@@ -1,0 +1,3188 @@
+{
+  "$class": "DatasetSchema",
+  "schema_name": "xradio.measurement_set.schema.FieldSourceEphemerisXds",
+  "dimensions": [
+    [
+      "time"
+    ],
+    [
+      "time",
+      "sky_dis_label"
+    ],
+    [
+      "time",
+      "cartesian_pos_label"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "time",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "cartesian_pos_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "cartesian_pos_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "cartesian_pos_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "cartesian_pos_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "cartesian_pos_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "cartesian_pos_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "cartesian_pos_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "cartesian_pos_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "cartesian_pos_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "cartesian_pos_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "cartesian_pos_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "cartesian_pos_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "cartesian_pos_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "cartesian_pos_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "cartesian_pos_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "cartesian_pos_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "cartesian_pos_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "cartesian_pos_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dis_label"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dis_label"
+    ],
+    [
+      "time",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "time",
+      "ellipsoid_dis_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "ellipsoid_dis_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dis_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dis_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dis_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dis_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dis_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dis_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dis_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "ellipsoid_dis_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "ellipsoid_dis_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dis_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dis_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dis_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dis_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dis_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ],
+    [
+      "time",
+      "sky_dir_label",
+      "sky_dis_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label",
+      "line_label",
+      "field_name",
+      "time_ephemeris"
+    ]
+  ],
+  "coordinates": [
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "time"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "source_name",
+      "optional": false,
+      "docstring": "Source name. "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "time"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "field_name",
+      "optional": false,
+      "docstring": "Field name."
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.TimeInterpolatedCoordArray",
+      "dimensions": [
+        [
+          "time"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "time"
+          ],
+          "name": "type",
+          "default": "time",
+          "docstring": "Coordinate type. Should be ``\"time\"``. "
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "s"
+          ],
+          "name": "units",
+          "default": "s",
+          "docstring": "Units to associate with axis"
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "tai",
+            "tcb",
+            "tcg",
+            "tdb",
+            "tt",
+            "ut1",
+            "utc"
+          ],
+          "name": "scale",
+          "default": "utc",
+          "docstring": "Astropy time scales, see :py:class:`~xradio.measurement_set.schema.TimeArray` "
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "unix",
+            "mjd",
+            "cxcsec",
+            "gps"
+          ],
+          "name": "format",
+          "default": "unix",
+          "docstring": "Astropy format, see :py:class:`~xradio.measurement_set.schema.TimeArray`"
+        }
+      ],
+      "class_docstring": "Data model of a time axis when it is interpolated to match the time\naxis of the main dataset. This can be used in the system_calibration_xds,\npointing_xds, weather_xds, field_and_source_info_xds, and phase_cal_xds\nwhen their respective time_system_cal, time_pointing, time_weather,\ntime_ephemeris or time_phase_cal are interpolated to the main dataset\ntime. See also :py:class:`~xradio.measurement_set.schema.TimeArray`.\n\nThe only difference with respect to the main TimeCoordArray is the\nabsence of the attribute integration_time",
+      "data_docstring": "Time, expressed in seconds since the epoch (see ``scale`` &\n``format``), see also see :py:class:`~xradio.measurement_set.schema.TimeArray`.",
+      "name": "time",
+      "optional": false,
+      "docstring": "Midpoint of time for which this set of parameters is accurate. Labeled 'time' when interpolated to main time "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "sky_dir_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "sky_dir_label",
+      "optional": true,
+      "default": [
+        "ra",
+        "dec"
+      ],
+      "docstring": "Coordinate labels of sky directions (typically shape 2 and 'ra', 'dec') "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "sky_dis_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "sky_dis_label",
+      "optional": true,
+      "default": "dist",
+      "docstring": "Coordinate lables of sky distance (typically shape 1 and 'dist') "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "ellipsoid_dir_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "ellipsoid_dir_label",
+      "optional": true,
+      "default": [
+        "lon",
+        "lat"
+      ]
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "ellipsoid_dis_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "ellipsoid_dis_label",
+      "optional": true,
+      "default": "height",
+      "docstring": "Coordinate labels of geodetic earth location data (typically shape 3 and 'lon', 'lat', 'height')"
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "cartesian_pos_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "cartesian_pos_label",
+      "optional": true,
+      "default": [
+        "x",
+        "y",
+        "z"
+      ],
+      "docstring": "Coordinate labels of geocentric earth location data (typically shape 3 and 'x', 'y', 'z')"
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "line_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "line_label",
+      "optional": true,
+      "default": [],
+      "docstring": "Line labels (for line names and variables). "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "field_name",
+          "line_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "line_names",
+      "optional": true,
+      "default": [],
+      "docstring": "Line names (e.g. v=1, J=1-0, SiO). "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.TimeEphemerisCoordArray",
+      "dimensions": [
+        [
+          "time_ephemeris"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "time_ephemeris"
+          ],
+          "name": "type",
+          "default": "time_ephemeris",
+          "docstring": "Coordinate type. Should be ``\"time_ephemeris\"``. "
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "s"
+          ],
+          "name": "units",
+          "default": "s",
+          "docstring": "Units to associate with axis"
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "tai",
+            "tcb",
+            "tcg",
+            "tdb",
+            "tt",
+            "ut1",
+            "utc"
+          ],
+          "name": "scale",
+          "default": "utc",
+          "docstring": "Astropy time scales, see :py:class:`~xradio.measurement_set.schema.TimeArray` "
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "unix",
+            "mjd",
+            "cxcsec",
+            "gps"
+          ],
+          "name": "format",
+          "default": "unix",
+          "docstring": "Astropy format, see :py:class:`~xradio.measurement_set.schema.TimeArray`"
+        }
+      ],
+      "class_docstring": "Data model of the 'time_ephemeris' axis (time axis in the\nfield_and_source_info_xds subdataset when not interpolated to the main\ntime axis. See also :py:class:`TimeCoordArray`.",
+      "data_docstring": "Time, expressed in seconds since the epoch (see ``scale`` &\n``format``).",
+      "name": "time_ephemeris",
+      "optional": true,
+      "default": [],
+      "docstring": "Midpoint of time for which this set of parameters is accurate. Labeled 'time_ephemeris' when not interpolating to main time "
+    }
+  ],
+  "data_vars": [
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.SkyCoordArray",
+      "dimensions": [
+        [
+          "time",
+          "sky_dir_label"
+        ],
+        [
+          "time",
+          "sky_dis_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m",
+            "rad"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "sky_coord"
+          ],
+          "name": "type",
+          "default": "sky_coord",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "icrs",
+            "fk5",
+            "fk4",
+            "fk4noterms",
+            "galactic",
+            "galactocentric",
+            "supergalactic",
+            "altaz",
+            "hadec",
+            "gcrs",
+            "cirs",
+            "itrs",
+            "hcrs",
+            "teme",
+            "tete",
+            "precessedgeocentric",
+            "geocentricmeanecliptic",
+            "barycentricmeanecliptic",
+            "heliocentricmeanecliptic",
+            "geocentrictrueecliptic",
+            "barycentrictrueecliptic",
+            "heliocentrictrueecliptic",
+            "heliocentriceclipticiau76",
+            "custombarycentricecliptic",
+            "lsr",
+            "lsrk",
+            "lsrd",
+            "galacticlsr"
+          ],
+          "name": "frame",
+          "default": "icrs",
+          "docstring": "Possible values are :py:class:`astropy.coordinates.SkyCoord` frames.\n\nSeveral casacore frames found in MSv2 are translated to ``astropy`` frames as follows:\n\n* ``AZELGEO`` => ``altaz``\n* ``J2000`` => ``fk5``\n* ``ICRS`` => ``icrs``\n\nFrom ``fixvis`` docs: ``clean`` and the ``im`` tool ignore the reference frame claimed\nby the UVW column (it is often mislabelled as ITRF when it is really FK5\nor J2000) and instead assume the (u, v, w)s are in the same frame as the phase\ntracking center. ``calcuvw`` does not yet force the UVW column and field centers\nto use the same reference frame!"
+        }
+      ],
+      "class_docstring": "Measures array for data variables that are sky coordinates, used in :py:class:`FieldSourceXds`",
+      "data_docstring": null,
+      "name": "FIELD_PHASE_CENTER_DIRECTION",
+      "optional": true,
+      "docstring": "Offset from the SOURCE_DIRECTION that gives the direction of phase\ncenter for which the fringes have been stopped-that is a point source in\nthis direction will produce a constant measured phase (page 2 of\nhttps://articles.adsabs.harvard.edu/pdf/1999ASPC..180...79F). For\nconversion from MSv2, frame refers column keywords by default. If frame\nvaries with field, it refers DelayDir_Ref column instead."
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.SkyCoordArray",
+      "dimensions": [
+        [
+          "time",
+          "sky_dir_label"
+        ],
+        [
+          "time",
+          "sky_dis_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m",
+            "rad"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "sky_coord"
+          ],
+          "name": "type",
+          "default": "sky_coord",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "icrs",
+            "fk5",
+            "fk4",
+            "fk4noterms",
+            "galactic",
+            "galactocentric",
+            "supergalactic",
+            "altaz",
+            "hadec",
+            "gcrs",
+            "cirs",
+            "itrs",
+            "hcrs",
+            "teme",
+            "tete",
+            "precessedgeocentric",
+            "geocentricmeanecliptic",
+            "barycentricmeanecliptic",
+            "heliocentricmeanecliptic",
+            "geocentrictrueecliptic",
+            "barycentrictrueecliptic",
+            "heliocentrictrueecliptic",
+            "heliocentriceclipticiau76",
+            "custombarycentricecliptic",
+            "lsr",
+            "lsrk",
+            "lsrd",
+            "galacticlsr"
+          ],
+          "name": "frame",
+          "default": "icrs",
+          "docstring": "Possible values are :py:class:`astropy.coordinates.SkyCoord` frames.\n\nSeveral casacore frames found in MSv2 are translated to ``astropy`` frames as follows:\n\n* ``AZELGEO`` => ``altaz``\n* ``J2000`` => ``fk5``\n* ``ICRS`` => ``icrs``\n\nFrom ``fixvis`` docs: ``clean`` and the ``im`` tool ignore the reference frame claimed\nby the UVW column (it is often mislabelled as ITRF when it is really FK5\nor J2000) and instead assume the (u, v, w)s are in the same frame as the phase\ntracking center. ``calcuvw`` does not yet force the UVW column and field centers\nto use the same reference frame!"
+        }
+      ],
+      "class_docstring": "Measures array for data variables that are sky coordinates, used in :py:class:`FieldSourceXds`",
+      "data_docstring": null,
+      "name": "FIELD_PHASE_CENTER_DISTANCE",
+      "optional": true,
+      "docstring": "Offset from the SOURCE_DIRECTION that gives the direction of phase\ncenter for which the fringes have been stopped-that is a point source in\nthis direction will produce a constant measured phase (page 2 of\nhttps://articles.adsabs.harvard.edu/pdf/1999ASPC..180...79F). For\nconversion from MSv2, frame refers column keywords by default. If frame\nvaries with field, it refers DelayDir_Ref column instead."
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.SkyCoordArray",
+      "dimensions": [
+        [
+          "time",
+          "sky_dir_label"
+        ],
+        [
+          "time",
+          "sky_dis_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m",
+            "rad"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "sky_coord"
+          ],
+          "name": "type",
+          "default": "sky_coord",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "icrs",
+            "fk5",
+            "fk4",
+            "fk4noterms",
+            "galactic",
+            "galactocentric",
+            "supergalactic",
+            "altaz",
+            "hadec",
+            "gcrs",
+            "cirs",
+            "itrs",
+            "hcrs",
+            "teme",
+            "tete",
+            "precessedgeocentric",
+            "geocentricmeanecliptic",
+            "barycentricmeanecliptic",
+            "heliocentricmeanecliptic",
+            "geocentrictrueecliptic",
+            "barycentrictrueecliptic",
+            "heliocentrictrueecliptic",
+            "heliocentriceclipticiau76",
+            "custombarycentricecliptic",
+            "lsr",
+            "lsrk",
+            "lsrd",
+            "galacticlsr"
+          ],
+          "name": "frame",
+          "default": "icrs",
+          "docstring": "Possible values are :py:class:`astropy.coordinates.SkyCoord` frames.\n\nSeveral casacore frames found in MSv2 are translated to ``astropy`` frames as follows:\n\n* ``AZELGEO`` => ``altaz``\n* ``J2000`` => ``fk5``\n* ``ICRS`` => ``icrs``\n\nFrom ``fixvis`` docs: ``clean`` and the ``im`` tool ignore the reference frame claimed\nby the UVW column (it is often mislabelled as ITRF when it is really FK5\nor J2000) and instead assume the (u, v, w)s are in the same frame as the phase\ntracking center. ``calcuvw`` does not yet force the UVW column and field centers\nto use the same reference frame!"
+        }
+      ],
+      "class_docstring": "Measures array for data variables that are sky coordinates, used in :py:class:`FieldSourceXds`",
+      "data_docstring": null,
+      "name": "FIELD_REFERENCE_CENTER_DIRECTION",
+      "optional": true,
+      "docstring": "Used in single-dish to record the associated reference direction if positionswitching\nbeen applied. For conversion from MSv2, frame refers column keywords by default. If\nframe varies with field, it refers DelayDir_Ref column instead."
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.SkyCoordArray",
+      "dimensions": [
+        [
+          "time",
+          "sky_dir_label"
+        ],
+        [
+          "time",
+          "sky_dis_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m",
+            "rad"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "sky_coord"
+          ],
+          "name": "type",
+          "default": "sky_coord",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "icrs",
+            "fk5",
+            "fk4",
+            "fk4noterms",
+            "galactic",
+            "galactocentric",
+            "supergalactic",
+            "altaz",
+            "hadec",
+            "gcrs",
+            "cirs",
+            "itrs",
+            "hcrs",
+            "teme",
+            "tete",
+            "precessedgeocentric",
+            "geocentricmeanecliptic",
+            "barycentricmeanecliptic",
+            "heliocentricmeanecliptic",
+            "geocentrictrueecliptic",
+            "barycentrictrueecliptic",
+            "heliocentrictrueecliptic",
+            "heliocentriceclipticiau76",
+            "custombarycentricecliptic",
+            "lsr",
+            "lsrk",
+            "lsrd",
+            "galacticlsr"
+          ],
+          "name": "frame",
+          "default": "icrs",
+          "docstring": "Possible values are :py:class:`astropy.coordinates.SkyCoord` frames.\n\nSeveral casacore frames found in MSv2 are translated to ``astropy`` frames as follows:\n\n* ``AZELGEO`` => ``altaz``\n* ``J2000`` => ``fk5``\n* ``ICRS`` => ``icrs``\n\nFrom ``fixvis`` docs: ``clean`` and the ``im`` tool ignore the reference frame claimed\nby the UVW column (it is often mislabelled as ITRF when it is really FK5\nor J2000) and instead assume the (u, v, w)s are in the same frame as the phase\ntracking center. ``calcuvw`` does not yet force the UVW column and field centers\nto use the same reference frame!"
+        }
+      ],
+      "class_docstring": "Measures array for data variables that are sky coordinates, used in :py:class:`FieldSourceXds`",
+      "data_docstring": null,
+      "name": "FIELD_REFERENCE_CENTER_DISTANCE",
+      "optional": true,
+      "docstring": "Used in single-dish to record the associated reference direction if positionswitching\nbeen applied. For conversion from MSv2, frame refers column keywords by default. If\nframe varies with field, it refers DelayDir_Ref column instead."
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.SpectralCoordArray",
+      "dimensions": [
+        [
+          "time",
+          "line_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "Hz"
+          ],
+          "name": "units",
+          "default": "Hz",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "REST",
+            "BARY",
+            "TOPO",
+            "gcrs",
+            "icrs",
+            "hcrs",
+            "lsrk",
+            "lsrd",
+            "lsr"
+          ],
+          "name": "observer",
+          "default": "icrs",
+          "docstring": "Capitalized reference observers are from casacore. TOPO implies creating astropy earth_location.\nAstropy velocity reference frames are lowercase. Note that Astropy does not use the name 'TOPO' (telescope centric)\nrather it assumes if no velocity frame is given that this is the default.\n\nWhen converting from MSv2 and casacore frequency frames, the following translations from casacore to astropy\nframe names are applied: GEO=>gcrs, LSRK=>lsrk, LSRD=>lsrd"
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "spectral_coord"
+          ],
+          "name": "type",
+          "default": "spectral_coord",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Measures array for data variables and attributes that are spectral coordinates.",
+      "data_docstring": null,
+      "name": "LINE_REST_FREQUENCY",
+      "optional": true,
+      "docstring": "Rest frequencies for the transitions. "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.QuantityInMetersPerSecondArray",
+      "dimensions": [
+        [
+          "time",
+          "line_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m/s"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "quantity"
+          ],
+          "name": "type",
+          "default": "quantity",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Quantity with units of meters per second",
+      "data_docstring": null,
+      "name": "LINE_SYSTEMIC_VELOCITY",
+      "optional": true,
+      "docstring": "Systemic velocity at reference "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.SkyCoordArray",
+      "dimensions": [
+        [
+          "time",
+          "sky_dir_label"
+        ],
+        [
+          "time",
+          "sky_dis_label"
+        ],
+        [
+          "time_ephemeris",
+          "sky_dir_label"
+        ],
+        [
+          "time_ephemeris",
+          "sky_dis_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m",
+            "rad"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "sky_coord"
+          ],
+          "name": "type",
+          "default": "sky_coord",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "icrs",
+            "fk5",
+            "fk4",
+            "fk4noterms",
+            "galactic",
+            "galactocentric",
+            "supergalactic",
+            "altaz",
+            "hadec",
+            "gcrs",
+            "cirs",
+            "itrs",
+            "hcrs",
+            "teme",
+            "tete",
+            "precessedgeocentric",
+            "geocentricmeanecliptic",
+            "barycentricmeanecliptic",
+            "heliocentricmeanecliptic",
+            "geocentrictrueecliptic",
+            "barycentrictrueecliptic",
+            "heliocentrictrueecliptic",
+            "heliocentriceclipticiau76",
+            "custombarycentricecliptic",
+            "lsr",
+            "lsrk",
+            "lsrd",
+            "galacticlsr"
+          ],
+          "name": "frame",
+          "default": "icrs",
+          "docstring": "Possible values are :py:class:`astropy.coordinates.SkyCoord` frames.\n\nSeveral casacore frames found in MSv2 are translated to ``astropy`` frames as follows:\n\n* ``AZELGEO`` => ``altaz``\n* ``J2000`` => ``fk5``\n* ``ICRS`` => ``icrs``\n\nFrom ``fixvis`` docs: ``clean`` and the ``im`` tool ignore the reference frame claimed\nby the UVW column (it is often mislabelled as ITRF when it is really FK5\nor J2000) and instead assume the (u, v, w)s are in the same frame as the phase\ntracking center. ``calcuvw`` does not yet force the UVW column and field centers\nto use the same reference frame!"
+        }
+      ],
+      "class_docstring": "Measures array for data variables that are sky coordinates, used in :py:class:`FieldSourceXds`",
+      "data_docstring": null,
+      "name": "SOURCE_LOCATION",
+      "optional": true,
+      "docstring": "CASA Table Cols: RA,DEC,Rho.\"Astrometric RA and Dec and Geocentric\ndistance with respect to the observer's location (Geocentric). \"Adjusted\nfor light-time aberration only. With respect to the reference plane and\nequinox of the chosen system (ICRF or FK4/B1950). If the FK4/B1950 frame\noutput is selected, elliptic aberration terms are added. Astrometric RA/DEC\nis generally used when comparing or reducing data against a star catalog.\"\nhttps://ssd.jpl.nasa.gov/horizons/manual.html : 1. Astrometric RA & DEC"
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.QuantityInMetersPerSecondArray",
+      "dimensions": [
+        [
+          "time"
+        ],
+        [
+          "time_ephemeris"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m/s"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "quantity"
+          ],
+          "name": "type",
+          "default": "quantity",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Quantity with units of meters per second",
+      "data_docstring": null,
+      "name": "SOURCE_RADIAL_VELOCITY",
+      "optional": true,
+      "docstring": "CASA Table Cols: RadVel. Geocentric distance rate "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.QuantityInRadiansArray",
+      "dimensions": [
+        [
+          "time"
+        ],
+        [
+          "time_ephemeris"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "rad"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "quantity"
+          ],
+          "name": "type",
+          "default": "quantity",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Quantity with units of radians",
+      "data_docstring": null,
+      "name": "NORTH_POLE_POSITION_ANGLE",
+      "optional": true,
+      "docstring": "CASA Table cols: NP_ang, \"Targets' apparent north-pole position angle (counter-clockwise with respect to direction of true-of-date reference-frame north pole) and angular distance from the sub-observer point (center of disc) at print time. A negative distance indicates the north-pole is on the hidden hemisphere.\" https://ssd.jpl.nasa.gov/horizons/manual.html : 17. North pole position angle & distance from disc center. "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.QuantityInRadiansArray",
+      "dimensions": [
+        [
+          "time"
+        ],
+        [
+          "time_ephemeris"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "rad"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "quantity"
+          ],
+          "name": "type",
+          "default": "quantity",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Quantity with units of radians",
+      "data_docstring": null,
+      "name": "NORTH_POLE_ANGULAR_DISTANCE",
+      "optional": true,
+      "docstring": "CASA Table cols: NP_dist, \"Targets' apparent north-pole position angle (counter-clockwise with respect to direction of true-of date reference-frame north pole) and angular distance from the sub-observer point (center of disc) at print time. A negative distance indicates the north-pole is on the hidden hemisphere.\"https://ssd.jpl.nasa.gov/horizons/manual.html : 17. North pole position angle & distance from disc center. "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.LocationArray",
+      "dimensions": [
+        [
+          "time",
+          "ellipsoid_dir_label"
+        ],
+        [
+          "time",
+          "ellipsoid_dis_label"
+        ],
+        [
+          "time",
+          "cartesian_pos_label"
+        ],
+        [
+          "time_ephemeris",
+          "ellipsoid_dir_label"
+        ],
+        [
+          "time_ephemeris",
+          "ellipsoid_dis_label"
+        ],
+        [
+          "time_ephemeris",
+          "cartesian_pos_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m",
+            "rad"
+          ],
+          "name": "units",
+          "docstring": "Units of the location coordinates (typically 'm' or 'rad')."
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "ITRS",
+            "Undefined"
+          ],
+          "name": "frame",
+          "docstring": "Reference frame. Can be ITRS (assumed for all Earth locations) or Undefined (used in non-Earth locations)."
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "geocentric",
+            "planetcentric",
+            "geodetic",
+            "planetodetic",
+            "orbital",
+            "topocentric"
+          ],
+          "name": "coordinate_system",
+          "docstring": "Can be ``geocentric/planetcentric, geodetic/planetodetic, orbital`` "
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "name": "origin_object_name",
+          "docstring": "earth/sun/moon/etc."
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "GRS80",
+            "WGS84",
+            "WGS72"
+          ],
+          "optional": true,
+          "name": "ellipsoid",
+          "docstring": "Ellipsoid used in geodetic Earth locations (with EllipsoidDirLabel and EllipsoidDirLabel coordinate)"
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "location"
+          ],
+          "name": "type",
+          "default": "location",
+          "docstring": "Measure type. Should be ``\"location\"``."
+        }
+      ],
+      "class_docstring": "Measure type used for example in antenna_xds/ANTENNA_POSITION, weather_xds/STATION_POSITION,\nfield_and_source_xds(ephemeris)/OBSERVER_POSITION.\n\nData dimensions can be CartesianPosLabel or EllipsoidDirLabel or EllipsoidDisLabel",
+      "data_docstring": null,
+      "name": "SUB_OBSERVER_DIRECTION",
+      "optional": true,
+      "docstring": "CASA Table cols: DiskLong, DiskLat. \"Apparent planetodetic longitude and latitude of the center of the target disc seen by the OBSERVER at print-time. This is not exactly the same as the \"nearest point\" for a non-spherical target shape (since the center of the disc might not be the point closest to the observer), but is generally very close if not a very irregular body shape. The IAU2009 rotation models are used except for Earth and MOON, which use higher-precision models. For the gas giants Jupiter, Saturn, Uranus and Neptune, IAU2009 longitude is based on the \"System III\" prime meridian rotation angle of the magnetic field. By contrast, pole direction (thus latitude) is relative to the body dynamical equator. There can be an offset between the magnetic pole and the dynamical pole of rotation. Down-leg light travel-time from target to observer is taken into account. Latitude is the angle between the equatorial plane and perpendicular to the reference ellipsoid of the body and body oblateness thereby included. The reference ellipsoid is an oblate spheroid with a single flatness coefficient in which the y-axis body radius is taken to be the same value as the x-axis radius. Whether longitude is positive to the east or west for the target will be indicated at the end of the output ephemeris.\" https://ssd.jpl.nasa.gov/horizons/manual.html : 14. Observer sub-longitude & sub-latitude "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.LocationArray",
+      "dimensions": [
+        [
+          "time",
+          "ellipsoid_dir_label"
+        ],
+        [
+          "time",
+          "ellipsoid_dis_label"
+        ],
+        [
+          "time",
+          "cartesian_pos_label"
+        ],
+        [
+          "time_ephemeris",
+          "ellipsoid_dir_label"
+        ],
+        [
+          "time_ephemeris",
+          "ellipsoid_dis_label"
+        ],
+        [
+          "time_ephemeris",
+          "cartesian_pos_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m",
+            "rad"
+          ],
+          "name": "units",
+          "docstring": "Units of the location coordinates (typically 'm' or 'rad')."
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "ITRS",
+            "Undefined"
+          ],
+          "name": "frame",
+          "docstring": "Reference frame. Can be ITRS (assumed for all Earth locations) or Undefined (used in non-Earth locations)."
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "geocentric",
+            "planetcentric",
+            "geodetic",
+            "planetodetic",
+            "orbital",
+            "topocentric"
+          ],
+          "name": "coordinate_system",
+          "docstring": "Can be ``geocentric/planetcentric, geodetic/planetodetic, orbital`` "
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "name": "origin_object_name",
+          "docstring": "earth/sun/moon/etc."
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "GRS80",
+            "WGS84",
+            "WGS72"
+          ],
+          "optional": true,
+          "name": "ellipsoid",
+          "docstring": "Ellipsoid used in geodetic Earth locations (with EllipsoidDirLabel and EllipsoidDirLabel coordinate)"
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "location"
+          ],
+          "name": "type",
+          "default": "location",
+          "docstring": "Measure type. Should be ``\"location\"``."
+        }
+      ],
+      "class_docstring": "Measure type used for example in antenna_xds/ANTENNA_POSITION, weather_xds/STATION_POSITION,\nfield_and_source_xds(ephemeris)/OBSERVER_POSITION.\n\nData dimensions can be CartesianPosLabel or EllipsoidDirLabel or EllipsoidDisLabel",
+      "data_docstring": null,
+      "name": "SUB_SOLAR_POSITION",
+      "optional": true,
+      "docstring": "CASA Table cols: Sl_lon, Sl_lat, r. \"Heliocentric distance along with \"Apparent sub-solar longitude and latitude of the Sun on the target. The apparent planetodetic longitude and latitude of the center of the target disc as seen from the Sun, as seen by the observer at print-time.  This is _NOT_ exactly the same as the \"sub-solar\" (nearest) point for a non-spherical target shape (since the center of the disc seen from the Sun might not be the closest point to the Sun), but is very close if not a highly irregular body shape.  Light travel-time from Sun to target and from target to observer is taken into account.  Latitude is the angle between the equatorial plane and the line perpendicular to the reference ellipsoid of the body. The reference ellipsoid is an oblate spheroid with a single flatness coefficient in which the y-axis body radius is taken to be the same value as the x-axis radius. Uses IAU2009 rotation models except for Earth and Moon, which uses a higher precision models. Values for Jupiter, Saturn, Uranus and Neptune are Set III, referring to rotation of their magnetic fields.  Whether longitude is positive to the east or west for the target will be indicated at the end of the output ephemeris.\" https://ssd.jpl.nasa.gov/horizons/manual.html : 15. Solar sub-longitude & sub-latitude  "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.QuantityInMetersPerSecondArray",
+      "dimensions": [
+        [
+          "time"
+        ],
+        [
+          "time_ephemeris"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m/s"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "quantity"
+          ],
+          "name": "type",
+          "default": "quantity",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Quantity with units of meters per second",
+      "data_docstring": null,
+      "name": "HELIOCENTRIC_RADIAL_VELOCITY",
+      "optional": true,
+      "docstring": "CASA Table cols: rdot.\"The Sun's apparent range-rate relative to the target, as seen by the observer. A positive \"rdot\" means the target was moving away from the Sun, negative indicates movement toward the Sun.\" https://ssd.jpl.nasa.gov/horizons/manual.html : 19. Solar range & range-rate (relative to target) "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.QuantityInRadiansArray",
+      "dimensions": [
+        [
+          "time"
+        ],
+        [
+          "time_ephemeris"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "rad"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "quantity"
+          ],
+          "name": "type",
+          "default": "quantity",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Quantity with units of radians",
+      "data_docstring": null,
+      "name": "OBSERVER_PHASE_ANGLE",
+      "optional": true,
+      "docstring": "CASA Table cols: phang.\"\"phi\" is the true PHASE ANGLE at the observers' location at print time. \"PAB-LON\" and \"PAB-LAT\" are the FK4/B1950 or ICRF/J2000 ecliptic longitude and latitude of the phase angle bisector direction; the outward directed angle bisecting the arc created by the apparent vector from Sun to target center and the astrometric vector from observer to target center. For an otherwise uniform ellipsoid, the time when its long-axis is perpendicular to the PAB direction approximately corresponds to lightcurve maximum (or maximum brightness) of the body. PAB is discussed in Harris et al., Icarus 57, 251-258 (1984).\" https://ssd.jpl.nasa.gov/horizons/manual.html : Phase angle and bisector "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.LocationArray",
+      "dimensions": [
+        [
+          "ellipsoid_dir_label"
+        ],
+        [
+          "ellipsoid_dis_label"
+        ],
+        [
+          "cartesian_pos_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m",
+            "rad"
+          ],
+          "name": "units",
+          "docstring": "Units of the location coordinates (typically 'm' or 'rad')."
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "ITRS",
+            "Undefined"
+          ],
+          "name": "frame",
+          "docstring": "Reference frame. Can be ITRS (assumed for all Earth locations) or Undefined (used in non-Earth locations)."
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "geocentric",
+            "planetcentric",
+            "geodetic",
+            "planetodetic",
+            "orbital",
+            "topocentric"
+          ],
+          "name": "coordinate_system",
+          "docstring": "Can be ``geocentric/planetcentric, geodetic/planetodetic, orbital`` "
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "name": "origin_object_name",
+          "docstring": "earth/sun/moon/etc."
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "GRS80",
+            "WGS84",
+            "WGS72"
+          ],
+          "optional": true,
+          "name": "ellipsoid",
+          "docstring": "Ellipsoid used in geodetic Earth locations (with EllipsoidDirLabel and EllipsoidDirLabel coordinate)"
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "location"
+          ],
+          "name": "type",
+          "default": "location",
+          "docstring": "Measure type. Should be ``\"location\"``."
+        }
+      ],
+      "class_docstring": "Measure type used for example in antenna_xds/ANTENNA_POSITION, weather_xds/STATION_POSITION,\nfield_and_source_xds(ephemeris)/OBSERVER_POSITION.\n\nData dimensions can be CartesianPosLabel or EllipsoidDirLabel or EllipsoidDisLabel",
+      "data_docstring": null,
+      "name": "OBSERVER_POSITION",
+      "optional": true,
+      "docstring": "Observer location. "
+    }
+  ],
+  "attributes": [
+    {
+      "$class": "AttrSchemaRef",
+      "type": "str",
+      "literal": [
+        "ratio",
+        "m/s"
+      ],
+      "optional": true,
+      "name": "doppler_shift_velocity",
+      "docstring": "Velocity definition of the Doppler shift, e.g., RADIO or OPTICAL velocity in m/s "
+    },
+    {
+      "$class": "AttrSchemaRef",
+      "type": "str",
+      "optional": true,
+      "name": "source_model_url",
+      "docstring": "URL to access source model"
+    },
+    {
+      "$class": "AttrSchemaRef",
+      "type": "str",
+      "optional": true,
+      "name": "ephemeris_name",
+      "docstring": "The name of the ephemeris. For example DE430.\n\nThis can be used with Astropy solar_system_ephemeris.set('DE430'), see\nhttps://docs.astropy.org/en/stable/coordinates/solarsystem.html."
+    },
+    {
+      "$class": "AttrSchemaRef",
+      "type": "str",
+      "literal": [
+        "field_and_source_ephemeris"
+      ],
+      "name": "type",
+      "default": "field_and_source_ephemeris",
+      "docstring": "Type of dataset."
+    }
+  ],
+  "class_docstring": "Field positions for each source, when the source have ephemeris information.\n\nDefines a field position on the sky. For interferometers, this is the correlated field position.\nFor single dishes, this is the nominal pointing direction."
+}

@@ -1,0 +1,296 @@
+{
+  "$class": "DatasetSchema",
+  "schema_name": "xradio.measurement_set.schema.GainCurveXds",
+  "dimensions": [
+    [
+      "antenna_name",
+      "receptor_label",
+      "poly_term"
+    ]
+  ],
+  "coordinates": [
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.AntennaNameArray",
+      "dimensions": [
+        [
+          "antenna_name"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "optional": true,
+          "name": "long_name",
+          "default": "Antenna name",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Model of the antenna_name coordinate, used in the main dataset (single dish data, :py:class:`VisibilityXds`)\nand several sub-datasets such as antenna_xds, pointing_xds, weather_xds, system_calibration_xds, gain_curve_xds, etc.",
+      "data_docstring": "Unique name for each antenna(_station).",
+      "name": "antenna_name",
+      "optional": false,
+      "docstring": "Antenna name "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "antenna_name"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "station_name",
+      "optional": false,
+      "docstring": "Name of the station pad (relevant to arrays with moving antennas). "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "antenna_name"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "mount",
+      "optional": false,
+      "docstring": "Mount type of the antenna. Reserved keywords include: ”EQUATORIAL” - equatorial mount;\n”ALT-AZ”: azimuth-elevation mount;\n\"ALT-AZ+ROTATOR\": alt-az mount with feed rotator; introduced for ASKAP dishes;\n\"ALT-AZ+NASMYTH-R\": Nasmyth mount with receivers at the right-hand side of the cabin. Many high-frequency antennas used for VLBI have such a mount typel;\n\"ALT-AZ+NASMYTH-L\": Nasmyth mount with receivers at the left-hand side of the cabin.\n\"ALT-AZ+BWG-R\": alt-az mount that uses a Beam Wave Guide to bring the focus down to the pedestal. The receivers are at the right-hand side of the cabin (-R). Compared to the Nasmyth mounts there is an extra correction term because there are now two rotating mirrors. See https://arxiv.org/abs/2210.13381 for more details.\n\"ALT-AZ+BWG-L\": alt-az mount that uses a Beam Wave Guide, as above, but with receivers at the left-hand side of the cabin.\n”X-Y”: x-y mount;\n”SPACE-HALCA” - specific orientation model."
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "antenna_name"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "telescope_name",
+      "optional": false,
+      "docstring": "Useful when data is combined from mutiple arrays for example ACA + ALMA. "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "receptor_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "receptor_label",
+      "optional": false,
+      "docstring": "Names of receptors "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "antenna_name",
+          "receptor_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "polarization_type",
+      "optional": false,
+      "docstring": "Polarization type to which each receptor responds (e.g. ”R”,”L”,”X” or ”Y”).\nThis is the receptor polarization type as recorded in the final correlated data (e.g. ”RR”); i.e.\nas measured after all polarization combiners. ['X','Y'], ['R','L'] "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "antenna_name"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "gain_curve_type",
+      "optional": true,
+      "docstring": "Gain curve type. Reserved keywords include:\n(”POWER(EL)” - Power as a function of elevation;\n ”POWER(ZA)” - Power as a function of zenith angle;\n ”VOLTAGE(EL)” - Voltage as a function of elevation;\n ”VOLTAGE(ZA)” - Voltage as a function of zenith angle). See https://casacore.github.io/casacore-notes/265.pdf"
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "poly_term"
+        ]
+      ],
+      "dtypes": [
+        "<i8"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "poly_term",
+      "optional": false,
+      "docstring": "Term orders in gain curve polynomial"
+    }
+  ],
+  "data_vars": [
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "antenna_name",
+          "poly_term",
+          "receptor_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "GAIN_CURVE",
+      "optional": false,
+      "docstring": "Coeﬃcients of the polynomial that describes the (power or voltage) gain.  "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.QuantityInSecondsArray",
+      "dimensions": [
+        [
+          "antenna_name"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "s"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "quantity"
+          ],
+          "name": "type",
+          "default": "quantity",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Quantity with units of seconds",
+      "data_docstring": null,
+      "name": "GAIN_CURVE_INTERVAL",
+      "optional": false,
+      "docstring": "Time interval. "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.QuantityInKelvinPerJanskyArray",
+      "dimensions": [
+        [
+          "antenna_name",
+          "receptor_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "K/Jy"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "quantity"
+          ],
+          "name": "type",
+          "default": "quantity",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Quantity with units of K/Jy (sensitivity in gain curve)",
+      "data_docstring": null,
+      "name": "GAIN_CURVE_SENSITIVITY",
+      "optional": false,
+      "docstring": "Sensitivity of the antenna expressed in K/Jy. This is what AIPS calls “DPFU”. "
+    }
+  ],
+  "attributes": [
+    {
+      "$class": "AttrSchemaRef",
+      "type": "str",
+      "name": "measured_date",
+      "docstring": "Date gain curve was measured. Format: YYYY-MM-DDTHH:mm:ss.SSS (ISO 8601)"
+    },
+    {
+      "$class": "AttrSchemaRef",
+      "type": "str",
+      "literal": [
+        "gain_curve"
+      ],
+      "name": "type",
+      "default": "gain_curve",
+      "docstring": "Type of dataset. Expected to be ``gain_curve``"
+    }
+  ],
+  "class_docstring": "Gain curve dataset. See See https://casacore.github.io/casacore-notes/265.pdf for a full description."
+}

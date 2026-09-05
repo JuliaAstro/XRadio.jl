@@ -1,0 +1,19 @@
+name = "XRadio"
+uuid = "8f21e5d1-474f-4c64-bef4-ed78edb0e816"
+authors = ["Paul Tiede <ptiede91@gmail.com> and contributors"]
+version = "0.1.0"
+
+[deps]
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+DimensionalData = "0703355e-b756-11e9-17c0-8b28908087d0"
+JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
+OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
+Zarr = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
+
+[compat]
+Dates = "1"
+DimensionalData = "0.30"
+JSON3 = "1.14"
+OrderedCollections = "1"
+Zarr = "0.10"
+julia = "1.10"

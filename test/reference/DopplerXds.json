@@ -1,0 +1,11 @@
+{
+  "$class": "DatasetSchema",
+  "schema_name": "xradio.measurement_set.schema.DopplerXds",
+  "dimensions": [
+    []
+  ],
+  "coordinates": [],
+  "data_vars": [],
+  "attributes": [],
+  "class_docstring": "Not specified. Not implemented."
+}

@@ -1,0 +1,477 @@
+{
+  "$class": "DatasetSchema",
+  "schema_name": "xradio.measurement_set.schema.PointingXds",
+  "dimensions": [
+    [
+      "antenna_name",
+      "local_sky_dir_label"
+    ],
+    [
+      "antenna_name",
+      "local_sky_dir_label",
+      "time"
+    ],
+    [
+      "antenna_name",
+      "local_sky_dir_label",
+      "time_pointing"
+    ],
+    [
+      "antenna_name",
+      "local_sky_dir_label",
+      "time",
+      "time_pointing"
+    ],
+    [
+      "antenna_name",
+      "local_sky_dir_label",
+      "n_polynomial"
+    ],
+    [
+      "antenna_name",
+      "local_sky_dir_label",
+      "time",
+      "n_polynomial"
+    ],
+    [
+      "antenna_name",
+      "local_sky_dir_label",
+      "time_pointing",
+      "n_polynomial"
+    ],
+    [
+      "antenna_name",
+      "local_sky_dir_label",
+      "time",
+      "time_pointing",
+      "n_polynomial"
+    ]
+  ],
+  "coordinates": [
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.AntennaNameArray",
+      "dimensions": [
+        [
+          "antenna_name"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "optional": true,
+          "name": "long_name",
+          "default": "Antenna name",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Model of the antenna_name coordinate, used in the main dataset (single dish data, :py:class:`VisibilityXds`)\nand several sub-datasets such as antenna_xds, pointing_xds, weather_xds, system_calibration_xds, gain_curve_xds, etc.",
+      "data_docstring": "Unique name for each antenna(_station).",
+      "name": "antenna_name",
+      "optional": false,
+      "docstring": "Antenna name, as specified by baseline_antenna1/2_name in visibility dataset"
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "local_sky_dir_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "local_sky_dir_label",
+      "optional": false,
+      "docstring": "Direction labels."
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.TimeInterpolatedCoordArray",
+      "dimensions": [
+        [
+          "time"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "time"
+          ],
+          "name": "type",
+          "default": "time",
+          "docstring": "Coordinate type. Should be ``\"time\"``. "
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "s"
+          ],
+          "name": "units",
+          "default": "s",
+          "docstring": "Units to associate with axis"
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "tai",
+            "tcb",
+            "tcg",
+            "tdb",
+            "tt",
+            "ut1",
+            "utc"
+          ],
+          "name": "scale",
+          "default": "utc",
+          "docstring": "Astropy time scales, see :py:class:`~xradio.measurement_set.schema.TimeArray` "
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "unix",
+            "mjd",
+            "cxcsec",
+            "gps"
+          ],
+          "name": "format",
+          "default": "unix",
+          "docstring": "Astropy format, see :py:class:`~xradio.measurement_set.schema.TimeArray`"
+        }
+      ],
+      "class_docstring": "Data model of a time axis when it is interpolated to match the time\naxis of the main dataset. This can be used in the system_calibration_xds,\npointing_xds, weather_xds, field_and_source_info_xds, and phase_cal_xds\nwhen their respective time_system_cal, time_pointing, time_weather,\ntime_ephemeris or time_phase_cal are interpolated to the main dataset\ntime. See also :py:class:`~xradio.measurement_set.schema.TimeArray`.\n\nThe only difference with respect to the main TimeCoordArray is the\nabsence of the attribute integration_time",
+      "data_docstring": "Time, expressed in seconds since the epoch (see ``scale`` &\n``format``), see also see :py:class:`~xradio.measurement_set.schema.TimeArray`.",
+      "name": "time",
+      "optional": true,
+      "docstring": "Mid-point of the time interval for which the information in this row is\nvalid. Required to use the same time measure reference as in visibility dataset.\nLabeled 'time' when interpolating to main time axis."
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.TimePointingCoordArray",
+      "dimensions": [
+        [
+          "time_pointing"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "time_pointing"
+          ],
+          "name": "type",
+          "default": "time_pointing",
+          "docstring": "Coordinate type. Should be ``\"time_pointing\"``. "
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "s"
+          ],
+          "name": "units",
+          "default": "s",
+          "docstring": "Units to associate with axis"
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "tai",
+            "tcb",
+            "tcg",
+            "tdb",
+            "tt",
+            "ut1",
+            "utc"
+          ],
+          "name": "scale",
+          "default": "utc",
+          "docstring": "Astropy time scales, see :py:class:`~xradio.measurement_set.schema.TimeArray` "
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "unix",
+            "mjd",
+            "cxcsec",
+            "gps"
+          ],
+          "name": "format",
+          "default": "unix",
+          "docstring": "Astropy format, see :py:class:`~xradio.measurement_set.schema.TimeArray`"
+        }
+      ],
+      "class_docstring": "Data model of the 'time_pointing' axis (time axis in pointing_xds\nsubdataset when not interpolated to the main time axis. See also\n:py:class:`TimeCoordArray`.",
+      "data_docstring": "Time, expressed in seconds since the epoch (see ``scale`` &\n``format``).",
+      "name": "time_pointing",
+      "optional": true,
+      "docstring": "Midpoint of time for which this set of parameters is accurate. Labeled\n'time_pointing' when not interpolating to main time axis "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "n_polynomial"
+        ]
+      ],
+      "dtypes": [
+        "<i8"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "n_polynomial",
+      "optional": true,
+      "docstring": "Polynomial index, when using polynomial coefficients to specify POINTING_BEAM"
+    }
+  ],
+  "data_vars": [
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.PointingBeamArray",
+      "dimensions": [
+        [
+          "time",
+          "antenna_name",
+          "local_sky_dir_label"
+        ],
+        [
+          "time_pointing",
+          "antenna_name",
+          "local_sky_dir_label"
+        ],
+        [
+          "time",
+          "antenna_name",
+          "local_sky_dir_label",
+          "n_polynomial"
+        ],
+        [
+          "time_pointing",
+          "antenna_name",
+          "local_sky_dir_label",
+          "n_polynomial"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "sky_coord"
+          ],
+          "name": "type",
+          "default": "sky_coord",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m",
+            "rad"
+          ],
+          "name": "units",
+          "default": "rad",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "icrs",
+            "fk5",
+            "fk4",
+            "fk4noterms",
+            "galactic",
+            "galactocentric",
+            "supergalactic",
+            "altaz",
+            "hadec",
+            "gcrs",
+            "cirs",
+            "itrs",
+            "hcrs",
+            "teme",
+            "tete",
+            "precessedgeocentric",
+            "geocentricmeanecliptic",
+            "barycentricmeanecliptic",
+            "heliocentricmeanecliptic",
+            "geocentrictrueecliptic",
+            "barycentrictrueecliptic",
+            "heliocentrictrueecliptic",
+            "heliocentriceclipticiau76",
+            "custombarycentricecliptic",
+            "lsr",
+            "lsrk",
+            "lsrd",
+            "galacticlsr"
+          ],
+          "name": "frame",
+          "default": "icrs",
+          "docstring": "Blank = use the phase tracking frame of vis."
+        }
+      ],
+      "class_docstring": "Pointing beam data array in :py:class:`PointingXds`.",
+      "data_docstring": null,
+      "name": "POINTING_BEAM",
+      "optional": false,
+      "docstring": "The direction of the peak response of the beam and is equavalent to the MSv2 DIRECTION (M2_direction) with_pointing_correction=True, optionally expressed as polynomial coefficients."
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.LocalSkyCoordArray",
+      "dimensions": [
+        [
+          "time",
+          "antenna_name",
+          "local_sky_dir_label"
+        ],
+        [
+          "time_pointing",
+          "antenna_name",
+          "local_sky_dir_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "sky_coord"
+          ],
+          "name": "type",
+          "default": "sky_coord",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m",
+            "rad"
+          ],
+          "name": "units",
+          "default": "rad",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "icrs",
+            "fk5",
+            "fk4",
+            "fk4noterms",
+            "galactic",
+            "galactocentric",
+            "supergalactic",
+            "altaz",
+            "hadec",
+            "gcrs",
+            "cirs",
+            "itrs",
+            "hcrs",
+            "teme",
+            "tete",
+            "precessedgeocentric",
+            "geocentricmeanecliptic",
+            "barycentricmeanecliptic",
+            "heliocentricmeanecliptic",
+            "geocentrictrueecliptic",
+            "barycentrictrueecliptic",
+            "heliocentrictrueecliptic",
+            "heliocentriceclipticiau76",
+            "custombarycentricecliptic",
+            "lsr",
+            "lsrk",
+            "lsrd",
+            "galacticlsr"
+          ],
+          "name": "frame",
+          "default": "icrs",
+          "docstring": "From ``fixvis`` docs: ``clean`` and the ``im`` tool ignore the reference frame claimed\nby the UVW column (it is often mislabelled as ITRF when it is really FK5\nor J2000) and instead assume the (u, v, w)s are in the same frame as the phase\ntracking center. ``calcuvw`` does not yet force the UVW column and field centers\nto use the same reference frame!\n\nBlank = use the phase tracking frame of vis."
+        }
+      ],
+      "class_docstring": "Measures array for the arrays that have coordinate local_sky_dir_label in\n:py:class:`PointingXds`",
+      "data_docstring": null,
+      "name": "POINTING_DISH_MEASURED",
+      "optional": true,
+      "docstring": "The current encoder values on the primary axes of the mount type for\nthe antenna. ENCODER in MSv2 (M2_encoder)."
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "time",
+          "antenna_name"
+        ],
+        [
+          "time_pointing",
+          "antenna_name"
+        ]
+      ],
+      "dtypes": [
+        "|b1"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "POINTING_OVER_THE_TOP",
+      "optional": true,
+      "docstring": "True if the antenna was driven to this position ”over the top” (az-el mount)."
+    }
+  ],
+  "attributes": [
+    {
+      "$class": "AttrSchemaRef",
+      "type": "str",
+      "literal": [
+        "pointing"
+      ],
+      "name": "type",
+      "default": "pointing",
+      "docstring": "Type of dataset."
+    }
+  ],
+  "class_docstring": "Pointing dataset: antenna pointing information.\n\nIn the past the relationship and definition of the pointing information has not been clear. Here we attempt to clarify it by explaining the relationship between the ASDM, MSv2 and MSv4 pointing information.\n\nThe following abreviations are used:\n\n- M2: Measurement Set version 2\n- M4: Measurement Set version 4\n- A : ASDM\n\nThe following definitions come from the ASDM's `SDM Tables Short Description <https://drive.google.com/file/d/16a3g0GQxgcO7N_ZabfdtexQ8r2jRbYIS/view>`_ page 97-99:\n\n- A_encoder: The values measured from the antenna. They may be however affected by metrology, if applied. Note that for ALMA this column will contain positions obtained using the AZ POSN RSP and EL POSN RSP monitor points of the ACU and not the GET AZ ENC and GET EL ENC monitor points (as these do not include the metrology corrections). It is agreed that the the vendor pointing model will never be applied. AZELNOWAntenna.position\n- A_pointingDirection: This is the commanded direction of the antenna. It is obtained by adding the target and offset columns, and then applying the pointing model referenced by PointingModelId. The pointing model can be the composition of the absolute pointing model and of a local pointing model. In that case their coefficients will both be in the PointingModel table.\n- A_target: This is the field center direction (as given in the Field Table), possibly affected by the optional antenna-based sourceOffset. This column is in horizontal coordinates. AZELNOWAntenna.position\n- A_offset: Additional offsets in horizontal coordinates (usually meant for measuring the pointing corrections, mapping the antenna beam, ...). AZELNOWAntenna.positiontarget\n- A_sourceOffset : Optionally, the antenna-based mapping offsets in the field. These are in the equatorial system, and used, for instance, in on-the-fly mapping when the antennas are driven independently across the field.\n\nM2_DIRECTION = rotate(A_target,A_offset)   #A_target is rotated to by A_offset\n\nif withPointingCorrection : M2_DIRECTION = rotate(A_target,A_offset) + (A_encoder - A_pointingDirection)\n\nM2_TARGET = A_target\nM2_POINTING_OFFSET = A_offset\nM2_ENCODER = A_encoder\n\nIt should be noted that definition of M2_direction is not consistent, it depends if withPointingCorrection is set to True or False (see the `importasdm documenation <https://casadocs.readthedocs.io/en/v6.2.0/api/tt/casatasks.data.importasdm.html#with-pointing-correction>`_  and `code <https://open-bitbucket.nrao.edu/projects/CASA/repos/casa6/browse/casatools/src/tools/sdm/sdm_cmpt.cc#2257>`_ for details).\n\nM4_DIRECTION = M2_DIRECTION (withPointingCorrection=True)\nM4_ENCODER = M2_ENCODER"
+}

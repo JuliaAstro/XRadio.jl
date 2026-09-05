@@ -1,0 +1,273 @@
+{
+  "$class": "DatasetSchema",
+  "schema_name": "xradio.measurement_set.schema.PhasedArrayXds",
+  "dimensions": [
+    [
+      "antenna_name",
+      "element_id",
+      "receptor_label",
+      "cartesian_pos_label",
+      "cartesian_pos_label_local"
+    ]
+  ],
+  "coordinates": [
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.AntennaNameArray",
+      "dimensions": [
+        [
+          "antenna_name"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "optional": true,
+          "name": "long_name",
+          "default": "Antenna name",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Model of the antenna_name coordinate, used in the main dataset (single dish data, :py:class:`VisibilityXds`)\nand several sub-datasets such as antenna_xds, pointing_xds, weather_xds, system_calibration_xds, gain_curve_xds, etc.",
+      "data_docstring": "Unique name for each antenna(_station).",
+      "name": "antenna_name",
+      "optional": false,
+      "docstring": "Antenna name "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "element_id"
+        ]
+      ],
+      "dtypes": [
+        "<i8",
+        "<i4"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "element_id",
+      "optional": false,
+      "docstring": "Element Id within a station/antenna "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "receptor_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "receptor_label",
+      "optional": false,
+      "docstring": "Names of receptors, i.e. polarization hands. "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "antenna_name",
+          "receptor_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "polarization_type",
+      "optional": false,
+      "docstring": "Polarization type to which each receptor responds (e.g. ”R”,”L”,”X” or ”Y”).\nThis is the receptor polarization type as recorded in the final correlated data (e.g. ”RR”); i.e.\nas measured after all polarization combiners. ['X','Y'], ['R','L'] "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "cartesian_pos_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "cartesian_pos_label",
+      "optional": false,
+      "docstring": "(x,y,z) - either cartesian or ellipsoid "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "cartesian_pos_label_local"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "cartesian_pos_label_local",
+      "optional": false,
+      "docstring": "(p,q,r) - cartesian station-local frame of reference "
+    }
+  ],
+  "data_vars": [
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.PhasedArrayCoordinateAxesArray",
+      "dimensions": [
+        [
+          "antenna_name",
+          "cartesian_pos_label_local",
+          "cartesian_pos_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "dimensionless"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "rotation_matrix"
+          ],
+          "name": "type",
+          "docstring": "Measure type. Should be ``\"rotation_matrix\"``."
+        }
+      ],
+      "class_docstring": "Schema for PHASED_ARRAY_COORDINATE_AXES",
+      "data_docstring": null,
+      "name": "PHASED_ARRAY_COORDINATE_AXES",
+      "optional": false,
+      "docstring": "3x3 Rotation M such that X_geo = M X_local.\nUsed to convert PHASED_ARRAY_ELEMENT_OFFSET coordinates from a station-local\nframe to a geocentric frame."
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.PhasedArrayElementOffsetArray",
+      "dimensions": [
+        [
+          "antenna_name",
+          "cartesian_pos_label_local",
+          "element_id"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "location"
+          ],
+          "name": "type",
+          "docstring": "Measure type. Should be ``\"location\"``."
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "topocentric"
+          ],
+          "name": "coordinate_system",
+          "docstring": "Coordinate system in which the element offsets are expressed.\nShould be ``\"topocentric\"``."
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "ANTENNA_POSITION"
+          ],
+          "name": "origin",
+          "docstring": "Origin of the coordinate system. Should be ``\"ANTENNA_POSITION\"``."
+        }
+      ],
+      "class_docstring": "Schema for PHASED_ARRAY_ELEMENT_OFFSET.",
+      "data_docstring": null,
+      "name": "PHASED_ARRAY_ELEMENT_OFFSET",
+      "optional": false,
+      "docstring": "Offsets of each array element from its parent station position, expressed\nin a station-local frame. Station positions are stored in\nantenna_xds.ANTENNA_POSITION."
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "antenna_name",
+          "receptor_label",
+          "element_id"
+        ]
+      ],
+      "dtypes": [
+        "|b1"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "PHASED_ARRAY_ELEMENT_FLAG",
+      "optional": false,
+      "docstring": "Boolean flag set to True if the data from a given polarisation receptor of a station element\nshould be ignored."
+    }
+  ],
+  "attributes": [
+    {
+      "$class": "AttrSchemaRef",
+      "type": "str",
+      "literal": [
+        "phased_array"
+      ],
+      "name": "type",
+      "docstring": "Type of dataset. Expected to be ``phased_array``"
+    }
+  ],
+  "class_docstring": "Phased array dataset: define stations made of multiple receiver elements."
+}

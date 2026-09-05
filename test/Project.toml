@@ -1,0 +1,14 @@
+[deps]
+DimensionalData = "0703355e-b756-11e9-17c0-8b28908087d0"
+JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
+OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+XRadio = "8f21e5d1-474f-4c64-bef4-ed78edb0e816"
+Zarr = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
+
+[compat]
+DimensionalData = "0.30"
+JSON3 = "1.14"
+OrderedCollections = "1"
+Test = "1"
+Zarr = "0.10"

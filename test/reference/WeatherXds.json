@@ -1,0 +1,848 @@
+{
+  "$class": "DatasetSchema",
+  "schema_name": "xradio.measurement_set.schema.WeatherXds",
+  "dimensions": [
+    [
+      "station_name"
+    ],
+    [
+      "station_name",
+      "time"
+    ],
+    [
+      "station_name",
+      "cartesian_pos_label"
+    ],
+    [
+      "station_name",
+      "time",
+      "cartesian_pos_label"
+    ],
+    [
+      "station_name",
+      "ellipsoid_dir_label"
+    ],
+    [
+      "station_name",
+      "time",
+      "ellipsoid_dir_label"
+    ],
+    [
+      "station_name",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "station_name",
+      "time",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "station_name",
+      "ellipsoid_dis_label"
+    ],
+    [
+      "station_name",
+      "time",
+      "ellipsoid_dis_label"
+    ],
+    [
+      "station_name",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "station_name",
+      "time",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "station_name",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label"
+    ],
+    [
+      "station_name",
+      "time",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label"
+    ],
+    [
+      "station_name",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "station_name",
+      "time",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "station_name",
+      "time_weather"
+    ],
+    [
+      "station_name",
+      "time",
+      "time_weather"
+    ],
+    [
+      "station_name",
+      "time_weather",
+      "cartesian_pos_label"
+    ],
+    [
+      "station_name",
+      "time",
+      "time_weather",
+      "cartesian_pos_label"
+    ],
+    [
+      "station_name",
+      "time_weather",
+      "ellipsoid_dir_label"
+    ],
+    [
+      "station_name",
+      "time",
+      "time_weather",
+      "ellipsoid_dir_label"
+    ],
+    [
+      "station_name",
+      "time_weather",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "station_name",
+      "time",
+      "time_weather",
+      "ellipsoid_dir_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "station_name",
+      "time_weather",
+      "ellipsoid_dis_label"
+    ],
+    [
+      "station_name",
+      "time",
+      "time_weather",
+      "ellipsoid_dis_label"
+    ],
+    [
+      "station_name",
+      "time_weather",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "station_name",
+      "time",
+      "time_weather",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "station_name",
+      "time_weather",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label"
+    ],
+    [
+      "station_name",
+      "time",
+      "time_weather",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label"
+    ],
+    [
+      "station_name",
+      "time_weather",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "station_name",
+      "time",
+      "time_weather",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label",
+      "cartesian_pos_label"
+    ]
+  ],
+  "coordinates": [
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "station_name"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "station_name",
+      "optional": false,
+      "docstring": "Station name "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.TimeInterpolatedCoordArray",
+      "dimensions": [
+        [
+          "time"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "time"
+          ],
+          "name": "type",
+          "default": "time",
+          "docstring": "Coordinate type. Should be ``\"time\"``. "
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "s"
+          ],
+          "name": "units",
+          "default": "s",
+          "docstring": "Units to associate with axis"
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "tai",
+            "tcb",
+            "tcg",
+            "tdb",
+            "tt",
+            "ut1",
+            "utc"
+          ],
+          "name": "scale",
+          "default": "utc",
+          "docstring": "Astropy time scales, see :py:class:`~xradio.measurement_set.schema.TimeArray` "
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "unix",
+            "mjd",
+            "cxcsec",
+            "gps"
+          ],
+          "name": "format",
+          "default": "unix",
+          "docstring": "Astropy format, see :py:class:`~xradio.measurement_set.schema.TimeArray`"
+        }
+      ],
+      "class_docstring": "Data model of a time axis when it is interpolated to match the time\naxis of the main dataset. This can be used in the system_calibration_xds,\npointing_xds, weather_xds, field_and_source_info_xds, and phase_cal_xds\nwhen their respective time_system_cal, time_pointing, time_weather,\ntime_ephemeris or time_phase_cal are interpolated to the main dataset\ntime. See also :py:class:`~xradio.measurement_set.schema.TimeArray`.\n\nThe only difference with respect to the main TimeCoordArray is the\nabsence of the attribute integration_time",
+      "data_docstring": "Time, expressed in seconds since the epoch (see ``scale`` &\n``format``), see also see :py:class:`~xradio.measurement_set.schema.TimeArray`.",
+      "name": "time",
+      "optional": true,
+      "docstring": "Mid-point of the time interval. Labeled 'time' when interpolated to main time axis "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.TimeWeatherCoordArray",
+      "dimensions": [
+        [
+          "time_weather"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "time_weather"
+          ],
+          "name": "type",
+          "default": "time_weather",
+          "docstring": "Coordinate type. Should be ``\"time_weather\"``. "
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "s"
+          ],
+          "name": "units",
+          "default": "s",
+          "docstring": "Units to associate with axis"
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "tai",
+            "tcb",
+            "tcg",
+            "tdb",
+            "tt",
+            "ut1",
+            "utc"
+          ],
+          "name": "scale",
+          "default": "utc",
+          "docstring": "Astropy time scales, see :py:class:`~xradio.measurement_set.schema.TimeArray` "
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "unix",
+            "mjd",
+            "cxcsec",
+            "gps"
+          ],
+          "name": "format",
+          "default": "unix",
+          "docstring": "Astropy format, see :py:class:`~xradio.measurement_set.schema.TimeArray`"
+        }
+      ],
+      "class_docstring": "Data model of the 'time_weather' axis (time axis in the weather_xds\nsubdataset when not interpolated to the main time axis. See also\n:py:class:`TimeCoordArray`.",
+      "data_docstring": "Time, expressed in seconds since the epoch (see ``scale`` &\n``format``).",
+      "name": "time_weather",
+      "optional": true,
+      "docstring": "Mid-point of the time interval. Labeled 'time_weather' when not interpolated to main time axis "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "ellipsoid_dir_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "ellipsoid_dir_label",
+      "optional": true,
+      "default": [
+        "lon",
+        "lat"
+      ],
+      "docstring": "Coordinate labels of geodetic earth location data (typically shape 2 and 'lon', 'lat')"
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "ellipsoid_dis_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "ellipsoid_dis_label",
+      "optional": true,
+      "default": [
+        "height"
+      ],
+      "docstring": "Coordinate labels of geodetic earth height data (typically shape 1 and 'height')"
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "cartesian_pos_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "cartesian_pos_label",
+      "optional": true,
+      "default": [
+        "x",
+        "y",
+        "z"
+      ],
+      "docstring": "Coordinate labels of geocentric earth location data (typically shape 3 and 'x', 'y', 'z')"
+    }
+  ],
+  "data_vars": [
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.LocationArray",
+      "dimensions": [
+        [
+          "station_name",
+          "ellipsoid_dir_label"
+        ],
+        [
+          "station_name",
+          "ellipsoid_dis_label"
+        ],
+        [
+          "station_name",
+          "cartesian_pos_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m",
+            "rad"
+          ],
+          "name": "units",
+          "docstring": "Units of the location coordinates (typically 'm' or 'rad')."
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "ITRS",
+            "Undefined"
+          ],
+          "name": "frame",
+          "docstring": "Reference frame. Can be ITRS (assumed for all Earth locations) or Undefined (used in non-Earth locations)."
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "geocentric",
+            "planetcentric",
+            "geodetic",
+            "planetodetic",
+            "orbital",
+            "topocentric"
+          ],
+          "name": "coordinate_system",
+          "docstring": "Can be ``geocentric/planetcentric, geodetic/planetodetic, orbital`` "
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "name": "origin_object_name",
+          "docstring": "earth/sun/moon/etc."
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "GRS80",
+            "WGS84",
+            "WGS72"
+          ],
+          "optional": true,
+          "name": "ellipsoid",
+          "docstring": "Ellipsoid used in geodetic Earth locations (with EllipsoidDirLabel and EllipsoidDirLabel coordinate)"
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "location"
+          ],
+          "name": "type",
+          "default": "location",
+          "docstring": "Measure type. Should be ``\"location\"``."
+        }
+      ],
+      "class_docstring": "Measure type used for example in antenna_xds/ANTENNA_POSITION, weather_xds/STATION_POSITION,\nfield_and_source_xds(ephemeris)/OBSERVER_POSITION.\n\nData dimensions can be CartesianPosLabel or EllipsoidDirLabel or EllipsoidDisLabel",
+      "data_docstring": null,
+      "name": "STATION_POSITION",
+      "optional": false,
+      "docstring": "Position of the weather station "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.QuantityInPerSquareMetersArray",
+      "dimensions": [
+        [
+          "station_name",
+          "time"
+        ],
+        [
+          "station_name",
+          "time_weather"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "/m^2"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "quantity"
+          ],
+          "name": "type",
+          "default": "quantity",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Quantity with units of /m^2",
+      "data_docstring": null,
+      "name": "H2O",
+      "optional": true,
+      "docstring": "Average column density of water, in zenith direction (rather than line of sight) "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.QuantityInPerSquareMetersArray",
+      "dimensions": [
+        [
+          "station_name",
+          "time"
+        ],
+        [
+          "station_name",
+          "time_weather"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "/m^2"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "quantity"
+          ],
+          "name": "type",
+          "default": "quantity",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Quantity with units of /m^2",
+      "data_docstring": null,
+      "name": "IONOS_ELECTRON",
+      "optional": true,
+      "docstring": "Average column density of electrons, in zenith direction (rather than line of sight) "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.QuantityInPascalArray",
+      "dimensions": [
+        [
+          "station_name",
+          "time"
+        ],
+        [
+          "station_name",
+          "time_weather"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "Pa"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "quantity"
+          ],
+          "name": "type",
+          "default": "quantity",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Quantity with units of Pa",
+      "data_docstring": null,
+      "name": "PRESSURE",
+      "optional": true,
+      "docstring": "Ambient atmospheric pressure "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "station_name",
+          "time"
+        ],
+        [
+          "station_name",
+          "time_weather"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "REL_HUMIDITY",
+      "optional": true,
+      "docstring": "Ambient relative humidity "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.QuantityInKelvinArray",
+      "dimensions": [
+        [
+          "station_name",
+          "time"
+        ],
+        [
+          "station_name",
+          "time_weather"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "K"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "quantity"
+          ],
+          "name": "type",
+          "default": "quantity",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Quantity with units of Kelvins",
+      "data_docstring": null,
+      "name": "TEMPERATURE",
+      "optional": true,
+      "docstring": "Ambient air temperature for an antenna "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.QuantityInKelvinArray",
+      "dimensions": [
+        [
+          "station_name",
+          "time"
+        ],
+        [
+          "station_name",
+          "time_weather"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "K"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "quantity"
+          ],
+          "name": "type",
+          "default": "quantity",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Quantity with units of Kelvins",
+      "data_docstring": null,
+      "name": "DEW_POINT",
+      "optional": true,
+      "docstring": "Dew point "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.QuantityInRadiansArray",
+      "dimensions": [
+        [
+          "station_name",
+          "time"
+        ],
+        [
+          "station_name",
+          "time_weather"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "rad"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "quantity"
+          ],
+          "name": "type",
+          "default": "quantity",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Quantity with units of radians",
+      "data_docstring": null,
+      "name": "WIND_DIRECTION",
+      "optional": true,
+      "docstring": "Average wind direction "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.QuantityInMetersPerSecondArray",
+      "dimensions": [
+        [
+          "station_name",
+          "time"
+        ],
+        [
+          "station_name",
+          "time_weather"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m/s"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "quantity"
+          ],
+          "name": "type",
+          "default": "quantity",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Quantity with units of meters per second",
+      "data_docstring": null,
+      "name": "WIND_SPEED",
+      "optional": true,
+      "docstring": "Average wind speed "
+    }
+  ],
+  "attributes": [
+    {
+      "$class": "AttrSchemaRef",
+      "type": "str",
+      "literal": [
+        "weather"
+      ],
+      "name": "type",
+      "default": "weather",
+      "docstring": "Type of dataset."
+    }
+  ],
+  "class_docstring": "Weather dataset: station positions and time-dependent mean external atmosphere and weather information"
+}

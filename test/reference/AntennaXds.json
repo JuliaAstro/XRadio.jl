@@ -1,0 +1,549 @@
+{
+  "$class": "DatasetSchema",
+  "schema_name": "xradio.measurement_set.schema.AntennaXds",
+  "dimensions": [
+    [
+      "antenna_name",
+      "receptor_label"
+    ],
+    [
+      "antenna_name",
+      "receptor_label",
+      "ellipsoid_dir_label"
+    ],
+    [
+      "antenna_name",
+      "receptor_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "antenna_name",
+      "receptor_label",
+      "cartesian_pos_label",
+      "ellipsoid_dir_label"
+    ],
+    [
+      "antenna_name",
+      "receptor_label",
+      "ellipsoid_dis_label"
+    ],
+    [
+      "antenna_name",
+      "receptor_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label"
+    ],
+    [
+      "antenna_name",
+      "receptor_label",
+      "cartesian_pos_label",
+      "ellipsoid_dis_label"
+    ],
+    [
+      "antenna_name",
+      "receptor_label",
+      "cartesian_pos_label",
+      "ellipsoid_dir_label",
+      "ellipsoid_dis_label"
+    ]
+  ],
+  "coordinates": [
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.AntennaNameArray",
+      "dimensions": [
+        [
+          "antenna_name"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "optional": true,
+          "name": "long_name",
+          "default": "Antenna name",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Model of the antenna_name coordinate, used in the main dataset (single dish data, :py:class:`VisibilityXds`)\nand several sub-datasets such as antenna_xds, pointing_xds, weather_xds, system_calibration_xds, gain_curve_xds, etc.",
+      "data_docstring": "Unique name for each antenna(_station).",
+      "name": "antenna_name",
+      "optional": false,
+      "docstring": "Antenna name "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "antenna_name"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "station_name",
+      "optional": false,
+      "docstring": "Name of the station pad (relevant to arrays with moving antennas). "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "antenna_name"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "mount",
+      "optional": false,
+      "docstring": "Mount type of the antenna. Reserved keywords include: ”EQUATORIAL” - equatorial mount;\n”ALT-AZ”: azimuth-elevation mount;\n\"ALT-AZ+ROTATOR\": alt-az mount with feed rotator; introduced for ASKAP dishes;\n\"ALT-AZ+NASMYTH-R\": Nasmyth mount with receivers at the right-hand side of the cabin. Many high-frequency antennas used for VLBI have such a mount typel;\n\"ALT-AZ+NASMYTH-L\": Nasmyth mount with receivers at the left-hand side of the cabin.\n\"ALT-AZ+BWG-R\": alt-az mount that uses a Beam Wave Guide to bring the focus down to the pedestal. The receivers are at the right-hand side of the cabin (-R). Compared to the Nasmyth mounts there is an extra correction term because there are now two rotating mirrors. See https://arxiv.org/abs/2210.13381 for more details.\n\"ALT-AZ+BWG-L\": alt-az mount that uses a Beam Wave Guide, as above, but with receivers at the left-hand side of the cabin.\n”X-Y”: x-y mount;\n”SPACE-HALCA” - specific orientation model."
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "antenna_name"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "telescope_name",
+      "optional": false,
+      "docstring": "Useful when data is combined from mutiple arrays for example ACA + ALMA. "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "receptor_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "receptor_label",
+      "optional": false,
+      "docstring": "Names of receptors "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "antenna_name",
+          "receptor_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "polarization_type",
+      "optional": false,
+      "docstring": "Polarization type to which each receptor responds (e.g. ”R”,”L”,”X” or ”Y”).\nThis is the receptor polarization type as recorded in the final correlated data (e.g. ”RR”); i.e.\nas measured after all polarization combiners. ['X','Y'], ['R','L'] "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "cartesian_pos_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "cartesian_pos_label",
+      "optional": true,
+      "docstring": "(x,y,z) - either cartesian or ellipsoid "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "ellipsoid_dir_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "ellipsoid_dir_label",
+      "optional": true,
+      "docstring": "(lon, lat, dist) - either cartesian or ellipsoid"
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "ellipsoid_dis_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "ellipsoid_dis_label",
+      "optional": true,
+      "docstring": "(lon, lat, dist) - either cartesian or ellipsoid"
+    }
+  ],
+  "data_vars": [
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.LocationArray",
+      "dimensions": [
+        [
+          "antenna_name",
+          "ellipsoid_dir_label"
+        ],
+        [
+          "antenna_name",
+          "ellipsoid_dis_label"
+        ],
+        [
+          "antenna_name",
+          "cartesian_pos_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m",
+            "rad"
+          ],
+          "name": "units",
+          "docstring": "Units of the location coordinates (typically 'm' or 'rad')."
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "ITRS",
+            "Undefined"
+          ],
+          "name": "frame",
+          "docstring": "Reference frame. Can be ITRS (assumed for all Earth locations) or Undefined (used in non-Earth locations)."
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "geocentric",
+            "planetcentric",
+            "geodetic",
+            "planetodetic",
+            "orbital",
+            "topocentric"
+          ],
+          "name": "coordinate_system",
+          "docstring": "Can be ``geocentric/planetcentric, geodetic/planetodetic, orbital`` "
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "name": "origin_object_name",
+          "docstring": "earth/sun/moon/etc."
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "GRS80",
+            "WGS84",
+            "WGS72"
+          ],
+          "optional": true,
+          "name": "ellipsoid",
+          "docstring": "Ellipsoid used in geodetic Earth locations (with EllipsoidDirLabel and EllipsoidDirLabel coordinate)"
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "location"
+          ],
+          "name": "type",
+          "default": "location",
+          "docstring": "Measure type. Should be ``\"location\"``."
+        }
+      ],
+      "class_docstring": "Measure type used for example in antenna_xds/ANTENNA_POSITION, weather_xds/STATION_POSITION,\nfield_and_source_xds(ephemeris)/OBSERVER_POSITION.\n\nData dimensions can be CartesianPosLabel or EllipsoidDirLabel or EllipsoidDisLabel",
+      "data_docstring": null,
+      "name": "ANTENNA_POSITION",
+      "optional": false,
+      "docstring": "In a right-handed frame, X towards the intersection of the equator and\nthe Greenwich meridian, Z towards the pole."
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.QuantityInMetersArray",
+      "dimensions": [
+        [
+          "antenna_name"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "quantity"
+          ],
+          "name": "type",
+          "default": "quantity",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Quantity with units of meters",
+      "data_docstring": null,
+      "name": "ANTENNA_DISH_DIAMETER",
+      "optional": true,
+      "docstring": "The diameter of the main reflector (or the largest dimension for non-circular apertures)."
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.QuantityInMetersArray",
+      "dimensions": [
+        [
+          "antenna_name"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "quantity"
+          ],
+          "name": "type",
+          "default": "quantity",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Quantity with units of meters",
+      "data_docstring": null,
+      "name": "ANTENNA_EFFECTIVE_DISH_DIAMETER",
+      "optional": true,
+      "docstring": "Effective dish diameter used in computing beam model (such as airy disk). "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.QuantityInMetersArray",
+      "dimensions": [
+        [
+          "antenna_name"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "quantity"
+          ],
+          "name": "type",
+          "default": "quantity",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Quantity with units of meters",
+      "data_docstring": null,
+      "name": "ANTENNA_BLOCKAGE",
+      "optional": true,
+      "docstring": "Blockage caused by secondary reflector used in computing beam model (such as airy disk)."
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.QuantityInRadiansArray",
+      "dimensions": [
+        [
+          "antenna_name",
+          "receptor_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "rad"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "quantity"
+          ],
+          "name": "type",
+          "default": "quantity",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Quantity with units of radians",
+      "data_docstring": null,
+      "name": "ANTENNA_RECEPTOR_ANGLE",
+      "optional": true,
+      "docstring": "Polarization reference angle. Converts into parallactic angle in the sky domain."
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.QuantityInMetersArray",
+      "dimensions": [
+        [
+          "antenna_name"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "quantity"
+          ],
+          "name": "type",
+          "default": "quantity",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Quantity with units of meters",
+      "data_docstring": null,
+      "name": "ANTENNA_FOCUS_LENGTH",
+      "optional": true,
+      "docstring": "Focus length. As defined along the optical axis of the antenna."
+    }
+  ],
+  "attributes": [
+    {
+      "$class": "AttrSchemaRef",
+      "type": "str",
+      "optional": true,
+      "name": "overall_telescope_name",
+      "docstring": "The name of the collection of arrays and dishes that were used for the observation.\nIn many instances this will only be a single array or dish. An example of a\ntelescope consistening of mutiple arrays and dishes is the EHT. The coordinate\ntelescope_name will give the names of the constituent arrays and dishes. From\nMSv2 observation table."
+    },
+    {
+      "$class": "AttrSchemaRef",
+      "type": "bool",
+      "optional": true,
+      "name": "relocatable_antennas",
+      "docstring": "Can the antennas be moved (ALMA, VLA, NOEMA) "
+    },
+    {
+      "$class": "AttrSchemaRef",
+      "type": "str",
+      "literal": [
+        "antenna"
+      ],
+      "name": "type",
+      "default": "antenna",
+      "docstring": "Type of dataset. Expected to be ``antenna``"
+    }
+  ],
+  "class_docstring": "Antenna dataset: global antenna properties for each antenna."
+}

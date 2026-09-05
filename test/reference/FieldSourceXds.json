@@ -1,0 +1,598 @@
+{
+  "$class": "DatasetSchema",
+  "schema_name": "xradio.measurement_set.schema.FieldSourceXds",
+  "dimensions": [
+    [
+      "field_name",
+      "sky_dir_label"
+    ],
+    [
+      "field_name",
+      "sky_dir_label",
+      "cartesian_pos_label"
+    ],
+    [
+      "field_name",
+      "sky_dir_label",
+      "line_label"
+    ],
+    [
+      "field_name",
+      "sky_dir_label",
+      "cartesian_pos_label",
+      "line_label"
+    ]
+  ],
+  "coordinates": [
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "field_name"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "source_name",
+      "optional": false,
+      "docstring": "Source name. "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "field_name"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "field_name",
+      "optional": false,
+      "docstring": "Field name."
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "sky_dir_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "sky_dir_label",
+      "optional": false,
+      "docstring": "Coordinate labels of sky directions (typically shape 2 and 'ra', 'dec') "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "cartesian_pos_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "cartesian_pos_label",
+      "optional": true,
+      "default": [
+        "x",
+        "y",
+        "z"
+      ],
+      "docstring": "Coordinate labels of geocentric earth location data (typically shape 3 and 'x', 'y', 'z')"
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "line_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "line_label",
+      "optional": true,
+      "default": [],
+      "docstring": "Line labels (for line names and variables). "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": null,
+      "dimensions": [
+        [
+          "field_name",
+          "line_label"
+        ]
+      ],
+      "dtypes": [
+        "<U0"
+      ],
+      "coordinates": [],
+      "attributes": [],
+      "class_docstring": null,
+      "data_docstring": null,
+      "name": "line_names",
+      "optional": true,
+      "default": [],
+      "docstring": "Line names (e.g. v=1, J=1-0, SiO). "
+    }
+  ],
+  "data_vars": [
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.SkyCoordArray",
+      "dimensions": [
+        [
+          "field_name",
+          "sky_dir_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m",
+            "rad"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "sky_coord"
+          ],
+          "name": "type",
+          "default": "sky_coord",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "icrs",
+            "fk5",
+            "fk4",
+            "fk4noterms",
+            "galactic",
+            "galactocentric",
+            "supergalactic",
+            "altaz",
+            "hadec",
+            "gcrs",
+            "cirs",
+            "itrs",
+            "hcrs",
+            "teme",
+            "tete",
+            "precessedgeocentric",
+            "geocentricmeanecliptic",
+            "barycentricmeanecliptic",
+            "heliocentricmeanecliptic",
+            "geocentrictrueecliptic",
+            "barycentrictrueecliptic",
+            "heliocentrictrueecliptic",
+            "heliocentriceclipticiau76",
+            "custombarycentricecliptic",
+            "lsr",
+            "lsrk",
+            "lsrd",
+            "galacticlsr"
+          ],
+          "name": "frame",
+          "default": "icrs",
+          "docstring": "Possible values are :py:class:`astropy.coordinates.SkyCoord` frames.\n\nSeveral casacore frames found in MSv2 are translated to ``astropy`` frames as follows:\n\n* ``AZELGEO`` => ``altaz``\n* ``J2000`` => ``fk5``\n* ``ICRS`` => ``icrs``\n\nFrom ``fixvis`` docs: ``clean`` and the ``im`` tool ignore the reference frame claimed\nby the UVW column (it is often mislabelled as ITRF when it is really FK5\nor J2000) and instead assume the (u, v, w)s are in the same frame as the phase\ntracking center. ``calcuvw`` does not yet force the UVW column and field centers\nto use the same reference frame!"
+        }
+      ],
+      "class_docstring": "Measures array for data variables that are sky coordinates, used in :py:class:`FieldSourceXds`",
+      "data_docstring": null,
+      "name": "FIELD_PHASE_CENTER_DIRECTION",
+      "optional": true,
+      "docstring": "Offset from the SOURCE_DIRECTION that gives the direction of phase\ncenter for which the fringes have been stopped-that is a point source in\nthis direction will produce a constant measured phase (page 2 of\nhttps://articles.adsabs.harvard.edu/pdf/1999ASPC..180...79F). For\nconversion from MSv2, frame refers column keywords by default. If frame\nvaries with field, it refers DelayDir_Ref column instead."
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.SkyCoordArray",
+      "dimensions": [
+        [
+          "field_name",
+          "sky_dir_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m",
+            "rad"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "sky_coord"
+          ],
+          "name": "type",
+          "default": "sky_coord",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "icrs",
+            "fk5",
+            "fk4",
+            "fk4noterms",
+            "galactic",
+            "galactocentric",
+            "supergalactic",
+            "altaz",
+            "hadec",
+            "gcrs",
+            "cirs",
+            "itrs",
+            "hcrs",
+            "teme",
+            "tete",
+            "precessedgeocentric",
+            "geocentricmeanecliptic",
+            "barycentricmeanecliptic",
+            "heliocentricmeanecliptic",
+            "geocentrictrueecliptic",
+            "barycentrictrueecliptic",
+            "heliocentrictrueecliptic",
+            "heliocentriceclipticiau76",
+            "custombarycentricecliptic",
+            "lsr",
+            "lsrk",
+            "lsrd",
+            "galacticlsr"
+          ],
+          "name": "frame",
+          "default": "icrs",
+          "docstring": "Possible values are :py:class:`astropy.coordinates.SkyCoord` frames.\n\nSeveral casacore frames found in MSv2 are translated to ``astropy`` frames as follows:\n\n* ``AZELGEO`` => ``altaz``\n* ``J2000`` => ``fk5``\n* ``ICRS`` => ``icrs``\n\nFrom ``fixvis`` docs: ``clean`` and the ``im`` tool ignore the reference frame claimed\nby the UVW column (it is often mislabelled as ITRF when it is really FK5\nor J2000) and instead assume the (u, v, w)s are in the same frame as the phase\ntracking center. ``calcuvw`` does not yet force the UVW column and field centers\nto use the same reference frame!"
+        }
+      ],
+      "class_docstring": "Measures array for data variables that are sky coordinates, used in :py:class:`FieldSourceXds`",
+      "data_docstring": null,
+      "name": "FIELD_REFERENCE_CENTER_DIRECTION",
+      "optional": true,
+      "docstring": "Used in single-dish to record the associated reference direction if positionswitching\nbeen applied. For conversion from MSv2, frame refers column keywords by default. If\nframe varies with field, it refers DelayDir_Ref column instead."
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.SkyCoordArray",
+      "dimensions": [
+        [
+          "field_name",
+          "sky_dir_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m",
+            "rad"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "sky_coord"
+          ],
+          "name": "type",
+          "default": "sky_coord",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "icrs",
+            "fk5",
+            "fk4",
+            "fk4noterms",
+            "galactic",
+            "galactocentric",
+            "supergalactic",
+            "altaz",
+            "hadec",
+            "gcrs",
+            "cirs",
+            "itrs",
+            "hcrs",
+            "teme",
+            "tete",
+            "precessedgeocentric",
+            "geocentricmeanecliptic",
+            "barycentricmeanecliptic",
+            "heliocentricmeanecliptic",
+            "geocentrictrueecliptic",
+            "barycentrictrueecliptic",
+            "heliocentrictrueecliptic",
+            "heliocentriceclipticiau76",
+            "custombarycentricecliptic",
+            "lsr",
+            "lsrk",
+            "lsrd",
+            "galacticlsr"
+          ],
+          "name": "frame",
+          "default": "icrs",
+          "docstring": "Possible values are :py:class:`astropy.coordinates.SkyCoord` frames.\n\nSeveral casacore frames found in MSv2 are translated to ``astropy`` frames as follows:\n\n* ``AZELGEO`` => ``altaz``\n* ``J2000`` => ``fk5``\n* ``ICRS`` => ``icrs``\n\nFrom ``fixvis`` docs: ``clean`` and the ``im`` tool ignore the reference frame claimed\nby the UVW column (it is often mislabelled as ITRF when it is really FK5\nor J2000) and instead assume the (u, v, w)s are in the same frame as the phase\ntracking center. ``calcuvw`` does not yet force the UVW column and field centers\nto use the same reference frame!"
+        }
+      ],
+      "class_docstring": "Measures array for data variables that are sky coordinates, used in :py:class:`FieldSourceXds`",
+      "data_docstring": null,
+      "name": "SOURCE_DIRECTION",
+      "optional": true,
+      "docstring": "CASA Table Cols: RA,DEC,Rho.\"Astrometric RA and Dec and Geocentric\ndistance with respect to the observer's location (Geocentric). \"Adjusted\nfor light-time aberration only. With respect to the reference plane and\nequinox of the chosen system (ICRF or FK4/B1950). If the FK4/B1950 frame\noutput is selected, elliptic aberration terms are added. Astrometric RA/DEC\nis generally used when comparing or reducing data against a star catalog.\"\nhttps://ssd.jpl.nasa.gov/horizons/manual.html : 1. Astrometric RA & DEC"
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.SpectralCoordArray",
+      "dimensions": [
+        [
+          "field_name",
+          "line_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "Hz"
+          ],
+          "name": "units",
+          "default": "Hz",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "REST",
+            "BARY",
+            "TOPO",
+            "gcrs",
+            "icrs",
+            "hcrs",
+            "lsrk",
+            "lsrd",
+            "lsr"
+          ],
+          "name": "observer",
+          "default": "icrs",
+          "docstring": "Capitalized reference observers are from casacore. TOPO implies creating astropy earth_location.\nAstropy velocity reference frames are lowercase. Note that Astropy does not use the name 'TOPO' (telescope centric)\nrather it assumes if no velocity frame is given that this is the default.\n\nWhen converting from MSv2 and casacore frequency frames, the following translations from casacore to astropy\nframe names are applied: GEO=>gcrs, LSRK=>lsrk, LSRD=>lsrd"
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "spectral_coord"
+          ],
+          "name": "type",
+          "default": "spectral_coord",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Measures array for data variables and attributes that are spectral coordinates.",
+      "data_docstring": null,
+      "name": "LINE_REST_FREQUENCY",
+      "optional": true,
+      "docstring": "Rest frequencies for the transitions. "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.QuantityInMetersPerSecondArray",
+      "dimensions": [
+        [
+          "field_name",
+          "line_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m/s"
+          ],
+          "name": "units",
+          "docstring": null
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "quantity"
+          ],
+          "name": "type",
+          "default": "quantity",
+          "docstring": null
+        }
+      ],
+      "class_docstring": "Quantity with units of meters per second",
+      "data_docstring": null,
+      "name": "LINE_SYSTEMIC_VELOCITY",
+      "optional": true,
+      "docstring": "Systemic velocity at reference "
+    },
+    {
+      "$class": "ArraySchemaRef",
+      "schema_name": "xradio.measurement_set.schema.LocationArray",
+      "dimensions": [
+        [
+          "cartesian_pos_label"
+        ]
+      ],
+      "dtypes": [
+        "<f8"
+      ],
+      "coordinates": [],
+      "attributes": [
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "m",
+            "rad"
+          ],
+          "name": "units",
+          "docstring": "Units of the location coordinates (typically 'm' or 'rad')."
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "ITRS",
+            "Undefined"
+          ],
+          "name": "frame",
+          "docstring": "Reference frame. Can be ITRS (assumed for all Earth locations) or Undefined (used in non-Earth locations)."
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "geocentric",
+            "planetcentric",
+            "geodetic",
+            "planetodetic",
+            "orbital",
+            "topocentric"
+          ],
+          "name": "coordinate_system",
+          "docstring": "Can be ``geocentric/planetcentric, geodetic/planetodetic, orbital`` "
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "name": "origin_object_name",
+          "docstring": "earth/sun/moon/etc."
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "GRS80",
+            "WGS84",
+            "WGS72"
+          ],
+          "optional": true,
+          "name": "ellipsoid",
+          "docstring": "Ellipsoid used in geodetic Earth locations (with EllipsoidDirLabel and EllipsoidDirLabel coordinate)"
+        },
+        {
+          "$class": "AttrSchemaRef",
+          "type": "str",
+          "literal": [
+            "location"
+          ],
+          "name": "type",
+          "default": "location",
+          "docstring": "Measure type. Should be ``\"location\"``."
+        }
+      ],
+      "class_docstring": "Measure type used for example in antenna_xds/ANTENNA_POSITION, weather_xds/STATION_POSITION,\nfield_and_source_xds(ephemeris)/OBSERVER_POSITION.\n\nData dimensions can be CartesianPosLabel or EllipsoidDirLabel or EllipsoidDisLabel",
+      "data_docstring": null,
+      "name": "OBSERVER_POSITION",
+      "optional": true,
+      "docstring": "Observer location. "
+    }
+  ],
+  "attributes": [
+    {
+      "$class": "AttrSchemaRef",
+      "type": "str",
+      "literal": [
+        "ratio",
+        "m/s"
+      ],
+      "optional": true,
+      "name": "doppler_shift_velocity",
+      "docstring": "Velocity definition of the Doppler shift, e.g., RADIO or OPTICAL velocity in m/s "
+    },
+    {
+      "$class": "AttrSchemaRef",
+      "type": "str",
+      "optional": true,
+      "name": "source_model_url",
+      "docstring": "URL to access source model"
+    },
+    {
+      "$class": "AttrSchemaRef",
+      "type": "str",
+      "literal": [
+        "field_and_source"
+      ],
+      "name": "type",
+      "default": "field_and_source",
+      "docstring": "Type of dataset."
+    }
+  ],
+  "class_docstring": "Field positions for each source.\n\nDefines a field position on the sky. For interferometers, this is the correlated field position.\nFor single dishes, this is the nominal pointing direction."
+}
