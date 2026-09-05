@@ -46,7 +46,12 @@ function synthetic_visibility(;
             metadata = Dict{Symbol, Any}(
                 :type => "spectral_coord", :units => "Hz", :observer => "icrs",
                 :spectral_window_name => "spw_0", :spectral_window_intents => ["CONTINUUM"],
-                :reference_frequency => measure(2.3e11, "Hz", "spectral_coord"),
+                :reference_frequency => XRadio.Measure(
+                    2.3e11,
+                    Dict{Symbol, Any}(
+                        :units => "Hz", :type => "spectral_coord", :observer => "icrs"
+                    )
+                ),
                 :channel_width => measure(1.0e6, "Hz"),
             )
         )
@@ -87,6 +92,8 @@ function synthetic_visibility(;
                     :correlated_data => "VISIBILITY", :flag => "FLAG",
                     :weight => "WEIGHT", :uvw => "UVW",
                     :field_and_source => "field_and_source_base_xds",
+                    :description => "Correlator output",
+                    :date => "2026-01-01T00:00:00.000",
                 ),
             ),
         )

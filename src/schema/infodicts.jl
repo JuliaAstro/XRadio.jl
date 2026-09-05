@@ -77,8 +77,8 @@ const DATA_GROUP = DictSpec(
         AttrSpec(:weight, :str; doc = "Name of the group's weight variable"),
         AttrSpec(:uvw, :str; optional = true, doc = "Name of the group's UVW variable; absent for single-dish data"),
         AttrSpec(:field_and_source, :str; doc = "Name of the group's field and source sub-dataset"),
-        AttrSpec(:description, :str; optional = true, doc = "What distinguishes this group"),
-        AttrSpec(:date, :str; optional = true, doc = "ISO 8601 creation time of the group"),
+        AttrSpec(:description, :str; doc = "What distinguishes this group"),
+        AttrSpec(:date, :str; doc = "ISO 8601 creation time of the group"),
     ];
     doc = "One correlated-data / flag / weight / uvw grouping."
 )

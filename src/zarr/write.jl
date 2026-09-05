@@ -71,13 +71,43 @@ function _write_tree(parent::Zarr.ZGroup, name::AbstractString, tree; zarr_forma
         coord = DimArray(collect(val(d)), (d,); metadata = metadata(lookup(d)))
         _write_array(group, string(msv4name(d)), coord; zarr_format, compressor, chunks)
     end
+
+    # Each data variable names the non-index coordinates of its dataset, which
+    # is how a reader learns they are coordinates and not data of their own.
+    # Promotion is dataset-wide, so every variable names all of them: listing
+    # only those sharing a variable's dimensions would leave a coordinate such
+    # as `polarization_type`, whose `receptor_label` no data variable spans,
+    # mentioned nowhere and read back as a variable.
+    auxiliary = _auxiliary_coords(tree)
+    allcoords = sort!(collect(values(auxiliary)))
     for key in keys(tree)
-        _write_array(group, _diskname(tree, key), tree[key]; zarr_format, compressor, chunks)
+        coords = haskey(auxiliary, key) ? String[] : allcoords
+        _write_array(
+            group, _diskname(tree, key), tree[key];
+            zarr_format, compressor, chunks, coords
+        )
     end
     for (subkey, sub) in branches(tree)
         _write_tree(group, nodename(subkey), sub; zarr_format, compressor, chunks)
     end
     return group
+end
+
+# The layers that are coordinates rather than data variables: the schema calls
+# them coordinates, but they span a dimension they are not named after, so
+# `DimensionalData` holds them as layers. `field_name` and `scan_name` label
+# the time axis this way.
+function _auxiliary_coords(tree)
+    type = get(metadata(tree), :type, nothing)
+    type isa AbstractString || return Dict{Symbol, String}()
+    spec = try
+        schema(type)
+    catch
+        return Dict{Symbol, String}()
+    end
+    return Dict{Symbol, String}(
+        c.name => c.diskname for c in spec.coords if haskey(tree, c.name)
+    )
 end
 
 # The on-disk name of a layer. The schema knows it; a variable the schema does
@@ -96,7 +126,10 @@ function _diskname(tree, key::Symbol)
     return uppercase(string(key))
 end
 
-function _write_array(group::Zarr.ZGroup, name::AbstractString, array; zarr_format, compressor, chunks)
+function _write_array(
+        group::Zarr.ZGroup, name::AbstractString, array;
+        zarr_format, compressor, chunks, coords = String[]
+    )
     data = _to_storable(parent(array), zarr_format)
     # MSv4 states dimensions slowest-varying first, the reverse of the order a
     # Julia array's axes run in.
@@ -106,6 +139,7 @@ function _write_array(group::Zarr.ZGroup, name::AbstractString, array; zarr_form
     # Zarr v2 has nowhere in its own metadata for dimension names, so xarray
     # puts them in an attribute; v3 has a field for them, patched in below.
     zarr_format == 2 && (attrs["_ARRAY_DIMENSIONS"] = string.(dnames))
+    isempty(coords) || (attrs["coordinates"] = join(coords, " "))
 
     z = Zarr.zcreate(
         eltype(data), group, name, size(data)...;

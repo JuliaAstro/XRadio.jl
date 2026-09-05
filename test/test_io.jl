@@ -60,6 +60,30 @@ end
     @test isempty(check(read(ProcessingSet, path)))
 end
 
+@testset "auxiliary coordinates are marked as coordinates" begin
+    # `field_name` and `scan_name` are coordinates that are not dimensions.
+    # xarray only knows that from the `coordinates` attribute on the data
+    # variables, and without it reads them back as data variables — which this
+    # package's own reader would not notice, because it labels from the
+    # dimension names instead. So the attribute is checked directly.
+    ps = synthetic_set(1)
+    path = joinpath(mktempdir(), "coords.ps.zarr")
+    write(path, ps)
+
+    group = Zarr.zopen(path)["test_00"]
+    listed = split(group["VISIBILITY"].attrs["coordinates"])
+    for name in ("field_name", "scan_name", "baseline_antenna1_name", "baseline_antenna2_name")
+        @test name in listed
+    end
+    # A coordinate does not list itself.
+    @test !haskey(group["scan_name"].attrs, "coordinates")
+
+    # Every non-index coordinate is named, including one whose dimensions no
+    # data variable spans.
+    antenna = Zarr.zopen(path)["test_00"]["antenna_xds"]
+    @test "polarization_type" in split(antenna["ANTENNA_POSITION"].attrs["coordinates"])
+end
+
 @testset "lazy and eager reads agree" begin
     ps = synthetic_set(1)
     path = joinpath(mktempdir(), "lazy.ps.zarr")

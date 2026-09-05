@@ -90,10 +90,11 @@ function _v3_dimension_names(array::Zarr.ZArray)
 end
 
 # Attributes that describe how an array is stored rather than what it means.
-# `_ARRAY_DIMENSIONS` is where Zarr v2 keeps dimension names, and `_FillValue`
-# is xarray's encoding of the fill. Both are re-derived on write, so keeping
-# them in the metadata would only let a stale copy travel with the data.
-const STORAGE_ATTRS = (:_ARRAY_DIMENSIONS, :_FillValue)
+# `_ARRAY_DIMENSIONS` is where Zarr v2 keeps dimension names, `_FillValue` is
+# xarray's encoding of the fill, and `coordinates` lists the non-index
+# coordinates that label a variable. All three are re-derived on write, so
+# keeping them in the metadata would only let a stale copy travel with the data.
+const STORAGE_ATTRS = (:_ARRAY_DIMENSIONS, :_FillValue, :coordinates)
 
 # Attribute dictionaries come back from Zarr keyed by string. MSv4 attribute
 # names are identifiers, so they are more usefully symbols; nested dictionaries

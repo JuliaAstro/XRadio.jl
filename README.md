@@ -137,6 +137,11 @@ reference implementation, and the test suite compares every dataset, variable,
 dimension tuple, dtype set, optionality flag and permitted attribute value
 against it.
 
+The other direction is checked by hand rather than in CI, since it needs a
+Python environment: a store written here passes `xradio`'s own
+`check_datatree` with no issues, and `xradio` reads it with the dimensions in
+MSv4 order and the data unchanged.
+
 Regenerate the reference against a new `xradio` release with:
 
 ```python
@@ -152,6 +157,9 @@ export_schema_json_file(s.VisibilityXds, "test/reference/VisibilityXds.json")
   path to that and no plan for one.
 - **Images.** `xradio` also defines an image data model; this package covers
   the Measurement Set only.
+- **Attributes nested inside attributes.** `check` validates an array's own
+  attributes but does not descend into the labelled arrays some of them hold,
+  such as the frequency axis's `reference_frequency`.
 
 ## Status against the standard
 
