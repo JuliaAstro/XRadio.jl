@@ -87,8 +87,12 @@ Ordered by how much design they need, not by code volume.
    a converter that silently fabricates `intents` produces data that *looks*
    authoritative and is not.
 
-4. **Weights.** FITS-IDI `WEIGHT` semantics depend on the `WEIGHTYP` header;
-   MSv4 `WEIGHT` is strictly `1/σ²`. Gustavo's `weight_mode` handling
+4. **Weights.** Confirmed by CHUNK-001 to be worse than assumed. The test file
+   has `WEIGHTYP = "CORRELAT"`, so weights are correlation-coefficient
+   normalized rather than `1/σ²` — the conversion is required, not a corner
+   case. And the `WEIGHT` column is `NO_BAND × NO_STKD`, *not* per channel,
+   while MSv4's `WEIGHT` has the full science-array shape, so it must also be
+   broadcast across `frequency`. Gustavo's `weight_mode` handling
    (`:auto`/`:validity`/`:radiometer`) encodes hard-won knowledge here and
    should be ported rather than re-derived.
 
@@ -98,23 +102,27 @@ Ordered by how much design they need, not by code volume.
    VLBI the precision matters. Consider `format: "mjd"` instead, which avoids
    the epoch shift entirely — see CHUNK-004.
 
-6. **UVW.** FITS-IDI `UU---SIN`/`VV---SIN`/`WW---SIN` are in **seconds** (light
-   travel time); MSv4 `UVW` is in **metres**. Multiply by `c`. Also settle the
-   frame attribute — FITS-IDI is typically apparent-of-date, MSv4 permits
-   `icrs`/`fk5`/`APP`. Verify the sign convention (antenna1→antenna2) against a
-   real file rather than assuming.
+6. **UVW and the other unit conversions.** `UU/VV/WW---SIN` carry
+   `TUNIT = SECONDS` (verified), so multiply by `c` for MSv4's metres. The sign
+   convention (antenna1→antenna2) is the one thing headers cannot settle and
+   must be checked against real `BASELINE` values. Several other conversions
+   ride along: `RAEPO`/`DECEPO` and `WIND_DIRECTION` in degrees → radians,
+   `TEMPERATURE`/`DEWPOINT` in centigrade → kelvin, `PRESSURE` in millibars →
+   pascals. Also settle the frame attribute — MSv4 permits `icrs`/`fk5`/`APP`.
 
-7. **Dense regridding.** FITS-IDI rows are `(time, baseline)` pairs with
-   dropouts; MSv4 is a dense rectangular grid padded with `NaN`. Gustavo does
-   this well and lazily; the converter can be simpler because it writes once.
+7. **Dense regridding, at a size that will not fit in memory.** FITS-IDI rows
+   are `(time, baseline)` pairs with dropouts; MSv4 is a dense rectangular grid
+   padded with `NaN`. The plan originally assumed the converter could be
+   simpler than Gustavo's lazy reader because it writes once — CHUNK-001 shows
+   otherwise, at ~10 GB per band partition. See CHUNK-014.
 
 ## Test strategy
 
-There is **no FITS-IDI file on this machine** and none in Gustavo's fixtures —
-Gustavo's tests build one by writing a synthetic `UVSet` with its own
-`write_fitsidi`. XRadio needs the same trick: a minimal, test-only FITS-IDI
-writer, exactly paralleling `test/synthetic.jl`, which already builds a
-conforming MSv4 from nothing.
+Two real VLBA files now sit under `testdata/` (CHUNK-001), but at 24.73 GB the
+usable one is an integration fixture, not a unit-test one. The synthetic route
+is still needed: a minimal, test-only FITS-IDI writer paralleling
+`test/synthetic.jl`, which already builds a conforming MSv4 from nothing.
+Gustavo takes the same approach, writing fixtures with its own `write_fitsidi`.
 
 Three layers, mirroring what is already in place:
 
@@ -124,16 +132,51 @@ Three layers, mirroring what is already in place:
 2. **Value round-trip.** Assert visibilities, UVW, weights, flags, antenna
    positions and frequencies survive with the values put in, including the
    axis-order reversal.
-3. **Real file, by hand.** Convert one real VLBI FITS-IDI and run `xradio`'s
-   `check_datatree` on the result, as was done for the writer. Needs a file —
-   see CHUNK-001.
+3. **Real file, by hand.** Convert the Q-band file and run `xradio`'s
+   `check_datatree` on the result, as was done for the writer. Because it is
+   24.73 GB, prefer converting a row range or a single band; a full conversion
+   is a deliberate long-running job, not part of any suite.
 
 ## Chunks
 
 ### CHUNK-001: preflight
 - **Kind**: `preflight`
-- **Description**: Establish the baseline and, critically, **obtain a real FITS-IDI file**. Confirm XRadio's suite is green at HEAD. Find a public VLBI FITS-IDI (EHT data releases, VLBA archive, or one of the author's own tracks) and record its path, size, and which optional tables it carries. Dump its HDU list and headers into this chunk's Notes — every later chunk is guessing without it. Also verify against that file: the `UU---SIN` units (seconds vs metres), the UVW sign convention, and whether `NO_BAND > 1`.
-- **Status**: `todo`
+- **Description**: Establish the baseline and, critically, **obtain a real FITS-IDI file**. Record its HDU list and headers here — every later chunk is guessing without it. Verify the `UU---SIN` units, the UVW sign convention, and whether `NO_BAND > 1`.
+- **Status**: `complete`
+- **Notes**: Two VLBA BT164A files under `testdata/` (git-ignored; `testdata/fetch-all.sh` re-fetches, `testdata/SHA1SUMS` verifies). Surveyed with the **dev checkout** of FITSFiles at `/home/ptiede/.julia/dev/FITSFiles`, which reads them without complaint. Note its API is `cards["KEY"]`/`haskey`, not the `card_value` helper Gustavo defines locally.
+
+  **Q-band — `VLBA_BT164A_bt164aQband_...idifits`, 24.73 GB, complete.** The full-coverage case: every table the mapping needs is present.
+
+  | HDU | rows | | HDU | rows |
+  | --- | --- | --- | --- | --- |
+  | ARRAY_GEOMETRY | 10 | | UV_DATA | 752,160 |
+  | SOURCE | 3 | | FLAG | 7,245 |
+  | ANTENNA | 10 | | SYSTEM_TEMPERATURE | 2,043 |
+  | FREQUENCY | 1 | | PHASE-CAL | 2,368 |
+  | INTERFEROMETER_MODEL | 1,265 | | WEATHER | 899 |
+  | MODEL_COMPS | 1,265 | | GAIN_CURVE | 10 |
+  | CALC | 5 | | | |
+
+  `UV_DATA`: `NO_STKD=4`, `STK_1=-1` (RR, LL, RL, LR — circular, as expected for VLBA), `NO_BAND=4`, `NO_CHAN=256`, `REF_FREQ=42.912 GHz`, `CHAN_BW=500 kHz`, `WEIGHTYP="CORRELAT"`, `DATE-OBS=2025-12-08`, `TELESCOP=VLBA`, `OBSCODE=BT164A`. Columns: `UU/VV/WW---SIN [SECONDS]`, `DATE [DAYS]`, `TIME [DAYS]`, `BASELINE`, `FILTER`, `SOURCE`, `FREQID`, `INTTIM [SECONDS]`, `WEIGHT 16E`, `GATEID 0J` (empty), `FLUX 8192E [UNCALIB]`. Data-matrix axes `CTYPE1..4 = COMPLEX, STOKES (CRVAL=-1, CDELT=-1), FREQ, BAND`.
+
+  `ARRAY_GEOMETRY`: `FRAME=GEOCENTRIC`, `TIMSYS=UTC`, `RDATE=2025-12-08`; columns `ANNAME`, `STABXYZ [METERS]`, `NOSTA`, `MNTSTA`, `STAXOF [METERS]`, `DIAMETER [METERS]` — a direct fit to `antenna_xds`.
+  `FREQUENCY`: one row, `BANDFREQ`, `CH_WIDTH`, `TOTAL_BANDWIDTH`, `SIDEBAND`, `BB_CHAN`, each of length `NO_BAND`.
+  `SOURCE`: `RAEPO`/`DECEPO [DEGREES]`, `EQUINOX`, `RAAPP`/`DECAPP`, fluxes, velocities.
+  `WEATHER`: `TEMPERATURE [CENTIGRADE]`, `PRESSURE [MILLIBARS]`, `DEWPOINT [CENTIGRADE]`, `WIND_VELOCITY [M/SEC]`, `WIND_DIRECTION [DEGREES]`, `WVR_H2O`, `IONOS_ELECTRON`.
+  `SYSTEM_TEMPERATURE`: `TSYS_1/2 [K]`, `TANT_1/2 [K]` only. `GAIN_CURVE`: `TYPE`, `NTERM`, `X_VAL`, `Y_VAL`, `GAIN`, `SENS [K/JY]`. `PHASE-CAL`: `CABLE_CAL [SECONDS]`, `PC_FREQ [Hz]`, `PC_REAL`, `PC_IMAG`, `PC_RATE`. `FLAG`: `SOURCE_ID`, `ARRAY`, `ANTS`, `FREQID`, `TIMERANG [DAYS]`, `BANDS`, `CHANS`, `PFLAGS`, `REASON`, `SEVERITY`.
+  The `_1`/`_2` suffixes throughout are **per receptor** (R and L) and map onto MSv4's `receptor_label`.
+
+  **W-band — `VLBA_BT164A_bt164aWbandrecor_...idifits`: INCOMPLETE.** Its `UV_DATA` header declares 47.43 GB and only 3.09 GB is on disk; a `wget -c` is still running. `NO_BAND=16`, `NO_CHAN=64`, 1,434,170 rows, and it carries **only** ARRAY_GEOMETRY, SOURCE, ANTENNA, FREQUENCY, INTERFEROMETER_MODEL, CALC, MODEL_COMPS — no FLAG, SYSTEM_TEMPERATURE, PHASE-CAL, WEATHER or GAIN_CURVE. Once complete it is the useful *minimal* counterpart, and its 16 bands stress partitioning harder than Q-band's 4. Re-verify against `SHA1SUMS` before relying on it.
+
+  **Answers to the three questions this chunk existed to settle:**
+  1. `UU/VV/WW---SIN` carry `TUNIT = SECONDS`. Multiply by `c` for MSv4 metres — confirmed, not assumed.
+  2. `NO_BAND` is 4 and 16. Band partitioning is **mandatory**, not hypothetical.
+  3. Sign convention still unverified — it needs actual `BASELINE` values and antenna positions, not headers. Carried into CHUNK-007.
+
+  **Three findings that were not anticipated:**
+  - **`WEIGHT` is `16E` = `NO_BAND × NO_STKD`, not per channel.** MSv4 `WEIGHT` has the full science-array shape, so the weight must be broadcast across `frequency`.
+  - **`WEIGHTYP = "CORRELAT"`.** Weights are correlation-coefficient normalized, not `1/σ²`. Converting them is required, not optional — Gustavo's `weight_mode = :radiometer` path is what this needs.
+  - **`FLUX` is in `UNCALIB` units,** so `VISIBILITY.units` must not claim `Jy`.
 
 ### CHUNK-002: decide-partitioning
 - **Kind**: `decide`
@@ -169,7 +212,7 @@ Three layers, mirroring what is already in place:
 - **Kind**: `implement`
 - **Description**: Rows → the dense `(time, baseline_id, frequency, polarization)` grid, in XRadio's reversed Julia axis order, with `NaN` padding for absent baselines. Produce `VISIBILITY`, `FLAG`, `WEIGHT`, `UVW` and the coordinates `time`, `baseline_id`, `frequency`, `polarization`, `field_name`, `scan_name`, `baseline_antenna1_name`, `baseline_antenna2_name`. Apply the CHUNK-002 partitioning, the CHUNK-003 defaults, the CHUNK-004 time convention, the weight semantics from `WEIGHTYP`, and the UVW seconds→metres conversion. Gate: the result passes `check` with no issues.
 - **Status**: `todo`
-- **Depends on**: CHUNK-002, CHUNK-003, CHUNK-004, CHUNK-005, CHUNK-006
+- **Depends on**: CHUNK-002, CHUNK-003, CHUNK-004, CHUNK-005, CHUNK-006, CHUNK-014
 
 ### CHUNK-008: implement-antenna-and-field-source
 - **Kind**: `implement`
@@ -207,12 +250,30 @@ Three layers, mirroring what is already in place:
 - **Status**: `todo`
 - **Depends on**: CHUNK-012
 
+### CHUNK-014: decide-streaming-architecture
+- **Kind**: `decide`
+- **Description**: **Raised by CHUNK-001 and not anticipated when this plan was written.** The Q-band file is 24.73 GB of `UV_DATA`, and splitting it by band gives four partitions of roughly 6.2 GB of `VISIBILITY` alone (13,676 times x 55 baselines x 256 channels x 4 polarizations x 8 bytes), plus ~3 GB of `WEIGHT` and ~0.8 GB of `FLAG` each. `write(path, ps)` as it stands takes a fully materialized `ProcessingSet`, so the obvious implementation would need ~10 GB resident per partition and would not run on an ordinary machine.
+  Questions: (a) does the converter bypass the in-memory `ProcessingSet` and write Zarr chunk by chunk as it reads FITS-IDI rows? (b) or does `ProcessingSet` learn to hold lazy arrays, with `write` streaming them — which would also let `open(ProcessingSet, ...; lazy = true)` round-trip without materializing? (c) either way, what is the default `chunks` for a converted store, given the current default of one chunk per array is exactly wrong at this size?
+  **Recommendation**: (b). The reader already produces lazy `Zarr.ZArray`-backed layers, so a `write` that streams whatever array it is handed makes the lazy read path useful for the first time and keeps one write implementation rather than two. A time-chunked default (say 128 times x all baselines x 64 channels x all polarizations) follows from how the data is read and how it is later used.
+- **Status**: `todo`
+- **Depends on**: CHUNK-001
+
 ## Open risks
 
-- **No real FITS-IDI file yet.** CHUNK-001 is a hard gate: several conversions
-  (UVW units and sign, `WEIGHTYP` in practice, which optional tables real data
-  carries) cannot be settled from the spec alone, and getting them wrong is
-  silent — the output would pass the schema checker and be physically wrong.
+- **Scale.** Settled by CHUNK-001 and now the dominant constraint: 24.73 GB in,
+  ~10 GB per band partition out. Nothing in the current package streams, so
+  CHUNK-014 gates the main conversion. A unit test cannot use these files;
+  the synthetic writer (CHUNK-006) is not optional.
+- **The UVW sign convention is still unverified.** It is the one CHUNK-001
+  question headers could not answer, and getting it wrong is silent — the
+  output would pass the schema checker and be conjugated. Check it against
+  actual `BASELINE` values and `STABXYZ` positions in CHUNK-007.
+- **Unit conversions are pervasive and individually trivial**, which is what
+  makes them easy to miss: seconds→metres (UVW), degrees→radians (`RAEPO`,
+  `DECEPO`, `WIND_DIRECTION`), centigrade→kelvin (`TEMPERATURE`, `DEWPOINT`),
+  millibars→pascals (`PRESSURE`). MSv4 states units in every array's
+  attributes, so `check` catches a wrong *declaration* but never a wrong
+  *value*. Each conversion needs a test with a known number.
 - **Scan inference and invented metadata are judgement, not translation.** They
   belong in the docs and in the store's provenance, not only in the code.
 - **FLAG expansion is the fiddliest table.** Six independent range axes with

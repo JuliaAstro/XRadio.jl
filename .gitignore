@@ -5,4 +5,5 @@ Manifest-v*.toml
 *.jl.cov
 *.jl.*.cov
 *.jl.mem
+/testdata/
 /*.ps.zarr/
