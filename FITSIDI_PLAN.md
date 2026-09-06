@@ -228,7 +228,29 @@ Three layers, mirroring what is already in place:
 
 ### CHUNK-003: decide-invented-metadata
 - **Kind**: `decide`
-- **Description**: Settle what the converter puts in the MSv4 fields FITS-IDI cannot supply, and how loudly. Fields: `scan_intents`, `spectral_window_intents`, `observation_info.project_UID`, `release_date`, `processor_info.{type,sub_type}`, `data_groups.base.description`. Questions: (a) invent a documented placeholder, or refuse to convert without the user supplying it? (b) if invented, is a warning emitted per conversion, or is a record written into the store (e.g. `creator` or a `description` naming the source file and this package)? **Recommendation**: placeholders with a single summarizing warning listing every invented field, plus provenance in `data_groups.base.description` naming the FITS-IDI file — fail-fast is right for corrupt input, but refusing to convert a valid FITS-IDI because it lacks an ALMA project code would make the converter useless for its actual audience.
+- **Description**: Settle what the converter puts in the MSv4 fields FITS-IDI cannot supply, and how loudly.
+  **Largely answered by reading what the reference implementation does** (`_utils/_msv2/msv4_info_dicts.py`, `conversion.py`) and what the FITS-IDI primary header actually carries. The set of genuinely invented fields is far smaller than this chunk assumed:
+
+  | MSv4 field | FITS-IDI source | xradio's own MSv2 behaviour |
+  | --- | --- | --- |
+  | `observation_info.observer` | primary `OBSERVER` (`"BT164A"` — the obs code, not a person; VLBA convention) | `OBSERVATION.OBSERVER` |
+  | `observation_info.project_UID` | `UV_DATA.OBSCODE` (`"BT164A"`) | `OBSERVATION.PROJECT`, renamed — xradio does **not** synthesize a UID either |
+  | `observation_info.observing_log` | `HISTORY` cards (correlator, version, per-job spans) | `OBSERVATION.LOG` |
+  | `processor_info.type` | `"CORRELATOR"` | PROCESSOR table |
+  | `processor_info.sub_type` | primary `CORRELAT` (`"DIFX"`) | PROCESSOR table |
+  | `spectral_window_name` | `"spw_<n>"` | same `"spw_<id>"` fallback when `SPECTRAL_WINDOW.NAME` is empty |
+  | `observation_info.release_date` | **none** | `OBSERVATION.RELEASE_DATE` |
+  | `scan_intents` | **none** — FITS-IDI has no `STATE`/`OBS_MODE` analogue | `STATE.OBS_MODE`, comma-split |
+  | `spectral_window_intents` | **none** | **hardcoded `["UNSPECIFIED"]`**, even from MSv2 (`conversion.py:543`) |
+
+  So only three fields lack a source, and each has a precedent rather than needing invention:
+  - `spectral_window_intents` → `["UNSPECIFIED"]`, which is exactly what xradio writes from MSv2. Not a compromise; it is the reference behaviour.
+  - `scan_intents` → `["UNSPECIFIED"]`, matching xradio's own accessor default (`measurement_set_xdt.py:233`).
+  - `release_date` → `"1858-11-17T00:00:00.000"`, the MJD-zero "unset" epoch that real converted MSv4 data already carries (the ALMA `Antennae_North` fixture has exactly this).
+
+  Remaining questions: (a) should each of the three be overridable by keyword? (b) is one summarizing warning right, or should a sentinel be silent given it matches the reference implementation? (c) does the source file name go into `data_groups.base.description` as provenance?
+  **Recommendation**: keywords for all three; warn only for `release_date` (the one where a sentinel could be mistaken for real policy) and stay silent on the two intents, since `["UNSPECIFIED"]` is the standard's normal content rather than a shortfall; record the source file in `data_groups.base.description`.
+  **Aside worth reporting upstream**: `conversion.py:1084` reads `partition_info["OBS_MODE"][0]` unconditionally, but `OBS_MODE` is only added when a non-empty `STATE` table exists (`partition_queries.py:124-142`). An MSv2 without a `STATE` table — common for VLBI — appears to raise `KeyError` there. Worth confirming before filing.
 - **Status**: `todo`
 - **Depends on**: CHUNK-001
 
