@@ -41,8 +41,98 @@ Author's working preferences, gathered while building the package:
 ## Decisions
 <!-- Answers to `decide` chunks land here, tagged with the chunk ID. -->
 
-None yet. CHUNK-002, CHUNK-003, CHUNK-004 and CHUNK-014 are all ready and
-carry recommendations grounded in measurements recorded in CHUNK-001's Notes.
+#### CHUNK-002 — partitioning
+
+Default to **spectral window + scan**. On the Q-band file that is 144
+partitions of 270 MB at 100% fill, against 4 partitions of 6.81 GB at 90.4%
+fill for spectral window alone; peak working memory drops 25-fold and the
+9.6% of `NaN` padding disappears entirely. Each partition's baseline axis then
+describes antennas that actually observed together, which the spw-only scheme
+cannot express — baselines per scan run from 10 to 55.
+
+- Keyword: `partition = (:scan,)`, mirroring xradio's `partition_scheme`.
+  `:source` remains available but is not a default; on this file it is wholly
+  subsumed by `:scan` (both give 36 scans).
+- Node names: `<file basename>_<zero-padded index>`, matching xradio, so a
+  store holding both converted and xradio-written data stays coherent.
+- 144 nodes means several thousand metadata files, so CHUNK-015 (consolidated
+  metadata) must land before CHUNK-012 validates a real conversion — the
+  dependency is recorded there.
+
+#### CHUNK-003 — invented metadata
+
+Only three MSv4 fields lack a FITS-IDI source, and each takes the value the
+reference implementation already writes:
+
+| field | value | overridable |
+| --- | --- | --- |
+| `spectral_window_intents` | `["UNSPECIFIED"]` | keyword |
+| `scan_intents` | `["UNSPECIFIED"]` | keyword |
+| `observation_info.release_date` | `"1858-11-17T00:00:00.000"` | keyword |
+
+Warn for `release_date` only. A sentinel date could be mistaken for a real
+embargo policy, whereas `["UNSPECIFIED"]` is what xradio itself writes from
+MSv2 and so is normal content rather than a shortfall. The source file name
+goes into `data_groups.base.description` as provenance.
+
+`observation_info.observer` comes from the **primary header's** `OBSERVER`,
+falling back to `UV_DATA`'s. The two disagree in the test file — primary says
+`"BT164A"`, `UV_DATA` says `"PLUTO"` — and the primary header is the
+file-level authority, which is where AIPS Memo 114 places the keyword. This
+duplicates `project_UID` (also `"BT164A"`, from `OBSCODE`) on VLBA data, which
+is an honest reflection of the file rather than a defect to paper over.
+
+#### CHUNK-004 — time and frames
+
+**Time**: `format = "unix"`, `scale = "utc"`, `units = "s"`.
+
+The plan recommended `mjd` on the grounds that it avoids an epoch shift and
+keeps precision. Both grounds were wrong, and testing rather than assuming is
+what showed it. MSv4 pins the time coordinate's `units` to `"s"` and defines
+decoding as `Time(data * u.Unit(units), format=format, scale=scale)`. Under
+astropy 8.0.1, `Time(60617.5 * u.s, format="mjd")` yields **1858-11-17**
+rather than 2024-11-03 — writing MJD in days under `units = "s"` is wrong by
+166 years and raises nothing. `format = "mjd"` therefore obliges seconds since
+MJD 0, so:
+
+- the epoch shift is unavoidable either way;
+- the precision claim inverts. MJD-in-seconds is 5.27e9 for this observation
+  against unix's 1.77e9, so its `Float64` ulp is 9.5e-7 s against 2.4e-7 s —
+  four times coarser.
+
+`unix` is additionally the MSv4 default, XRadio's own schema default, and what
+existing stores carry. `Dates.datetime2unix` supplies POSIX seconds from
+`RDATE` with no new dependency.
+
+**Frames**: `EQUINOX` maps literally — `"J2000"` → `"fk5"`, which is exactly
+xradio's `Ref_map` in `_utils/schema.py`. Anything else is an error rather
+than a silent default to `icrs`; the difference is ~25 mas and invisible in
+the output. `UVW.frame` takes the phase center's frame, following xradio's
+`fix_uvw_frame`, which distrusts any separately declared UVW frame.
+
+Source directions come from `RAEPO`/`DECEPO` (degrees → radians).
+`RAAPP`/`DECAPP` are **unusable**: DiFX wrote them as verbatim copies of the
+mean places, so they are not apparent places despite the column names.
+
+**No time-scale dependency.** `TIMSYS = "UTC"` throughout, and the file
+supplies `IATUTC = 37.0` and `UT1UTC = 0.077593` explicitly if ever needed.
+Converting `RDATE` + `DATE` + `TIME` to UTC seconds is arithmetic on values
+FITS-IDI already provides.
+
+#### CHUNK-014 — streaming architecture
+
+**Deferred, and no longer a blocker.** With spectral window + scan as the
+CHUNK-002 default, partitions are 270 MB and materialize comfortably, so
+CHUNK-007 proceeds against the existing in-memory `ProcessingSet` and
+`write`. The chunk stays open as an optimization: a correlator emitting one
+long scan brings the problem straight back.
+
+The eventual shape, when something demands it, is a lazy `ProcessingSet` with
+a streaming `write` — it makes the existing lazy read path useful for the
+first time and keeps one `write` implementation rather than two. A
+time-chunked Zarr default (128 times x all baselines x 64 channels x all
+polarizations) should be set with CHUNK-007 regardless, since the current
+default of one chunk per array is wrong at any of these sizes.
 
 ## Why this and not MSv2
 
@@ -260,9 +350,11 @@ Three layers, mirroring what is already in place:
 - **Description**: How does the user control the split from one FITS-IDI into N Measurement Sets? Questions: (a) what is the default — spectral window alone, or spectral window plus scan? (b) what is the keyword — `partition = (:scan,)` mirroring xradio's `partition_scheme`, or a more Julian predicate? (c) how are the resulting MSv4 nodes named, given MSv4 names must be unique within a store and xradio uses `<basename>_<zero-padded index>`?
   **Recommendation, revised after the CHUNK-001 addendum measured it**: default to **spectral window + scan**. On the test file that gives 144 partitions of 270 MB at 100% fill, against 4 partitions of 6.81 GB at 90.4% fill for spectral window alone. It is denser, 25x smaller in peak memory, and each partition's baseline axis then describes antennas that actually observed together — baselines per scan run from 10 to 55. `:source` stays available but is subsumed by `:scan` on this data and should not be a default. Names `<file basename>_<NN>`, matching xradio so a mixed store stays coherent.
   **Cost to weigh**: 144 nodes means ~4,300 metadata files, and this package does not yet write consolidated metadata — Python warns about its absence when opening our stores today. At 4 nodes that is irrelevant; at 144 it governs how long `open` takes, especially over a network. `Zarr.consolidate_metadata` exists (unexported) for both Zarr versions, so this is a small addition to the writer, but it should land with this decision rather than after it.
-- **Status**: `not-started`
+- **Status**: `complete`
 - **Depends on**: CHUNK-001
-- **Notes**:
+- **Notes**: spectral window + scan, `partition = (:scan,)`, names
+  `<basename>_<NN>`. Recorded under Decisions. Consolidated metadata (CHUNK-015) is now a
+  prerequisite of CHUNK-012 rather than an independent improvement.
 
 ### CHUNK-003: decide-invented-metadata
 - **Kind**: `decide`
@@ -289,23 +381,41 @@ Three layers, mirroring what is already in place:
   Remaining questions: (a) should each of the three be overridable by keyword? (b) is one summarizing warning right, or should a sentinel be silent given it matches the reference implementation? (c) does the source file name go into `data_groups.base.description` as provenance?
   **Recommendation**: keywords for all three; warn only for `release_date` (the one where a sentinel could be mistaken for real policy) and stay silent on the two intents, since `["UNSPECIFIED"]` is the standard's normal content rather than a shortfall; record the source file in `data_groups.base.description`.
   **Aside worth reporting upstream**: `conversion.py:1084` reads `partition_info["OBS_MODE"][0]` unconditionally, but `OBS_MODE` is only added when a non-empty `STATE` table exists (`partition_queries.py:124-142`). An MSv2 without a `STATE` table — common for VLBI — appears to raise `KeyError` there. Worth confirming before filing.
-- **Status**: `not-started`
+- **Status**: `complete`
 - **Depends on**: CHUNK-001
-- **Notes**:
+- **Notes**: keywords for all three sentinels; warn on `release_date`
+  only. Recorded under Decisions. One thing this chunk did not anticipate: the primary
+  header and `UV_DATA` carry **different** `OBSERVER` values (`"BT164A"` vs `"PLUTO"`).
+  Resolved in favour of the primary header.
 
 ### CHUNK-004: decide-time-and-frames
 - **Kind**: `decide`
 - **Description**: Settle the time and coordinate-frame conversions. Questions: (a) `format = "unix"` (needs a real UTC→Unix conversion, and leap seconds) or `format = "mjd"` (FITS-IDI is already MJD-adjacent via `RDATE`, avoiding an epoch shift and a precision loss on ~1e9-second values held in `Float64`)? MSv4 permits both. (b) which `frame` for `UVW` and which for the source directions, given FITS-IDI's `EQUINOX`/`RADECSYS`? (c) does any of this need a time-scale dependency (AstroTime.jl, ERFA.jl), or is it arithmetic on values FITS-IDI already provides? **Recommendation**: `mjd`, which keeps VLBI-relevant precision and needs no epoch arithmetic; revisit only if a consumer demands `unix`.
-- **Status**: `not-started`
+- **Status**: `complete`
 - **Depends on**: CHUNK-001
-- **Notes**:
+- **Notes**: `format = "unix"`, **reversing** this chunk's own `mjd`
+  recommendation — `units = "s"` is mandatory, which forces MJD to be written in seconds and
+  destroys both arguments for it. Frames map `EQUINOX` literally, `"J2000"` → `"fk5"`.
+  `RAAPP`/`DECAPP` are copies of the mean places and must not be used. No new dependency.
+  Full reasoning and the astropy measurement are under Decisions.
 
 ### CHUNK-005: implement-fitsidi-reader
 - **Kind**: `implement`
 - **Description**: A `XRadioFITSFilesExt` package extension on `FITSFiles` (weak dependency, as Gustavo does) that parses the FITS-IDI tables into plain Julia structures — antennas, frequency setups, sources, flags, and a row iterator over `UV_DATA`. **No MSv4 types yet**: this chunk's output is intermediate, so it can be tested against a real file independently of the conversion. Port from Gustavo's `_build_idi_*` helpers. Handle the STOKES code permutation here.
 - **Status**: `not-started`
 - **Depends on**: CHUNK-001
-- **Notes**:
+- **Notes**: FITSFiles API, as measured against the Q-band file with the dev checkout:
+  `fits(path)` returns a `Vector{HDU}` and is lazy by default, so opening the 24.73 GB file
+  is cheap. Header cards are `hdu.cards["KEY"]`/`haskey`; table data is `hdu.data`, a
+  `LazyStructuredData` addressed by **`Symbol`** column names (`d[:RAEPO]`) — it supports
+  `keys` but **not** `haskey`, so guard column access with `in keys(d)`.
+
+  Two string traps, both silent:
+  - Card values are **space-padded** to their FITS field width. `EXTNAME` reads
+    `"SOURCE  "`, not `"SOURCE"`, so every table lookup and every `EQUINOX`/`WEIGHTYP`
+    comparison must `strip`.
+  - Table string columns are **NUL-padded**: `"3C273\0\0\0..."`, `"J2000\0\0\0"`.
+    Source and antenna names carry these into MSv4 coordinate labels if not trimmed.
 
 ### CHUNK-006: implement-test-fitsidi-writer
 - **Kind**: `implement`
@@ -318,7 +428,7 @@ Three layers, mirroring what is already in place:
 - **Kind**: `implement`
 - **Description**: Rows → the dense `(time, baseline_id, frequency, polarization)` grid, in XRadio's reversed Julia axis order, with `NaN` padding for absent baselines. Produce `VISIBILITY`, `FLAG`, `WEIGHT`, `UVW` and the coordinates `time`, `baseline_id`, `frequency`, `polarization`, `field_name`, `scan_name`, `baseline_antenna1_name`, `baseline_antenna2_name`. Apply the CHUNK-002 partitioning, the CHUNK-003 defaults, the CHUNK-004 time convention, the weight semantics from `WEIGHTYP`, and the UVW seconds→metres conversion. Gate: the result passes `check` with no issues.
 - **Status**: `not-started`
-- **Depends on**: CHUNK-002, CHUNK-003, CHUNK-004, CHUNK-005, CHUNK-006, CHUNK-014
+- **Depends on**: CHUNK-002, CHUNK-003, CHUNK-004, CHUNK-005, CHUNK-006
 - **Notes**:
 
 ### CHUNK-008: implement-antenna-and-field-source
@@ -353,8 +463,10 @@ Three layers, mirroring what is already in place:
 - **Kind**: `implement`
 - **Description**: Convert the real file from CHUNK-001, run `xradio`'s `check_datatree` on the output, and record the result in the README's conformance section alongside the existing writer evidence. Use the venv recipe in the `msv4-test-fixtures` memory. Any issue found here is a converter bug, not a fixture artefact.
 - **Status**: `not-started`
-- **Depends on**: CHUNK-011
-- **Notes**:
+- **Depends on**: CHUNK-011, CHUNK-015
+- **Notes**: CHUNK-015 is a dependency because scan-level partitioning produces ~144 nodes;
+  without consolidated metadata, opening the result in Python is slow enough to obscure
+  whether `check_datatree` is reporting a conformance problem or a latency one.
 
 ### CHUNK-013: implement-docs
 - **Kind**: `implement`
@@ -368,9 +480,14 @@ Three layers, mirroring what is already in place:
 - **Description**: **Raised by CHUNK-001 and not anticipated when this plan was written.** The Q-band file is 24.73 GB of `UV_DATA`, and splitting it by spectral window gives four partitions of roughly 6.2 GB of `VISIBILITY` alone (13,676 times x 55 baselines x 256 channels x 4 polarizations x 8 bytes), plus ~3 GB of `WEIGHT` and ~0.8 GB of `FLAG` each. `write(path, ps)` as it stands takes a fully materialized `ProcessingSet`, so the obvious implementation would need ~10 GB resident per partition and would not run on an ordinary machine.
   Questions: (a) does the converter bypass the in-memory `ProcessingSet` and write Zarr chunk by chunk as it reads FITS-IDI rows? (b) or does `ProcessingSet` learn to hold lazy arrays, with `write` streaming them — which would also let `open(ProcessingSet, ...; lazy = true)` round-trip without materializing? (c) either way, what is the default `chunks` for a converted store, given the current default of one chunk per array is exactly wrong at this size?
   **Recommendation**: (b). The reader already produces lazy `Zarr.ZArray`-backed layers, so a `write` that streams whatever array it is handed makes the lazy read path useful for the first time and keeps one write implementation rather than two. A time-chunked default (say 128 times x all baselines x 64 channels x all polarizations) follows from how the data is read and how it is later used.
-- **Status**: `not-started`
+- **Status**: `complete`
 - **Depends on**: CHUNK-001, CHUNK-002
 - **Notes**: the CHUNK-001 addendum found that partitioning by scan gives 270 MB partitions rather than 6.81 GB ones. If CHUNK-002 adopts that default, this chunk stops being a blocker and becomes an optimization — a 270 MB partition materializes comfortably. Keep it open, because a correlator producing one long scan would bring the problem straight back, but it need not gate CHUNK-007 in that case.
+
+  **Decided: deferred.** The scan-level partitioning adopted in
+  CHUNK-002 confirms the reading above — 270 MB partitions materialize comfortably, so this
+  does not gate CHUNK-007. Left open as an optimization against single-long-scan data.
+  Recorded under Decisions.
 
 ### CHUNK-015: implement-consolidated-metadata
 - **Kind**: `implement`
@@ -402,10 +519,10 @@ Three layers, mirroring what is already in place:
 
 ## Open risks
 
-- **Scale.** Settled by CHUNK-001 and now the dominant constraint: 24.73 GB in,
-  ~10 GB per spectral-window partition out. Nothing in the current package streams, so
-  CHUNK-014 gates the main conversion. A unit test cannot use these files;
-  the synthetic writer (CHUNK-006) is not optional.
+- **Scale.** 24.73 GB in. Scan-level partitioning (CHUNK-002) cuts this to 270 MB
+  per partition, so nothing needs to stream and CHUNK-014 no longer gates the main
+  conversion. The constraint returns for any correlator that emits one long scan. A unit
+  test still cannot use these files; the synthetic writer (CHUNK-006) is not optional.
 - **The UVW sign convention is still unverified.** It is the one CHUNK-001
   question headers could not answer, and getting it wrong is silent — the
   output would pass the schema checker and be conjugated. Check it against
@@ -418,6 +535,9 @@ Three layers, mirroring what is already in place:
   *value*. Each conversion needs a test with a known number.
 - **Scan inference and invented metadata are judgement, not translation.** They
   belong in the docs and in the store's provenance, not only in the code.
+- **Trailing whitespace and NUL bytes in FITS strings.** Untrimmed, they reach MSv4
+  coordinate labels and comparison sites alike, and every symptom is silent. Recorded in
+  CHUNK-005's Notes.
 - **FLAG expansion is the fiddliest table.** Six independent range axes with
   wildcards, and no fixture generator writes one — Gustavo's tests hand-build
   the HDU. Budget for it accordingly.
@@ -438,3 +558,4 @@ Three layers, mirroring what is already in place:
 ## Session ledger
 
 - 2026-09-05 CHUNK-001 (preflight) → next: CHUNK-002, CHUNK-003, CHUNK-004, CHUNK-014 (all `decide`, batchable), then CHUNK-005
+- 2026-09-06 CHUNK-002, CHUNK-003, CHUNK-004, CHUNK-014 (all `decide`) → next: CHUNK-005
