@@ -54,7 +54,7 @@ This is the substance of the work. FITS-IDI table (AIPS Memo 114) → MSv4:
 | `UV_DATA` | main `visibility` dataset | Row-major `(time, baseline)` → dense `(time, baseline_id, frequency, polarization)` |
 | `ARRAY_GEOMETRY` + `ANTENNA` | `antenna_xds` | MSv4 already merges antenna and feed, as FITS-IDI does |
 | `SOURCE` | `field_and_source_*_xds` | |
-| `FREQUENCY` | `frequency` coordinate attributes | One MSv4 per band; `spectral_window_name` from the band |
+| `FREQUENCY` | `frequency` coordinate attributes | One MSv4 per spectral window; `spectral_window_name` from it |
 | `FLAG` | `FLAG` variable | FITS-IDI flags are ranges to apply, not a per-datum array |
 | `GAIN_CURVE` | `gain_curve_xds` | |
 | `SYSTEM_TEMPERATURE` | `system_calibration_xds` | |
@@ -68,10 +68,12 @@ This is the substance of the work. FITS-IDI table (AIPS Memo 114) → MSv4:
 Ordered by how much design they need, not by code volume.
 
 1. **Partitioning.** One MSv4 covers a single spectral window, polarization
-   setup, observation mode, processor and beam. A FITS-IDI `UV_DATA` holds
-   `NO_BAND` bands in one array and many sources and scans. Splitting by band is
-   mandatory; splitting further (by source, by scan) is a user choice. Needs a
-   keyword mirroring `xradio`'s `partition_scheme`.
+   setup, observation mode, processor and beam. FITS-IDI's `BAND` axis — counted
+   by `NO_BAND` — is what MSv4 calls a **spectral window**; it is not a receiver
+   band, despite the `Qband`/`Wband` in the filenames, which name the receiver.
+   One `UV_DATA` holds all `NO_BAND` spectral windows in a single array, plus
+   many sources and scans, so splitting by spectral window is mandatory.
+   Splitting further is a choice measured in the CHUNK-001 addendum.
 
 2. **Scans.** MSv4 requires a `scan_name` coordinate. FITS-IDI has no scan
    column — unlike MSv2's `SCAN_NUMBER` — so scans must be *inferred* from
@@ -134,7 +136,7 @@ Three layers, mirroring what is already in place:
    axis-order reversal.
 3. **Real file, by hand.** Convert the Q-band file and run `xradio`'s
    `check_datatree` on the result, as was done for the writer. Because it is
-   24.73 GB, prefer converting a row range or a single band; a full conversion
+   24.73 GB, prefer converting a row range or a single spectral window; a full conversion
    is a deliberate long-running job, not part of any suite.
 
 ## Chunks
@@ -166,12 +168,50 @@ Three layers, mirroring what is already in place:
   `SYSTEM_TEMPERATURE`: `TSYS_1/2 [K]`, `TANT_1/2 [K]` only. `GAIN_CURVE`: `TYPE`, `NTERM`, `X_VAL`, `Y_VAL`, `GAIN`, `SENS [K/JY]`. `PHASE-CAL`: `CABLE_CAL [SECONDS]`, `PC_FREQ [Hz]`, `PC_REAL`, `PC_IMAG`, `PC_RATE`. `FLAG`: `SOURCE_ID`, `ARRAY`, `ANTS`, `FREQID`, `TIMERANG [DAYS]`, `BANDS`, `CHANS`, `PFLAGS`, `REASON`, `SEVERITY`.
   The `_1`/`_2` suffixes throughout are **per receptor** (R and L) and map onto MSv4's `receptor_label`.
 
-  **W-band — `VLBA_BT164A_bt164aWbandrecor_...idifits`: INCOMPLETE.** Its `UV_DATA` header declares 47.43 GB and only 3.09 GB is on disk; a `wget -c` is still running. `NO_BAND=16`, `NO_CHAN=64`, 1,434,170 rows, and it carries **only** ARRAY_GEOMETRY, SOURCE, ANTENNA, FREQUENCY, INTERFEROMETER_MODEL, CALC, MODEL_COMPS — no FLAG, SYSTEM_TEMPERATURE, PHASE-CAL, WEATHER or GAIN_CURVE. Once complete it is the useful *minimal* counterpart, and its 16 bands stress partitioning harder than Q-band's 4. Re-verify against `SHA1SUMS` before relying on it.
+  **W-band — `VLBA_BT164A_bt164aWbandrecor_...idifits`: INCOMPLETE.** Its `UV_DATA` header declares 47.43 GB and only 3.09 GB is on disk; a `wget -c` is still running. `NO_BAND=16`, `NO_CHAN=64`, 1,434,170 rows, and it carries **only** ARRAY_GEOMETRY, SOURCE, ANTENNA, FREQUENCY, INTERFEROMETER_MODEL, CALC, MODEL_COMPS — no FLAG, SYSTEM_TEMPERATURE, PHASE-CAL, WEATHER or GAIN_CURVE. Once complete it is the useful *minimal* counterpart, and its 16 spectral windows stress partitioning harder than Q-band's 4. Re-verify against `SHA1SUMS` before relying on it.
 
   **Answers to the three questions this chunk existed to settle:**
   1. `UU/VV/WW---SIN` carry `TUNIT = SECONDS`. Multiply by `c` for MSv4 metres — confirmed, not assumed.
-  2. `NO_BAND` is 4 and 16. Band partitioning is **mandatory**, not hypothetical.
+  2. `NO_BAND` is 4 and 16 — these count **spectral windows**, not receiver bands. Partitioning by spectral window is **mandatory**, not hypothetical.
   3. Sign convention still unverified — it needs actual `BASELINE` values and antenna positions, not headers. Carried into CHUNK-007.
+
+
+  **Addendum — scan and baseline structure, measured.** Read the scalar columns
+  of `UV_DATA` (all within the first 48 bytes of each 32,880-byte row, so ~23 s
+  for all 752,160 rows) and segmented scans on a source change or a time gap
+  greater than ten median steps:
+
+  | | |
+  | --- | --- |
+  | unique times | 15,120 over 7.64 h, `INTTIM` 0.5 s |
+  | baselines | 55 (10 antennas: 45 cross + 10 auto) |
+  | sources | 3 |
+  | scans | **36**, by time gap alone *and* by gap-plus-source |
+  | times per scan | min 240, median 600, max 600 (5-minute scans) |
+
+  Three results that bear on partitioning:
+
+  - **Source changes always coincide with scan boundaries here**, so `:scan`
+    subsumes `:source` for this file — both give 36. Splitting by source as
+    well as by scan would add nothing.
+  - **Every source was seen by all 55 baselines.** The hypothesis that
+    telescopes cannot all see the same sources does not hold for this VLBA
+    track, though it remains true of wider arrays.
+  - **Baselines per scan range from 10 to 55.** The heterogeneity is
+    per *scan*, not per source — antennas drop out within the track, not by
+    target.
+
+  Partition sizes for `VISIBILITY` in one spectral window:
+
+  | scheme | per partition | fill | nodes |
+  | --- | --- | --- | --- |
+  | spectral window only | 6.81 GB | 90.4% | 4 |
+  | spw + source | 4.87 GB | — | 12 |
+  | **spw + scan** | **270 MB** | **100.0%** | 144 |
+
+  Splitting by scan makes every partition **exactly dense** — the 9.6% of NaN
+  padding disappears, saving ~2.6 GB across the track — and drops peak working
+  memory 25-fold, which very largely dissolves CHUNK-014.
 
   **Three findings that were not anticipated:**
   - **`WEIGHT` is `16E` = `NO_BAND × NO_STKD`, not per channel.** MSv4 `WEIGHT` has the full science-array shape, so the weight must be broadcast across `frequency`.
@@ -180,7 +220,9 @@ Three layers, mirroring what is already in place:
 
 ### CHUNK-002: decide-partitioning
 - **Kind**: `decide`
-- **Description**: How does the user control the split from one FITS-IDI into N Measurement Sets? Questions: (a) is band-splitting the only mandatory axis, or does anything else in FITS-IDI force a split? (b) what is the keyword — `partition = [:source, :scan]` mirroring xradio's `partition_scheme`, or a more Julian predicate? (c) how are the resulting MSv4 nodes named, given MSv4 names must be unique within a store and xradio uses `<basename>_<zero-padded index>`? **Recommendation**: band is mandatory; `partition = ()` by default with `:source` and `:scan` as opt-in; names `<file basename>_<NN>`, matching xradio so a mixed store stays coherent.
+- **Description**: How does the user control the split from one FITS-IDI into N Measurement Sets? Questions: (a) what is the default — spectral window alone, or spectral window plus scan? (b) what is the keyword — `partition = (:scan,)` mirroring xradio's `partition_scheme`, or a more Julian predicate? (c) how are the resulting MSv4 nodes named, given MSv4 names must be unique within a store and xradio uses `<basename>_<zero-padded index>`?
+  **Recommendation, revised after the CHUNK-001 addendum measured it**: default to **spectral window + scan**. On the test file that gives 144 partitions of 270 MB at 100% fill, against 4 partitions of 6.81 GB at 90.4% fill for spectral window alone. It is denser, 25x smaller in peak memory, and each partition's baseline axis then describes antennas that actually observed together — baselines per scan run from 10 to 55. `:source` stays available but is subsumed by `:scan` on this data and should not be a default. Names `<file basename>_<NN>`, matching xradio so a mixed store stays coherent.
+  **Cost to weigh**: 144 nodes means ~4,300 metadata files, and this package does not yet write consolidated metadata — Python warns about its absence when opening our stores today. At 4 nodes that is irrelevant; at 144 it governs how long `open` takes, especially over a network. `Zarr.consolidate_metadata` exists (unexported) for both Zarr versions, so this is a small addition to the writer, but it should land with this decision rather than after it.
 - **Status**: `todo`
 - **Depends on**: CHUNK-001
 
@@ -250,18 +292,25 @@ Three layers, mirroring what is already in place:
 - **Status**: `todo`
 - **Depends on**: CHUNK-012
 
+### CHUNK-015: implement-consolidated-metadata
+- **Kind**: `implement`
+- **Description**: Write Zarr consolidated metadata when closing a store, via `Zarr.consolidate_metadata` / `consolidate_metadata_v3`, and read it back on `open`. Independent of FITS-IDI — it improves every store this package writes — but the converter is what makes it matter, since a per-scan partitioning produces on the order of 144 nodes and several thousand metadata files. xarray currently warns when opening our stores that it fell back to non-consolidated metadata.
+- **Status**: `todo`
+- **Depends on**: CHUNK-002
+
 ### CHUNK-014: decide-streaming-architecture
 - **Kind**: `decide`
-- **Description**: **Raised by CHUNK-001 and not anticipated when this plan was written.** The Q-band file is 24.73 GB of `UV_DATA`, and splitting it by band gives four partitions of roughly 6.2 GB of `VISIBILITY` alone (13,676 times x 55 baselines x 256 channels x 4 polarizations x 8 bytes), plus ~3 GB of `WEIGHT` and ~0.8 GB of `FLAG` each. `write(path, ps)` as it stands takes a fully materialized `ProcessingSet`, so the obvious implementation would need ~10 GB resident per partition and would not run on an ordinary machine.
+- **Description**: **Raised by CHUNK-001 and not anticipated when this plan was written.** The Q-band file is 24.73 GB of `UV_DATA`, and splitting it by spectral window gives four partitions of roughly 6.2 GB of `VISIBILITY` alone (13,676 times x 55 baselines x 256 channels x 4 polarizations x 8 bytes), plus ~3 GB of `WEIGHT` and ~0.8 GB of `FLAG` each. `write(path, ps)` as it stands takes a fully materialized `ProcessingSet`, so the obvious implementation would need ~10 GB resident per partition and would not run on an ordinary machine.
   Questions: (a) does the converter bypass the in-memory `ProcessingSet` and write Zarr chunk by chunk as it reads FITS-IDI rows? (b) or does `ProcessingSet` learn to hold lazy arrays, with `write` streaming them — which would also let `open(ProcessingSet, ...; lazy = true)` round-trip without materializing? (c) either way, what is the default `chunks` for a converted store, given the current default of one chunk per array is exactly wrong at this size?
   **Recommendation**: (b). The reader already produces lazy `Zarr.ZArray`-backed layers, so a `write` that streams whatever array it is handed makes the lazy read path useful for the first time and keeps one write implementation rather than two. A time-chunked default (say 128 times x all baselines x 64 channels x all polarizations) follows from how the data is read and how it is later used.
 - **Status**: `todo`
-- **Depends on**: CHUNK-001
+- **Depends on**: CHUNK-001, CHUNK-002
+- **Note**: the CHUNK-001 addendum found that partitioning by scan gives 270 MB partitions rather than 6.81 GB ones. If CHUNK-002 adopts that default, this chunk stops being a blocker and becomes an optimization — a 270 MB partition materializes comfortably. Keep it open, because a correlator producing one long scan would bring the problem straight back, but it need not gate CHUNK-007 in that case.
 
 ## Open risks
 
 - **Scale.** Settled by CHUNK-001 and now the dominant constraint: 24.73 GB in,
-  ~10 GB per band partition out. Nothing in the current package streams, so
+  ~10 GB per spectral-window partition out. Nothing in the current package streams, so
   CHUNK-014 gates the main conversion. A unit test cannot use these files;
   the synthetic writer (CHUNK-006) is not optional.
 - **The UVW sign convention is still unverified.** It is the one CHUNK-001
