@@ -316,7 +316,28 @@ Three layers, mirroring what is already in place:
 
 ### CHUNK-015: implement-consolidated-metadata
 - **Kind**: `implement`
-- **Description**: Write Zarr consolidated metadata when closing a store, via `Zarr.consolidate_metadata` / `consolidate_metadata_v3`, and read it back on `open`. Independent of FITS-IDI — it improves every store this package writes — but the converter is what makes it matter, since a per-scan partitioning produces on the order of 144 nodes and several thousand metadata files. xarray currently warns when opening our stores that it fell back to non-consolidated metadata.
+- **Description**: Write Zarr consolidated metadata when closing a store, and use it on `open`. Independent of FITS-IDI — it improves every store this package writes — but the converter is what makes it matter, since per-scan partitioning produces on the order of 144 nodes and several thousand metadata files. xarray already warns when opening our stores that it fell back to non-consolidated metadata.
+
+  **How the reference implementation does it** (`convert_msv2_to_processing_set.py:256-264`): a single finalize step after every partition is written, not per partition —
+
+  ```python
+  root_group = zarr.open(out_file, mode="r+", zarr_format=ZARR_FORMAT)
+  root_group.attrs["type"] = "processing_set"
+  zarr.consolidate_metadata(root_group.store)
+  ```
+
+  Consolidated metadata is **not** part of the Zarr v3 specification. xradio writes it there regardless and silences the resulting warning in `src/xradio/__init__.py`, commented "XRADIO intentionally writes/reads consolidated metadata" — a deliberate trade of spec purity for open latency. Their read side is inconsistent: `open_processing_set` passes no `consolidated=` argument and takes xarray's try-then-warn default, while `load_processing_set` passes `consolidated=False` outright (their own notes call that a performance bug over S3). We should not copy that inconsistency.
+
+  **What `Zarr.jl` can actually do**, measured:
+
+  | | write | read back |
+  | --- | --- | --- |
+  | v2 | `consolidate_metadata(g)` | root attrs, children and node attrs all intact |
+  | v3 | `consolidate_metadata(g.storage, g.path, ZarrFormat(3))` writes a correct `consolidated_metadata` into the root `zarr.json` | **empty group** — no attributes, no children |
+
+  So v3 consolidated metadata can be written for zarr-python's benefit but must not be read back by us. Also note `consolidate_metadata(::ZGroup)` does not dispatch on the group's format: on a v3 store it writes a v2-style `.zmetadata` and leaves `zarr.json` alone. Reproduced in `zarr-mwes/4_consolidated_metadata_v3.jl`.
+
+  Consequences for the implementation: consolidate as a finalize step in `write`; on `open`, use consolidated metadata for v2 and fall back for v3 until Zarr.jl is fixed; do not fail when it is absent, since existing stores lack it.
 - **Status**: `todo`
 - **Depends on**: CHUNK-002
 

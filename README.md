@@ -122,11 +122,13 @@ strings the standard specifies for v3. Pass `zarr_format = 3` for a v3 store;
 it reads back correctly everywhere, but its string arrays are variable-length
 and a strict check against the standard calls their dtype wrong.
 
-Three `Zarr.jl` gaps are worked around here, all in Zarr v3 and all worth fixing
+Four `Zarr.jl` gaps sit behind this, all in Zarr v3 and all worth fixing
 upstream: `dimension_names` is parsed but discarded on read and unavailable on
-write, complex arrays are written with a `data_type` and `fill_value` that
-neither the specification nor `Zarr.jl`'s own reader accepts, and fixed-width
-strings can be read but not written.
+write; complex arrays are written with a `data_type` and `fill_value` that
+neither the specification nor `Zarr.jl`'s own reader accepts; fixed-width
+strings can be read but not written; and consolidated metadata can be written
+but reads back as an empty group. Reproductions for all four, depending only on
+`Zarr`, are in `zarr-mwes/`.
 
 ## Conformance
 
