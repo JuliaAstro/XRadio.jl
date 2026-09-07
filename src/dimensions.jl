@@ -11,7 +11,7 @@ selectors work on MSv4 data.
 @dim BaselineId "Baseline identifier"
 @dim Frequency "Frequency (Hz)"
 @dim Polarization "Polarization product"
-@dim UvwLabel "UVW component"
+@dim UVWLabel "UVW component"
 
 @dim AntennaName "Antenna name"
 @dim StationName "Station name"
@@ -53,7 +53,7 @@ const MSV4_DIMS = (
     baseline_id = BaselineId,
     frequency = Frequency,
     polarization = Polarization,
-    uvw_label = UvwLabel,
+    uvw_label = UVWLabel,
     antenna_name = AntennaName,
     station_name = StationName,
     field_name = FieldName,

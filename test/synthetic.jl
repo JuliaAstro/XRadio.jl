@@ -58,7 +58,7 @@ function synthetic_visibility(;
     )
     pol = Polarization(Categorical(["XX", "YY"]))
     base = BaselineId(Sampled(collect(1:nbaseline)))
-    uvwlab = UvwLabel(Categorical(["u", "v", "w"]))
+    uvwlab = UVWLabel(Categorical(["u", "v", "w"]))
     npol = length(val(pol))
 
     # MSv4 states dimensions slowest-varying first; a Julia array runs the

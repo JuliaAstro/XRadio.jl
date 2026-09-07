@@ -59,7 +59,12 @@ produces conforms or the call fails.
 
 ## Checking
 
+Conformance checking is public but not exported, since reading and writing is
+what most work needs:
+
 ```julia
+using XRadio: check, validate
+
 issues = check(ps)          # every departure from the standard
 isvalid(ps)                 # or just whether there are any
 validate(ps)                # or raise them as an error
@@ -67,6 +72,9 @@ validate(ps)                # or raise them as an error
 
 `check(ps; strict = false)` relaxes only the element types, accepting any type of
 the same kind as the standard names — see *Element types* below.
+
+`check` returns `XRadio.SchemaIssue`s; `validate` throws an
+`XRadio.SchemaError` carrying them.
 
 ## Things worth knowing
 

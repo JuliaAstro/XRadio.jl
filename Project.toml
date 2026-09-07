@@ -8,12 +8,21 @@ Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 DimensionalData = "0703355e-b756-11e9-17c0-8b28908087d0"
 JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
+Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
 Zarr = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
+
+[weakdeps]
+FITSFiles = "358a0a88-3548-4ad6-b652-8bdbf64af8e5"
+
+[extensions]
+XRadioFITSFilesExt = "FITSFiles"
 
 [compat]
 Dates = "1"
 DimensionalData = "0.30"
+FITSFiles = "0.3.2"
 JSON3 = "1.14"
 OrderedCollections = "1"
+Reexport = "1"
 Zarr = "0.10"
 julia = "1.10"

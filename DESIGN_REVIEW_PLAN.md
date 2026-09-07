@@ -119,13 +119,108 @@ supplies `IATUTC = 37.0` and `UT1UTC = 0.077593` explicitly if ever needed.
 Converting `RDATE` + `DATE` + `TIME` to UTC seconds is arithmetic on values
 FITS-IDI already provides.
 
+#### CHUNK-005 — polarization is labelled by receptor, not by basis
+
+Follow **Gustavo's** representation rather than MSv4's. The `UV_DATA` `STOKES`
+axis is decoded to generic correlation products — `PP`, `QQ`, `PQ`, `QP`, by
+receptor index — and the polarization basis stays **per antenna**, from the
+`ANTENNA` table's `POLTYA`/`POLTYB`. The circular block (-1..-4) and the linear
+block (-5..-8) therefore decode identically; they differ only in what the
+antennas' receptors carry.
+
+MSv4's array-wide `polarization` coordinate of `"RR"`, `"RL"`, … presumes every
+antenna shares a basis, and a VLBI array need not: mixing circular- and
+linear-feed stations is ordinary, and the baseline between them measures `RX`,
+`LY`, `RY`, `LX` — products no single array-wide label can name. Labelling the
+axis by basis is only correct for a homogeneous array and is silently wrong
+otherwise, which is exactly the failure mode the stated values call out.
+
+`baseline_pol_labels(header, nosta1, nosta2)` resolves the products to actual
+polarizations for one baseline, which is the level at which the question has an
+answer. On the homogeneous VLBA file it returns the familiar
+`["RR", "LL", "RL", "LR"]`.
+
+This is a representation choice inside the reader, not a licence to write a
+non-conforming store. What CHUNK-007 puts in the MSv4 `polarization` coordinate
+is still MSv4's problem, and a mixed-basis array will need an explicit decision
+there rather than a silent mislabelling.
+
+#### CHUNK-005 — no intermediate model
+
+There is **no FITS-IDI data model**. `fitsidi2msv4` builds MSv4 datasets
+straight from the file's tables, and the extension holds only what that needs:
+access primitives for cards and columns, the arithmetic the format states
+rather than stores (`pol_axis`, `pol_labels`, `baseline_antennas`,
+`channel_frequencies`, `scan_ranges`), and one bulk reader for `UV_DATA`'s
+per-row columns.
+
+An earlier pass built eight structs mirroring the tables. It was a
+representation for a FITS-IDI *library*, not for a one-way converter: nothing
+but the conversion ever reads it, and roughly sixteen of its fields had no MSv4
+target at all — proper motion and parallax, which `FIELD_SOURCE_SCHEMA` does
+not define; the earth-orientation keywords CHUNK-004 had already ruled out;
+`RAAPP`/`DECAPP`, which the same chunk found unusable.
+
+The standing preference is **simple, readable code**. Structs are welcome where
+they make the conversion clearer and should be introduced then, driven by the
+call sites that want them, rather than anticipated. `read_uv_rows` returns a
+`NamedTuple` of columns for the same reason.
+
+Consequence for sequencing: with nothing between the file and the MSv4 arrays,
+the conversion cannot be tested without a FITS file. **CHUNK-006 is now a hard
+prerequisite for CHUNK-007**, not an optional convenience.
+
+#### CHUNK-005 — where the FITS-IDI code lives
+
+**Entirely in the extension.** XRadio implements MSv4; FITS-IDI is not MSv4,
+and a package that carries FITS-IDI vocabulary in its own namespace has widened
+its subject. `src/` declares one function, `fitsidi2msv4`, and everything the
+conversion needs on the way stays behind `using FITSFiles`.
+
+The cost is that unit tests reach the reader through
+`Base.get_extension(XRadio, :XRadioFITSFilesExt)` rather than importing it
+directly. That is a documented mechanism and the extension is loaded in the
+test environment regardless, so it buys the scope boundary cheaply.
+
+`fitsidi2msv4(path, dest)` **writes to disk and returns `dest`** rather than
+returning a `ProcessingSet`. Each partition is written as it is built, so peak
+memory is one partition — 270 MB on the validation file — no matter how large
+the input. Returning an in-memory set would put the whole 24.73 GB observation
+through memory to reach a store the caller then has to write anyway.
+
+`fitsidi2msv4` is the author's name for it. It is not the `read`/`write`-on-a-type
+form the plan's stated values otherwise ask for; CHUNK-011 owns the public API
+and can settle that.
+
+#### CHUNK-005 — which FITSFiles
+
+Depend on the **development branch**, `ptiede/FITSFiles.jl` at
+`ptiede-uvfixes` (four commits ahead of `JuliaAstro/FITSFiles.jl` `main`,
+including "Added new lazy reading features using disk arrays and fixed perf").
+Author's instruction, and there is no alternative that is not worse.
+
+Registered `0.3.2` and the dev checkout report the same version but are not the
+same code. Registered `0.3.2` has no `LazyStructuredData` at all: `hdu.data`
+materializes the whole HDU on **every** property access, so merely touching
+`f[9].data` on the Q-band file reads all 24.73 GB. Everything CHUNK-001 and
+CHUNK-005 measured about the FITSFiles API was measured against the dev
+checkout.
+
+The `[compat]` bound is `FITSFiles = "0.3.2"`, which is the closest
+expressible thing and is *not* sufficient — the registered release of that
+version cannot run the extension. It becomes true once the four commits are
+merged and released; until then a manifest pinning the branch is required, and
+XRadio cannot be registered.
+
 #### CHUNK-014 — streaming architecture
 
 **Deferred, and no longer a blocker.** With spectral window + scan as the
-CHUNK-002 default, partitions are 270 MB and materialize comfortably, so
-CHUNK-007 proceeds against the existing in-memory `ProcessingSet` and
-`write`. The chunk stays open as an optimization: a correlator emitting one
-long scan brings the problem straight back.
+CHUNK-002 default, partitions are 270 MB, so CHUNK-007 builds one partition at
+a time in memory and writes it through the existing `write` before starting the
+next. Peak memory is one partition, and no new machinery is needed to get
+there. The chunk stays open as an optimization: a correlator emitting one long
+scan brings the problem straight back, because a single partition is then too
+large to hold.
 
 The eventual shape, when something demands it, is a lazy `ProcessingSet` with
 a streaming `write` — it makes the existing lazy read path useful for the
@@ -401,35 +496,51 @@ Three layers, mirroring what is already in place:
 
 ### CHUNK-005: implement-fitsidi-reader
 - **Kind**: `implement`
-- **Description**: A `XRadioFITSFilesExt` package extension on `FITSFiles` (weak dependency, as Gustavo does) that parses the FITS-IDI tables into plain Julia structures — antennas, frequency setups, sources, flags, and a row iterator over `UV_DATA`. **No MSv4 types yet**: this chunk's output is intermediate, so it can be tested against a real file independently of the conversion. Port from Gustavo's `_build_idi_*` helpers. Handle the STOKES code permutation here.
-- **Status**: `not-started`
+- **Description**: A `XRadioFITSFilesExt` package extension on `FITSFiles` (weak dependency, as Gustavo does) holding what it takes to read a FITS-IDI file: access primitives for cards and columns, the arithmetic the format states rather than stores (the STOKES axis, `BASELINE` packing, channel frequencies, scan inference), and a bulk reader for `UV_DATA`'s per-row columns. Port from Gustavo's `_build_idi_*` helpers. **No MSv4 types and no intermediate data model** — the conversion in CHUNK-007 builds MSv4 datasets straight from the tables.
+- **Status**: `complete`
 - **Depends on**: CHUNK-001
-- **Notes**: FITSFiles API, as measured against the Q-band file with the dev checkout:
-  `fits(path)` returns a `Vector{HDU}` and is lazy by default, so opening the 24.73 GB file
-  is cheap. Header cards are `hdu.cards["KEY"]`/`haskey`; table data is `hdu.data`, a
-  `LazyStructuredData` addressed by **`Symbol`** column names (`d[:RAEPO]`) — it supports
-  `keys` but **not** `haskey`, so guard column access with `in keys(d)`.
+- **Notes**: Landed as `ext/XRadioFITSFilesExt/fitsidi.jl` (346 lines) — access
+  primitives, the format's own arithmetic, and one bulk reader for `UV_DATA`'s
+  per-row columns. **No intermediate data model**; see `Decisions` for that, for
+  where the code lives, for the polarization representation, and for which
+  FITSFiles to depend on.
 
-  Two string traps, both silent:
-  - Card values are **space-padded** to their FITS field width. `EXTNAME` reads
-    `"SOURCE  "`, not `"SOURCE"`, so every table lookup and every `EQUINOX`/`WEIGHTYP`
-    comparison must `strip`.
-  - Table string columns are **NUL-padded**: `"3C273\0\0\0..."`, `"J2000\0\0\0"`.
-    Source and antenna names carry these into MSv4 coordinate labels if not trimmed.
+  Verified on the Q-band file: 10 stations, 4 bands x 256 channels x 4 pols,
+  `WEIGHTYP = 'CORRELAT'`, `SORT = 'T*'`, 3 sources (3C273, M87, 3C279), 752160
+  `UV_DATA` rows read in ~23 s. `scan_ranges` recovers **36** scans, which is
+  exactly the number of `HISTORY DIFXJOB` entries in the primary header — an
+  independent confirmation of the gap heuristic, and the test asserts the two
+  agree. 36 scans x 4 bands = the 144 partitions CHUNK-002 predicted.
+
+  `UV_DATA` row layout on this file: 752160 rows of 32880 bytes; UU/VV/WW, DATE,
+  TIME, BASELINE, FILTER, SOURCE, FREQID, INTTIM all inside the first 48 bytes,
+  then `WEIGHT` (16 = NO_STKD x NO_BAND), a zero-length `GATEID`, and `FLUX`
+  (8192 = 2 x 4 x 256 x 4). So `read_uv_rows` makes one strided pass collecting
+  48-byte prefixes into a single 36 MB buffer and decodes columns out of memory;
+  column-at-a-time access would traverse 24.73 GB once per column.
+
+  Not carried over from the discarded model, and now CHUNK-007's to write when it
+  needs them: the `FLAG` table parse (CHUNK-009) and the `MNTSTA` mount-code
+  lookup, which survives as `IDI_MOUNTS`.
 
 ### CHUNK-006: implement-test-fitsidi-writer
 - **Kind**: `implement`
 - **Description**: A minimal FITS-IDI writer under `test/`, enough to build fixtures with known values: `ARRAY_GEOMETRY`, `ANTENNA`, `SOURCE`, `FREQUENCY`, `UV_DATA`, and optionally `FLAG`. Not public API and not in `src/`. Model on Gustavo's `fitsidi_write.jl`, keeping only what a fixture needs. Parallels the existing `test/synthetic.jl`.
 - **Status**: `not-started`
 - **Depends on**: CHUNK-005
-- **Notes**:
+- **Notes**: **Load-bearing, not a convenience.** With no intermediate model between
+  the file and the MSv4 arrays there is nothing else to assert on, so a fixture
+  `.idifits` is the only way to test the conversion without the 24 GB validation
+  file. Test-only throughout: under `test/`, never in `src/`, never public API.
 
 ### CHUNK-007: implement-main-dataset-conversion
 - **Kind**: `implement`
 - **Description**: Rows → the dense `(time, baseline_id, frequency, polarization)` grid, in XRadio's reversed Julia axis order, with `NaN` padding for absent baselines. Produce `VISIBILITY`, `FLAG`, `WEIGHT`, `UVW` and the coordinates `time`, `baseline_id`, `frequency`, `polarization`, `field_name`, `scan_name`, `baseline_antenna1_name`, `baseline_antenna2_name`. Apply the CHUNK-002 partitioning, the CHUNK-003 defaults, the CHUNK-004 time convention, the weight semantics from `WEIGHTYP`, and the UVW seconds→metres conversion. Gate: the result passes `check` with no issues.
 - **Status**: `not-started`
 - **Depends on**: CHUNK-002, CHUNK-003, CHUNK-004, CHUNK-005, CHUNK-006
-- **Notes**:
+- **Notes**: `fitsidi2msv4` writes each partition to the destination store as it is
+  built rather than assembling a `ProcessingSet` in memory, so the `check` gate runs
+  against the store read back from disk. See `Decisions`.
 
 ### CHUNK-008: implement-antenna-and-field-source
 - **Kind**: `implement`
@@ -457,7 +568,20 @@ Three layers, mirroring what is already in place:
 - **Description**: The user-facing entry point. Shape: `read(ProcessingSet, path; format = :fitsidi, ...)` reusing the existing verb, or a distinct `convert_fitsidi(in, out)`. Settle against the `open`/`read`/`write` convention already established. Include the keywords from CHUNK-002/003, and make `write` the natural next call so `read(...) |> ps -> write(out, ps)` is the whole workflow.
 - **Status**: `not-started`
 - **Depends on**: CHUNK-010
-- **Notes**:
+- **Notes**: Three export-surface changes already landed, ahead of this chunk and at
+  the author's direction, so the shape this chunk settles is narrower than it was:
+  - `check`, `validate`, `SchemaIssue` and `SchemaError` are **public but not
+    exported**. Conformance checking is not what most work with a store involves,
+    so it does not earn a name in the caller's namespace. The README shows
+    `using XRadio: check, validate`.
+  - DimensionalData is **re-exported** (`@reexport`, hence the `Reexport`
+    dependency), because a `MeasurementSet` is a `DimTree` and nothing can be
+    selected or sliced without `At`, `Near`, `dims` and `lookup`.
+  - The dimension type is `UVWLabel`, not `UvwLabel`. The MSv4 dimension name
+    `uvw_label` is unchanged; only the Julia spelling moved.
+
+  `BaselineId` and `ElementId` still spell their acronym `Id` rather than `ID`,
+  which is the same inconsistency; settle both here.
 
 ### CHUNK-012: implement-real-file-validation
 - **Kind**: `implement`
@@ -533,11 +657,23 @@ Three layers, mirroring what is already in place:
   millibars→pascals (`PRESSURE`). MSv4 states units in every array's
   attributes, so `check` catches a wrong *declaration* but never a wrong
   *value*. Each conversion needs a test with a known number.
+- **A mixed-basis array has no correct MSv4 `polarization` coordinate.** The
+  reader now represents this honestly — generic products, per-antenna basis —
+  but CHUNK-007 still has to write a single array-wide coordinate to conform,
+  and for a heterogeneous array any value it picks is wrong for some baseline.
+  Decide explicitly there; the validation files are both homogeneously
+  circular, so nothing in the test suite will catch a silent choice.
 - **Scan inference and invented metadata are judgement, not translation.** They
   belong in the docs and in the store's provenance, not only in the code.
 - **Trailing whitespace and NUL bytes in FITS strings.** Untrimmed, they reach MSv4
   coordinate labels and comparison sites alike, and every symptom is silent. Recorded in
   CHUNK-005's Notes.
+- **The FITSFiles dependency is not satisfiable from the registry.** The
+  extension needs the lazy-reading API that exists only on `ptiede-uvfixes`;
+  the registered `0.3.2` shares the version number but not the code, and its
+  `hdu.data` materializes an entire HDU per access. Until those commits are
+  merged and released, `test/Manifest.toml` must pin the branch and XRadio
+  cannot be registered. Recorded under Decisions.
 - **FLAG expansion is the fiddliest table.** Six independent range axes with
   wildcards, and no fixture generator writes one — Gustavo's tests hand-build
   the HDU. Budget for it accordingly.
@@ -559,3 +695,4 @@ Three layers, mirroring what is already in place:
 
 - 2026-09-05 CHUNK-001 (preflight) → next: CHUNK-002, CHUNK-003, CHUNK-004, CHUNK-014 (all `decide`, batchable), then CHUNK-005
 - 2026-09-06 CHUNK-002, CHUNK-003, CHUNK-004, CHUNK-014 (all `decide`) → next: CHUNK-005
+- 2026-09-06 CHUNK-005 (implement-fitsidi-reader) → next: CHUNK-006
