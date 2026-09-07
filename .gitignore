@@ -7,3 +7,7 @@ Manifest-v*.toml
 *.jl.mem
 /testdata/
 /*.ps.zarr/
+
+# Review-workflow working documents
+*_REVIEW_PLAN.md
+*_REVIEW_SESSION.md
