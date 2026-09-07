@@ -181,7 +181,14 @@ const VISIBILITY_SCHEMA = DatasetSpec(
             ArraySpec(
                 "UVW", (:time, :baseline_id, :uvw_label), Union{Float16, Float32, Float64};
                 attrs = uvw_measure(),
-                doc = "Baseline vector in the `uvw` frame, in metres, from antenna 1 to antenna 2."
+                doc = "Baseline vector in the `uvw` frame, in metres: the first antenna's \
+                       position minus the second's, with `w` towards the source, `v` in the \
+                       plane through the source and the pole, and `u` towards increasing \
+                       longitude. The standard states the direction and the difference as \
+                       opposites of each other — \"from antenna 2 to antenna 1\" against \
+                       `POSITION2 - POSITION1` — and the direction is the clause its own \
+                       stores follow, which the test suite measures from antenna positions \
+                       rather than assumes. The sign of the visibility phase follows from it."
             ),
         ],
         _correlated_vars(:baseline_id, _VIS_SHAPE),

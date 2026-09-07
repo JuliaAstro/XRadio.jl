@@ -5,7 +5,11 @@ Manifest-v*.toml
 *.jl.cov
 *.jl.*.cov
 *.jl.mem
-/testdata/
+# The test data itself is too large to track; the recipes that fetch it are not.
+/testdata/*
+!/testdata/fetch-all.sh
+!/testdata/fetch-msv4.py
+!/testdata/SHA1SUMS
 /*.ps.zarr/
 
 # Review-workflow working documents

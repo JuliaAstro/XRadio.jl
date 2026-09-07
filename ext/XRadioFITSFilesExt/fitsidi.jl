@@ -65,19 +65,32 @@ rowvalues(v::AbstractVector, r::Integer) = [v[r]]
 """
     IDI_MOUNTS
 
-Maps a FITS-IDI `MNTSTA` mount code to its name. An antenna whose code is
-absent from this table cannot be described in MSv4, whose `mount` field is a
-name rather than a number.
+Maps a FITS-IDI `MNTSTA` mount code to the constructor of the
+[`XRadio.AbstractMount`](@ref) it names, each taking the antenna's `STAXOF`
+axis offset.
 """
 const IDI_MOUNTS = Dict(
-    0 => "ALT-AZ",
-    1 => "EQUATORIAL",
-    2 => "ORBITING",
-    3 => "X-Y",
-    4 => "ALT-AZ+NASMYTH-R",
-    5 => "ALT-AZ+NASMYTH-L",
-    6 => "OTHER",
+    0 => MountAltAz,
+    1 => MountEquatorial,
+    2 => MountOrbiting,
+    3 => MountXY,
+    4 => MountNasmythR,
+    5 => MountNasmythL,
+    6 => MountOther,
 )
+
+"""
+    idi_mount(mntsta, staxof) -> AbstractMount
+
+The mount an AIPS `MNTSTA` code names, carrying `staxof` as its axis offset.
+"""
+function idi_mount(mntsta::Integer, staxof)
+    haskey(IDI_MOUNTS, Int(mntsta)) || throw(ArgumentError(
+        "FITS-IDI MNTSTA $mntsta names no mount; AIPS defines " *
+            join(sort(collect(keys(IDI_MOUNTS))), ", ")
+    ))
+    return IDI_MOUNTS[Int(mntsta)](staxof)
+end
 
 """
     IDI_POL_PRODUCTS
@@ -224,18 +237,25 @@ end
 
 # ── UV_DATA's per-row columns ────────────────────────────────────────────────
 
-# The strided reader decodes raw bytes, so it applies neither the TSCAL/TZERO
-# scaling nor the multi-element layout that column access would. Both failures
-# are silent, so reject a column carrying either.
-function _scalar(field)
+_fieldname(field) = rstrip(String(field.name))
+
+# The byte readers here decode raw bytes, so they apply none of the TSCAL/TZERO
+# scaling that column access would. The failure is silent, so reject a column
+# carrying either.
+function _unscaled(field)
     scale = something(field.scale, 1)
     zero = something(field.zero, 0)
     (scale == 1 && zero == 0) || throw(ArgumentError(
-        "UV_DATA column $(rstrip(String(field.name))) is scaled " *
+        "UV_DATA column $(_fieldname(field)) is scaled " *
             "(TSCAL $scale, TZERO $zero), which this reader does not apply"
     ))
+    return field
+end
+
+function _scalar(field)
+    _unscaled(field)
     field.leng == 1 || throw(ArgumentError(
-        "UV_DATA column $(rstrip(String(field.name))) holds $(field.leng) " *
+        "UV_DATA column $(_fieldname(field)) holds $(field.leng) " *
             "values per row; this reader decodes scalar columns"
     ))
     return field
@@ -258,30 +278,37 @@ function _read_row_prefixes(desc, prefix::Int, n::Int, rowlen::Int)
     return buf
 end
 
-# FITS is big-endian; `S` is the type the file stores, `T` the type wanted.
-function _decode_column!(
-        out::Vector{T}, ::Type{S}, buf::Vector{UInt8}, prefix::Int, off::Int
+# FITS is big-endian; `S` is the type the file stores and `T` the type wanted.
+# `out` is one column per row, `stride` the distance between rows within `buf`,
+# and `off` the field's 1-based byte offset within a row.
+function _decode!(
+        out::Matrix{T}, ::Type{S}, buf::Vector{UInt8}, stride::Int, off::Int
     ) where {T, S}
-    for r in eachindex(out)
-        out[r] = T(ntoh(unsafe_load(Ptr{S}(pointer(buf, (r - 1) * prefix + off)))))
+    for r in axes(out, 2)
+        base = (r - 1) * stride + off
+        for k in axes(out, 1)
+            out[k, r] = T(ntoh(unsafe_load(Ptr{S}(pointer(buf, base + (k - 1) * sizeof(S))))))
+        end
     end
     return out
 end
 
-function _row_column(::Type{T}, field, buf::Vector{UInt8}, prefix::Int, n::Int) where {T}
-    out = Vector{T}(undef, n)
+function _decode_field!(out::Matrix, field, buf::Vector{UInt8}, stride::Int)
     off = first(field.slice)
     S = field.type
-    S === Float64 && return _decode_column!(out, Float64, buf, prefix, off)
-    S === Float32 && return _decode_column!(out, Float32, buf, prefix, off)
-    S === Int64 && return _decode_column!(out, Int64, buf, prefix, off)
-    S === Int32 && return _decode_column!(out, Int32, buf, prefix, off)
-    S === Int16 && return _decode_column!(out, Int16, buf, prefix, off)
+    S === Float64 && return _decode!(out, Float64, buf, stride, off)
+    S === Float32 && return _decode!(out, Float32, buf, stride, off)
+    S === Int64 && return _decode!(out, Int64, buf, stride, off)
+    S === Int32 && return _decode!(out, Int32, buf, stride, off)
+    S === Int16 && return _decode!(out, Int16, buf, stride, off)
     throw(ArgumentError(
-        "UV_DATA column $(rstrip(String(field.name))) has type $S, which is " *
-            "not a scalar this reader decodes"
+        "UV_DATA column $(_fieldname(field)) has type $S, which is not a " *
+            "numeric type this reader decodes"
     ))
 end
+
+_row_column(::Type{T}, field, buf::Vector{UInt8}, prefix::Int, n::Int) where {T} =
+    vec(_decode_field!(Matrix{T}(undef, 1, n), field, buf, prefix))
 
 """
     read_uv_rows(uv_hdu) -> NamedTuple
@@ -289,12 +316,19 @@ end
 Read the per-row columns of a `UV_DATA` table — the timestamps, baselines and
 uvw coordinates, but not the visibilities.
 
-Returns `(; jd, day, baseline, source_id, freqid, integration_time, uvw)`, one
-entry per row. `jd` and `day` are the timestamp FITS-IDI splits across `DATE`
-and `TIME` so that the whole-day part stays exactly representable; adding them
-costs precision, so callers do it once. `uvw` is `(nrows, 3)` in **seconds of
-light travel**, as the file writes it, and `integration_time` is in seconds.
-`baseline` is the packed code that [`baseline_antennas`](@ref) unpacks.
+Returns `(; jd, day, baseline, source_id, freqid, integration_time, scan, uvw)`,
+one entry per row. `jd` and `day` are the timestamp FITS-IDI splits across
+`DATE` and `TIME` so that the whole-day part stays exactly representable; adding
+them costs precision, so callers do it once. `uvw` is `(nrows, 3)` in **seconds
+of light travel**, as the file writes it. `baseline` is the packed code that
+[`baseline_antennas`](@ref) unpacks.
+
+Only `DATE`, `TIME`, `BASELINE` and the `UU`/`VV`/`WW` triple are required of a
+FITS-IDI file. `source_id` and `freqid` fall back to 1, which is what a file
+holding one source or one frequency setup means by omitting them.
+`integration_time` and `scan` are `nothing` when the file does not state them —
+the first is optional in the format, and the second is not part of it at all,
+so a `SCAN` column is a correlator's own addition and is read when offered.
 
 One pass over the file, reading only the leading bytes of each row.
 """
@@ -309,38 +343,201 @@ function read_uv_rows(uv_hdu)
             throw(ArgumentError("UV_DATA has no $name column"))
         return _scalar(byname[name])
     end
+    # AIPS Memo 114r makes several random parameters conditional — `SOURCE_ID`
+    # only when the file holds more than one source, `FREQID` only when it holds
+    # more than one setup, `INTTIM` never — and states three spellings of
+    # `SOURCE_ID` to be synonymous.
+    function optional_field(names::Symbol...)
+        for name in names
+            haskey(byname, name) && return _scalar(byname[name])
+        end
+        return nothing
+    end
 
-    # UU/VV/WW carry a suffix naming the projection the correlator used
-    # ("UU---SIN"); the standard also allows the bare names.
+    # UU/VV/WW carry a suffix naming the projection the correlator used. The
+    # ---NCP system puts `w` on the north pole rather than on the source, so its
+    # coordinates are not the ones MSv4 wants and reading them as ---SIN would
+    # be wrong in silence. The VLBA archive's `-L` suffix means ---SIN in
+    # seconds despite naming wavelengths, which the memo tells readers to expect.
     function uvw_field(axis::Char)
         base = string(axis, axis)
         for name in keys(byname)
-            startswith(String(name), base) && return _scalar(byname[name])
+            full = String(name)
+            startswith(full, base) || continue
+            occursin("NCP", full) && throw(ArgumentError(
+                "UV_DATA column $full is in the ---NCP system, whose w axis points " *
+                    "at the north pole rather than at the source; this reader " *
+                    "handles ---SIN"
+            ))
+            return _scalar(byname[name])
         end
         throw(ArgumentError("UV_DATA has no $base column"))
     end
 
-    wanted = [
-        field(:DATE), field(:TIME), field(:BASELINE), field(:SOURCE),
-        field(:FREQID), field(:INTTIM),
-        uvw_field('U'), uvw_field('V'), uvw_field('W'),
-    ]
+    date, time, baseline = field(:DATE), field(:TIME), field(:BASELINE)
+    source = optional_field(:SOURCE_ID, Symbol("SOURCE ID"), :SOURCE)
+    freqid = optional_field(:FREQID)
+    inttim = optional_field(:INTTIM)
+    array = optional_field(:ARRAY)
+    # No FITS-IDI table records scans — AIPS Memo 114r has no scan concept at
+    # all — so they are normally inferred. A correlator that writes one anyway
+    # knows better than any inference, and is believed.
+    scan = optional_field(:SCAN, :SCAN_NUMBER, Symbol("SCAN NO"), :SCANNO)
+
+    uu, vv, ww = uvw_field('U'), uvw_field('V'), uvw_field('W')
+    wanted = filter(!isnothing, [
+        date, time, baseline, source, freqid, inttim, array, scan, uu, vv, ww,
+    ])
     prefix = maximum(f -> last(f.slice), wanted)
     buf = _read_row_prefixes(desc, prefix, n, rowlen)
     col(::Type{T}, f) where {T} = _row_column(T, f, buf, prefix, n)
+    col(::Type{T}, ::Nothing, default) where {T} = fill(T(default), n)
+    col(::Type{T}, f, default) where {T} = col(T, f)
 
     uvw = Matrix{Float64}(undef, n, 3)
-    for (k, f) in enumerate(wanted[7:9])
+    for (k, f) in enumerate((uu, vv, ww))
         uvw[:, k] = col(Float64, f)
     end
 
+    # A single array need not number itself, but two arrays sharing one
+    # UV_DATA would collide in the 256*a1 + a2 baseline packing.
+    if array !== nothing
+        arrays = unique(col(Int32, array))
+        length(arrays) == 1 || throw(ArgumentError(
+            "UV_DATA spans arrays $(Int.(arrays)); this reader handles one array, " *
+                "whose antenna numbering the BASELINE packing assumes"
+        ))
+    end
+
     return (;
-        jd = col(Float64, wanted[1]),
-        day = col(Float64, wanted[2]),
-        baseline = col(Int32, wanted[3]),
-        source_id = col(Int32, wanted[4]),
-        freqid = col(Int32, wanted[5]),
-        integration_time = col(Float64, wanted[6]),
+        jd = col(Float64, date),
+        day = col(Float64, time),
+        baseline = col(Int32, baseline),
+        source_id = col(Int32, source, 1),
+        freqid = col(Int32, freqid, 1),
+        integration_time = inttim === nothing ? nothing : col(Float64, inttim),
+        scan = scan === nothing ? nothing : col(Int32, scan),
         uvw,
     )
+end
+
+# ── UV_DATA's data matrix ────────────────────────────────────────────────────
+
+"""
+    uv_matrix_layout(uv_hdu) -> (; ncomplex, no_stkd, no_chan, no_band)
+
+The shape of one row's `FLUX` array, from the `MAXISn`/`CTYPEn` keywords.
+
+FITS-IDI writes the regular axes of the data matrix fastest-varying first as
+`COMPLEX`, `STOKES`, `FREQ`, `BAND`, optionally followed by degenerate `RA` and
+`DEC` axes. `ncomplex` is 2 when a datum is a real and an imaginary part, and 3
+when it carries a per-channel weight as well.
+"""
+function uv_matrix_layout(uv_hdu)
+    maxis = Int(card(uv_hdu, "MAXIS", 0))
+    maxis >= 4 || throw(ArgumentError(
+        "UV_DATA data matrix has MAXIS = $maxis; the COMPLEX, STOKES, FREQ " *
+            "and BAND axes are all required"
+    ))
+    for (n, want) in enumerate(("COMPLEX", "STOKES", "FREQ", "BAND"))
+        got = card_string(uv_hdu, "CTYPE$n")
+        got == want || throw(ArgumentError(
+            "UV_DATA data-matrix axis $n is $(repr(got)), expected $(repr(want))"
+        ))
+    end
+    axislength(n) = Int(card(uv_hdu, "MAXIS$n", 0))
+    for n in 5:maxis
+        axislength(n) == 1 || throw(ArgumentError(
+            "UV_DATA data-matrix axis $n ($(card_string(uv_hdu, "CTYPE$n"))) has " *
+                "length $(axislength(n)); only degenerate axes may follow BAND"
+        ))
+    end
+    ncomplex = axislength(1)
+    ncomplex in (2, 3) || throw(ArgumentError(
+        "UV_DATA COMPLEX axis has length $ncomplex, expected 2 (real, imaginary) " *
+            "or 3 (real, imaginary, weight)"
+    ))
+    return (; ncomplex, no_stkd = axislength(2), no_chan = axislength(3),
+        no_band = axislength(4))
+end
+
+"""
+    read_uv_block(uv_hdu, rows; T = Float32) -> (; flux, weight, layout)
+
+Read the data matrix and the `WEIGHT` column for a contiguous range of
+`UV_DATA` rows.
+
+`flux` is `(complex, polarization, channel, band, row)` and `weight` is
+`(polarization, band, row)`, both in the file's own axis order and both
+`Matrix{T}`-backed; `weight` is `nothing` when the `COMPLEX` axis is 3 and so
+carries the weights itself. `layout` is the [`uv_matrix_layout`](@ref) the
+shapes come from.
+
+The rows are read as one contiguous block, which is nearly the whole cost of a
+conversion, so ask for a whole partition at a time. A block is
+`length(rows) * (2 to 3) * no_stkd * no_chan * no_band` values resident, which
+for a file of any size means the caller must partition rather than ask for all
+of them.
+"""
+function read_uv_block(uv_hdu, rows::AbstractUnitRange{<:Integer}; T::Type = Float32)
+    desc = _descriptor(uv_hdu)
+    n = _nrows(uv_hdu)
+    (first(rows) >= 1 && last(rows) <= n) || throw(ArgumentError(
+        "UV_DATA rows $rows lie outside the table's 1:$n"
+    ))
+    layout = uv_matrix_layout(uv_hdu)
+    rowlen = _rowlength(uv_hdu)
+    nrow = length(rows)
+
+    byname = Dict(Symbol(rstrip(String(f.name))) => f for f in desc.fields)
+    haskey(byname, :FLUX) || throw(ArgumentError("UV_DATA has no FLUX column"))
+    flux_field = _unscaled(byname[:FLUX])
+    nflux = layout.ncomplex * layout.no_stkd * layout.no_chan * layout.no_band
+    flux_field.leng == nflux || throw(ArgumentError(
+        "UV_DATA FLUX holds $(flux_field.leng) values per row; the data-matrix " *
+            "axes give $nflux"
+    ))
+
+    buf = Vector{UInt8}(undef, nrow * rowlen)
+    io = FITSFiles.open_lazy_source(desc)
+    try
+        seek(io, desc.begpos + rowlen * (first(rows) - 1))
+        read!(io, buf)
+    finally
+        close(io)
+    end
+
+    flux = reshape(
+        _decode_field!(Matrix{T}(undef, nflux, nrow), flux_field, buf, rowlen),
+        layout.ncomplex, layout.no_stkd, layout.no_chan, layout.no_band, nrow
+    )
+
+    # AIPS Memo 114r ties the WEIGHT random parameter to the COMPLEX axis: with
+    # MAXIS1 = 2 the weights have nowhere else to live and the parameter is
+    # required, and with MAXIS1 = 3 they are in the data matrix and it must be
+    # absent. Either mismatch means the weights are not what they appear.
+    haveweight = haskey(byname, :WEIGHT)
+    if haveweight == (layout.ncomplex == 3)
+        throw(ArgumentError(
+            haveweight ?
+                "UV_DATA has a WEIGHT column and a COMPLEX axis of 3, which already " *
+                "carries the weights; the standard permits only one of them" :
+                "UV_DATA has no WEIGHT column and a COMPLEX axis of 2, which leaves " *
+                "the weights unstated; the standard requires the column"
+        ))
+    end
+    weight = if haveweight
+        field = _unscaled(byname[:WEIGHT])
+        nweight = layout.no_stkd * layout.no_band
+        field.leng == nweight || throw(ArgumentError(
+            "UV_DATA WEIGHT holds $(field.leng) values per row; NO_STKD x " *
+                "NO_BAND gives $nweight"
+        ))
+        reshape(
+            _decode_field!(Matrix{T}(undef, nweight, nrow), field, buf, rowlen),
+            layout.no_stkd, layout.no_band, nrow
+        )
+    end
+
+    return (; flux, weight, layout)
 end

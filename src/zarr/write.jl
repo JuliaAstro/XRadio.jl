@@ -46,19 +46,26 @@ function Base.write(
     )
     validate && XRadio.validate(ps)
 
+    root = _create_store(path, metadata(ps); zarr_format, overwrite)
+    for (name, ms) in pairs(ps)
+        _write_tree(root, string(name), ms; zarr_format, compressor, chunks)
+    end
+    return path
+end
+
+# The root group of a new store, holding only the processing set's own
+# attributes. Measurement Sets are written into it one at a time, so a
+# converter reading a file larger than memory never has to hold more than the
+# partition it is building.
+function _create_store(path::AbstractString, meta; zarr_format::Integer, overwrite::Bool)
     if ispath(path)
         overwrite || throw(
             ArgumentError("`$path` exists; pass `overwrite = true` to replace it.")
         )
         rm(path; recursive = true)
     end
-
     store = Zarr.DirectoryStore(path)
-    root = Zarr.zgroup(store, "", zarr_format; attrs = _to_attrs(metadata(ps)))
-    for (name, ms) in pairs(ps)
-        _write_tree(root, string(name), ms; zarr_format, compressor, chunks)
-    end
-    return path
+    return Zarr.zgroup(store, "", zarr_format; attrs = _to_attrs(meta))
 end
 
 function _write_tree(parent::Zarr.ZGroup, name::AbstractString, tree; zarr_format, compressor, chunks)
