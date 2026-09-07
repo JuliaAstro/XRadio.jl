@@ -304,6 +304,138 @@ function _partition_polarization(products, bases, codes)
     return labels, perbaseline
 end
 
+# One row of the `FLAG` table. FITS-IDI records flags as ranges over the
+# observation rather than as an array beside the data: a row asserts that some
+# selection of source, antennas, frequency setup, time, bands, channels and
+# polarizations is bad, and a reader expands it onto whatever grid it builds.
+# `pols` is in MSv4's polarization order; everything else is as the file states
+# it, with the wildcards resolved.
+struct FlagRange
+    source_id::Int          # 0 covers every source
+    ant1::Int               # NOSTA, 0 a wildcard
+    ant2::Int
+    freqid::Int             # 0 covers every frequency setup
+    t0::Float64             # POSIX seconds
+    t1::Float64
+    bands::Vector{Bool}
+    chan_lo::Int            # 1-based, 0 meaning the first channel
+    chan_hi::Int            # 1-based, 0 meaning the last
+    pols::Vector{Bool}
+end
+
+"""
+    reference_date(hdu) -> DateTime
+
+The `RDATE` a FITS-IDI table's times are measured from.
+"""
+function reference_date(hdu)
+    text = card_string(hdu, "RDATE")
+    isempty(text) && throw(ArgumentError(
+        "FITS-IDI $(card_string(hdu, "EXTNAME")) table has no RDATE keyword, " *
+            "which its times are measured from"
+    ))
+    return try
+        DateTime(text)
+    catch
+        throw(ArgumentError(
+            "FITS-IDI RDATE $(repr(text)) is not a date; the standard writes it " *
+                "as yyyy-mm-dd"
+        ))
+    end
+end
+
+"""
+    read_flag_ranges(flag_hdu, perm, layout, rdate) -> Vector{FlagRange}
+
+The `FLAG` table's rows, with their wildcards resolved and their times turned
+into POSIX seconds from `rdate`.
+
+`perm[p]` is the on-disk `STOKES` index of MSv4 polarization `p`, so `PFLAGS`
+comes back in the order a converted partition's polarization axis uses.
+"""
+function read_flag_ranges(flag_hdu, perm, layout, rdate::DateTime)
+    data = flag_hdu.data
+    for name in (:SOURCE_ID, :ANTS, :FREQID, :TIMERANG, :BANDS, :CHANS, :PFLAGS)
+        hascol(data, name) || throw(ArgumentError(
+            "FITS-IDI FLAG table has no $name column, which the standard requires; " *
+                "without it a row does not say what it flags"
+        ))
+    end
+    epoch = datetime2unix(rdate)
+    source = column(data, :SOURCE_ID)
+    ants, freqid = column(data, :ANTS), column(data, :FREQID)
+    timerang, bands = column(data, :TIMERANG), column(data, :BANDS)
+    chans, pflags = column(data, :CHANS), column(data, :PFLAGS)
+
+    ranges = Vector{FlagRange}(undef, length(source))
+    for r in axes(source, 1)
+        a, t = rowvalues(ants, r), rowvalues(timerang, r)
+        b, c, p = rowvalues(bands, r), rowvalues(chans, r), rowvalues(pflags, r)
+        length(a) == 2 && length(t) == 2 && length(c) == 2 || throw(ArgumentError(
+            "FITS-IDI FLAG row $r gives $(length(a)) ANTS, $(length(t)) TIMERANG " *
+                "and $(length(c)) CHANS values; the standard defines two of each"
+        ))
+        length(b) == layout.no_band || throw(ArgumentError(
+            "FITS-IDI FLAG row $r gives $(length(b)) BANDS values, the UV_DATA " *
+                "data matrix $(layout.no_band) bands"
+        ))
+        length(p) == layout.no_stkd || throw(ArgumentError(
+            "FITS-IDI FLAG row $r gives $(length(p)) PFLAGS values, the UV_DATA " *
+                "data matrix $(layout.no_stkd) polarizations"
+        ))
+        # A literal `(0, 0)` would be an empty interval at the reference date;
+        # AIPS writes it for a flag that covers the whole observation.
+        t0, t1 = iszero(t[1]) && iszero(t[2]) ? (-Inf, Inf) :
+            (epoch + t[1] * 86400, epoch + t[2] * 86400)
+        ranges[r] = FlagRange(
+            Int(source[r]), Int(a[1]), Int(a[2]), Int(freqid[r]), t0, t1,
+            [!iszero(x) for x in b], Int(c[1]), Int(c[2]),
+            [!iszero(p[perm[i]]) for i in eachindex(perm)],
+        )
+    end
+    return ranges
+end
+
+# Whether a `FLAG` row's antenna selection covers a baseline. One antenna flags
+# every baseline touching it, two flag that baseline whichever way round the
+# file writes them, and neither flags them all.
+function _flags_baseline(e::FlagRange, a::Integer, b::Integer)
+    e.ant1 == 0 && e.ant2 == 0 && return true
+    e.ant2 == 0 && return e.ant1 == a || e.ant1 == b
+    e.ant1 == 0 && return e.ant2 == a || e.ant2 == b
+    return (e.ant1 == a && e.ant2 == b) || (e.ant1 == b && e.ant2 == a)
+end
+
+# Expand onto one partition's grid the flag ranges that touch it. A row names a
+# selection rather than a cell, so it is resolved to index vectors once and
+# written as a slice.
+function _apply_flags!(flag, ranges, codes, times, source_at, band, freqid, nchan)
+    isempty(ranges) && return flag
+    antennas = map(baseline_antennas, codes)
+    # A correlator writes one row per antenna dropout, so a real table has
+    # thousands of them and all but a few cover times outside any one scan.
+    # `times` is sorted, so its ends bound the partition.
+    span = extrema(times)
+    for e in ranges
+        (e.t1 >= span[1] && e.t0 <= span[2]) || continue
+        (e.freqid == 0 || e.freqid == freqid) || continue
+        e.bands[band] || continue
+        ks = [
+            k for k in eachindex(times) if e.t0 <= times[k] <= e.t1 &&
+                (e.source_id == 0 || e.source_id == source_at[k])
+        ]
+        isempty(ks) && continue
+        bs = [b for b in eachindex(antennas) if _flags_baseline(e, antennas[b]...)]
+        isempty(bs) && continue
+        ps = findall(e.pols)
+        isempty(ps) && continue
+        cs = max(e.chan_lo, 1):(e.chan_hi == 0 ? nchan : min(e.chan_hi, nchan))
+        isempty(cs) && continue
+        flag[ps, cs, bs, ks] .= true
+    end
+    return flag
+end
+
 # The antennas of one partition, in antenna-number order. A scan's baselines
 # name the antennas that actually observed together, which is fewer than the
 # array whenever a station was down.
@@ -456,6 +588,14 @@ function XRadio.fitsidi2msv4(
         "FITS-IDI FREQUENCY gives $(length(band_freq)) bands, the UV_DATA " *
             "data matrix $(layout.no_band)"
     ))
+    freqid = Int(column(fqd, :FREQID)[1])
+
+    # Flags. FITS-IDI keeps them apart from the data as ranges to apply, so
+    # nothing in `UV_DATA` says a datum is bad and the table has to be expanded
+    # onto every partition's grid.
+    fl = table(hdus, "FLAG")
+    flag_ranges = fl === nothing ? FlagRange[] :
+        read_flag_ranges(fl, perm, layout, reference_date(fl))
 
     # Sources, by SOURCE_ID, which is what UV_DATA's SOURCE column holds.
     srd = sr.data
@@ -515,7 +655,7 @@ function XRadio.fitsidi2msv4(
     shared = (;
         products, bases, antenna_name, source_names, frames, source_of, scan_of,
         source_ra, source_dec, positions, mounts, diameters, telescope_name,
-        receptor_angles = receptor_angle,
+        receptor_angles = receptor_angle, flag_ranges, freqid,
         ref_freq, band_freq, ch_width, radiometer, vis_scal, weight_scal, inttim,
         efficiency = Float64(weight_efficiency), perm, layout,
         scan_intents = collect(String, scan_intents),
@@ -580,6 +720,9 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
     uvw = fill(NaN, 3, nbase, ntime)
     field_name = Vector{String}(undef, ntime)
     scan_name = Vector{String}(undef, ntime)
+    # The `FLAG` table selects by SOURCE_ID, which is a property of a timestamp
+    # rather than of the grid.
+    source_at = Vector{Int}(undef, ntime)
 
     # `WEIGHTYP = 'CORRELAT'` weights are validity fractions rather than
     # variances; `f · 2Δν · τ · η²` is the thermal weight they imply. The
@@ -597,6 +740,7 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
         end
         field_name[k] = s.source_names[s.source_of[Int(rows.source_id[r])]]
         scan_name[k] = s.scan_of[r]
+        source_at[k] = Int(rows.source_id[r])
         scale = wscal * (iszero(wfactor) ? one(F) : wfactor * F(s.inttim[r]))
         for c in 1:nchan, (p, sp) in enumerate(s.perm)
             re = block.flux[1, sp, c, band, i]
@@ -609,6 +753,8 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
             flag[p, c, b, k] = !good
         end
     end
+
+    _apply_flags!(flag, s.flag_ranges, codes, grid_times, source_at, band, s.freqid, nchan)
 
     labels, mixed = _partition_polarization(s.products, s.bases, codes)
     sources = sort!(unique(s.source_of[Int(rows.source_id[r])] for r in range))

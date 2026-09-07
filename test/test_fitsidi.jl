@@ -392,6 +392,66 @@ end
             "field_and_source_base_xds"
     end
 
+    @testset "FLAG rows are ranges to be expanded" begin
+        # One antenna for the length of one scan: every baseline touching it,
+        # and nothing else. Nothing in UV_DATA repeats what the row says, so a
+        # store written without it would present flagged data as good.
+        gt = synthetic_fitsidi(
+            joinpath(dir, "flag.idifits");
+            flags = [(; ants = (2, 0), timerange = (0.0, 10 / 86400))],
+        )
+        ps = open(ProcessingSet, to_msv4(gt, "flag.ps.zarr"))
+        flag = parent(ps[:flag_00][:flag])
+        touching = [i for (i, (a, b)) in enumerate(gt.baselines) if 2 in (a, b)]
+
+        @test touching == [2, 4, 5]
+        @test all(flag[:, :, touching, :])
+        @test !any(flag[:, :, setdiff(eachindex(gt.baselines), touching), :])
+        # The second scan starts 600 s in, outside the range.
+        @test !any(ps[:flag_02][:flag])
+        # A flag says the datum must not be used, not that it was ill measured.
+        @test all(>(0), ps[:flag_00][:weight])
+
+        # PFLAGS is in the file's STOKES order, which is not MSv4's: on-disk
+        # index 2 is LL, which the parallel-hands-first permutation puts last.
+        gt = synthetic_fitsidi(
+            joinpath(dir, "flagpol.idifits");
+            flags = [(; pflags = (0, 1, 0, 0), chans = (2, 3))],
+        )
+        ms = open(ProcessingSet, to_msv4(gt, "flagpol.ps.zarr"))[:flagpol_00]
+        @test lookup(ms[:flag], Polarization) == ["RR", "RL", "LR", "LL"]
+        @test all(parent(ms[:flag])[4, 2:3, :, :])
+        @test !any(parent(ms[:flag])[1:3, :, :, :])
+        @test !any(parent(ms[:flag])[4, [1, 4], :, :])
+
+        # BANDS selects a spectral window, which is a whole partition here.
+        gt = synthetic_fitsidi(joinpath(dir, "flagband.idifits"); flags = [(; bands = (0, 1))])
+        ps = open(ProcessingSet, to_msv4(gt, "flagband.ps.zarr"))
+        @test !any(ps[:flagband_00][:flag])
+        @test all(ps[:flagband_01][:flag])
+
+        # SOURCE_ID selects a source; 0, which the VLBA file writes throughout,
+        # is the wildcard.
+        gt = synthetic_fitsidi(joinpath(dir, "flagsrc.idifits"); flags = [(; source_id = 2)])
+        ps = open(ProcessingSet, to_msv4(gt, "flagsrc.ps.zarr"))
+        @test !any(ps[:flagsrc_00][:flag])
+        @test all(ps[:flagsrc_02][:flag])
+
+        # A TIMERANG of (0, 0) is AIPS's "every time" rather than the empty
+        # interval a literal reading would make of it.
+        gt = synthetic_fitsidi(
+            joinpath(dir, "flagall.idifits"); flags = [(; timerange = (0.0, 0.0))]
+        )
+        ps = open(ProcessingSet, to_msv4(gt, "flagall.ps.zarr"))
+        @test all(ps[:flagall_00][:flag])
+        @test all(ps[:flagall_02][:flag])
+
+        # The standard fixes the width of each of these columns against the
+        # data matrix, and a row that disagrees does not say what it flags.
+        gt = synthetic_fitsidi(joinpath(dir, "flagbad.idifits"); flags = [(; bands = (1,))])
+        @test_throws "1 BANDS values" to_msv4(gt, "flagbad.ps.zarr")
+    end
+
     @testset "a mount MSv4 cannot name is written as OTHER" begin
         # MNTSTA 2 (orbiting) and 6 (other) have no MSv4 name, and 3 (X-Y) does.
         gt = synthetic_fitsidi(joinpath(dir, "mount.idifits"); mntsta = Int32[3, 2, 6])

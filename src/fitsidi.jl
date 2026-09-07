@@ -34,6 +34,13 @@ that subset rather than the whole. `STAXOF` has no field in MSv4's `antenna`
 dataset and is dropped; every other column of `ARRAY_GEOMETRY`, `ANTENNA` and
 `SOURCE` that MSv4 defines a home for is carried.
 
+A `FLAG` table is expanded onto the dense `FLAG` array. Its rows are *ranges* —
+a source, an antenna pair with `0` as a wildcard, a frequency setup, a time
+range, a band selector, a channel range and a polarization selector — and
+nothing in `UV_DATA` repeats what they say, so a store written without them
+would present flagged data as good. Flagging leaves the weights alone: `FLAG`
+says the datum must not be used and `WEIGHT` says how good it would have been.
+
 # Keywords
 - `partition = (:scan,)`: how to split beyond the mandatory spectral window.
   `(:source,)` splits where the source changes but not across time gaps, and
