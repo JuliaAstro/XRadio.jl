@@ -34,8 +34,22 @@ scans(ms), fields(ms)
 
 ## Selecting
 
-A `MeasurementSet` is a `DimensionalData.DimTree`, so everything that library
-offers applies:
+`select` narrows a processing set to the Measurement Sets stating the
+attributes asked for, by `antenna`, `field`, `scan` or `spectralwindow`:
+
+```julia
+select(ps; field = "M87")                       # one source
+select(ps; field = "M87", spectralwindow = "spw_2")
+select(ps; scan = ["3", "4", "5"])              # any of three scans
+```
+
+A keyword takes one name or a collection of them, several keywords must all
+match, and an unrecognized keyword is an error rather than a selection that
+quietly keeps everything. The result is a `ProcessingSet`, so selections chain;
+`filter(f, ps)` remains for predicates the keywords do not reach.
+
+Within one Measurement Set, a `MeasurementSet` is a `DimensionalData.DimTree`,
+so everything that library offers applies:
 
 ```julia
 vis = ms[:visibility]

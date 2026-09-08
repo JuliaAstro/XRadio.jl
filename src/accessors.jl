@@ -401,6 +401,69 @@ function spectralwindow(ms::MeasurementSet)
     return String(get(metadata(lookup(d)), :spectral_window_name, ""))
 end
 
+# What each `select` keyword asks of a Measurement Set. The keywords are
+# singular where the accessor is plural, since each names one value to match
+# rather than the set being searched.
+const _SELECT_BY = (
+    antenna = antennas,
+    field = fields,
+    scan = scans,
+    spectralwindow = spectralwindow,
+)
+
+"""
+    select(ps::ProcessingSet; kwargs...) -> ProcessingSet
+
+The Measurement Sets of `ps` that state every attribute asked for, keeping
+their names and the set's own attributes.
+
+The keywords are `antenna`, `field`, `scan` and `spectralwindow`, spelled as
+the accessors are but singular, since each names one value to match rather than
+the set being searched. A keyword takes one name or a collection of them, and a
+collection matches a Measurement Set stating any of its values. Several
+keywords together must all match.
+
+```julia
+select(ps; field = "M87")                       # one source
+select(ps; field = "M87", spectralwindow = "spw_2")
+select(ps; scan = ["3", "4", "5"])              # any of three scans
+```
+
+The result is a `ProcessingSet`, so selections chain. `filter(f, ps)` remains
+for predicates these keywords do not reach.
+
+An unrecognized keyword is an error rather than a selection that quietly keeps
+everything.
+"""
+function select(ps::ProcessingSet; kwargs...)
+    asked = values(kwargs)
+    unknown = setdiff(keys(asked), keys(_SELECT_BY))
+    isempty(unknown) || throw(
+        ArgumentError(
+            "`select` has no keyword $(join(string.('`', unknown, '`'), ", ")); " *
+                "it accepts " * join(string.(keys(_SELECT_BY)), ", ")
+        )
+    )
+    return filter(ps) do ms
+        all(k -> _states(_SELECT_BY[k](ms), asked[k]), keys(asked))
+    end
+end
+
+# Whether what a Measurement Set states — one name, as `spectralwindow` gives,
+# or many, as `fields` does — includes any of the names asked for.
+_states(have, want) = any(w -> _includes(have, w), _wanted(want))
+
+_includes(have::AbstractString, want) = have == want
+_includes(have, want) = want in have
+
+_wanted(want::AbstractString) = (want,)
+_wanted(want::Union{AbstractVector, Tuple}) = want
+_wanted(want) = throw(
+    ArgumentError(
+        "a `select` keyword takes a name or a collection of names; got $(repr(want))"
+    )
+)
+
 # The values of an index coordinate, or an empty vector when the tree has no
 # such dimension.
 function _lookup_values(tree, name::Symbol)

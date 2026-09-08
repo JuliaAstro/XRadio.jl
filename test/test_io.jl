@@ -317,3 +317,73 @@ let path = joinpath(@__DIR__, "..", "testdata", "Antennae_North.cal.lsrk.split.v
         end
     end
 end
+
+@testset "selecting Measurement Sets by attribute" begin
+    function varied(; field, spw, scan, ants)
+        ms = synthetic_visibility()
+        t = dims(ms, Ti)
+        ms[:field_name] = DimArray(fill(field, length(t)), (t,))
+        ms[:scan_name] = DimArray(fill(scan, length(t)), (t,))
+        metadata(lookup(dims(ms, Frequency)))[:spectral_window_name] = spw
+        branches(ms)[:antenna] = synthetic_antenna(ants)
+        return ms
+    end
+
+    ps = ProcessingSet(
+        OrderedCollections.OrderedDict{Symbol, MeasurementSet}(
+            :a => varied(field = "M87", spw = "spw_0", scan = "1", ants = ["AA", "BB"]),
+            :b => varied(field = "M87", spw = "spw_1", scan = "2", ants = ["AA", "CC"]),
+            :c => varied(field = "3C273", spw = "spw_0", scan = "3", ants = ["BB", "CC"]),
+        )
+    )
+
+    @testset "one attribute" begin
+        @test collect(keys(select(ps; field = "M87"))) == [:a, :b]
+        @test collect(keys(select(ps; spectralwindow = "spw_0"))) == [:a, :c]
+        @test collect(keys(select(ps; scan = "3"))) == [:c]
+        @test collect(keys(select(ps; antenna = "AA"))) == [:a, :b]
+    end
+
+    @testset "several attributes must all match" begin
+        @test collect(keys(select(ps; field = "M87", spectralwindow = "spw_0"))) == [:a]
+        @test isempty(select(ps; field = "3C273", scan = "1"))
+    end
+
+    @testset "a collection matches any of its values" begin
+        @test collect(keys(select(ps; scan = ["1", "3"]))) == [:a, :c]
+        @test collect(keys(select(ps; spectralwindow = ("spw_0", "spw_1")))) == [:a, :b, :c]
+        @test collect(keys(select(ps; antenna = ["CC"]))) == [:b, :c]
+    end
+
+    @testset "the result is a processing set" begin
+        got = select(ps; field = "M87")
+        @test got isa ProcessingSet
+        @test metadata(got)[:type] == "processing_set"
+        # Selections chain, and chaining agrees with asking for both at once.
+        @test keys(select(got; spectralwindow = "spw_1")) ==
+            keys(select(ps; field = "M87", spectralwindow = "spw_1"))
+        @test isempty(select(ps; field = "NOSUCH"))
+        @test select(ps; field = "NOSUCH") isa ProcessingSet
+        # No keyword asks for nothing, so nothing is excluded.
+        @test keys(select(ps)) == keys(ps)
+    end
+
+    @testset "an unknown keyword is an error" begin
+        # The whole risk of a keyword-driven selector is a typo silently
+        # selecting everything.
+        @test_throws ArgumentError select(ps; spectral_window = "spw_0")
+        @test_throws "no keyword `spectral_window`" select(ps; spectral_window = "spw_0")
+        @test_throws "accepts antenna, field, scan, spectralwindow" select(
+            ps; spectral_window = "spw_0"
+        )
+        @test_throws "no keyword `source`, `freq`" select(ps; source = "M87", freq = 1)
+        # `source` is not a synonym for `field`: MSv4 distinguishes them and
+        # this package has no `sources` accessor to honor the distinction.
+        @test_throws ArgumentError select(ps; source = "M87")
+    end
+
+    @testset "a keyword takes names" begin
+        @test_throws "takes a name or a collection of names" select(ps; field = 3)
+        @test_throws "got 3" select(ps; field = 3)
+    end
+end
