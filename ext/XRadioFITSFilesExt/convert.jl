@@ -1335,6 +1335,7 @@ function XRadio.fitsidi2msv4(
             index += 1
         end
     end
+    XRadio._consolidate(root)
     return dest
 end
 

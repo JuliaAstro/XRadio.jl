@@ -51,6 +51,48 @@ end
     end
 end
 
+@testset "consolidated metadata v$fmt" for fmt in (2, 3)
+    ps = synthetic_set(2)
+    path = joinpath(mktempdir(), "consolidated_v$fmt.ps.zarr")
+    write(path, ps; zarr_format = fmt)
+
+    # Zarr v2 keeps consolidated metadata in a `.zmetadata` file of its own;
+    # v3 keeps it in a `consolidated_metadata` field of the root `zarr.json`.
+    if fmt == 2
+        @test isfile(joinpath(path, ".zmetadata"))
+    else
+        @test occursin("consolidated_metadata", read(joinpath(path, "zarr.json"), String))
+    end
+
+    # Only v2's is read back: `Zarr.jl` returns an empty group from a v3
+    # consolidated read, so a v3 store is opened node by node.
+    store = XRadio._zarr_group(path).storage
+    @test (store isa Zarr.ConsolidatedStore) == (fmt == 2)
+
+    # Reading through it gives the same processing set as reading the nodes.
+    back = read(ProcessingSet, path)
+    plain = read(ProcessingSet, Zarr.zopen(path))
+    @test collect(keys(back)) == collect(keys(ps)) == collect(keys(plain))
+    for name in keys(ps)
+        @test metadata(back[name]) == metadata(plain[name])
+        @test parent(back[name][:visibility]) == parent(ps[name][:visibility])
+        @test antennas(back[name]) == antennas(ps[name])
+    end
+end
+
+@testset "a store without consolidated metadata still opens" begin
+    # Stores written by other tools have none, so its absence is not an error.
+    ps = synthetic_set(1)
+    path = joinpath(mktempdir(), "unconsolidated.ps.zarr")
+    write(path, ps)
+    rm(joinpath(path, ".zmetadata"))
+
+    @test !(XRadio._zarr_group(path).storage isa Zarr.ConsolidatedStore)
+    back = read(ProcessingSet, path)
+    @test collect(keys(back)) == collect(keys(ps))
+    @test parent(back[1][:visibility]) == parent(ps[1][:visibility])
+end
+
 @testset "a written store conforms" begin
     # Zarr v2 is the format this package can write fully to the standard; see
     # the `zarr_format` keyword of `write`.

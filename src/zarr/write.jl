@@ -50,7 +50,29 @@ function Base.write(
     for (name, ms) in pairs(ps)
         _write_tree(root, string(name), ms; zarr_format, compressor, chunks)
     end
+    _consolidate(root)
     return path
+end
+
+# Gather every node's metadata into one blob at the root, so that opening the
+# store costs one read rather than one per node. A processing set partitioned
+# per scan runs to hundreds of nodes and thousands of metadata files, which is
+# what makes this worth a finalize step over the whole store rather than
+# something done per Measurement Set.
+#
+# Consolidated metadata is not part of the Zarr v3 specification. It is written
+# there anyway, because the reference implementation reads it; `open` does not
+# read it back on v3, for the reason given at `_use_consolidated`.
+#
+# `Zarr.consolidate_metadata(::ZGroup)` always writes v2's `.zmetadata`, whatever
+# the group's own format, so the format is passed explicitly.
+function _consolidate(root::Zarr.ZGroup)
+    if root.zarr_format isa Zarr.ZarrFormat{3}
+        Zarr.consolidate_metadata(root.storage, root.path, Zarr.ZarrFormat(3))
+    else
+        Zarr.consolidate_metadata(root.storage, root.path)
+    end
+    return root
 end
 
 # The root group of a new store, holding only the processing set's own

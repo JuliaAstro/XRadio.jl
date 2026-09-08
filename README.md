@@ -130,6 +130,14 @@ strings the standard specifies for v3. Pass `zarr_format = 3` for a v3 store;
 it reads back correctly everywhere, but its string arrays are variable-length
 and a strict check against the standard calls their dtype wrong.
 
+Every store this package writes carries **consolidated metadata**, gathered as a
+finalize step, so opening one costs a single read rather than one per node — a
+processing set partitioned per scan runs to hundreds of nodes. Consolidated
+metadata is not part of the Zarr v3 specification; it is written to a v3 store
+anyway, because the reference implementation reads it, but `XRadio` does not
+read it back there. A store that has none, as one written by another tool may,
+opens node by node instead.
+
 Four `Zarr.jl` gaps sit behind this, all in Zarr v3 and all worth fixing
 upstream: `dimension_names` is parsed but discarded on read and unavailable on
 write; complex arrays are written with a `data_type` and `fill_value` that

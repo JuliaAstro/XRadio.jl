@@ -271,6 +271,11 @@ end
         @test collect(keys(ps)) == [:grid_00, :grid_01, :grid_02, :grid_03]
         @test isempty(conversion_issues(ps))
 
+        # The converter writes its partitions one at a time rather than going
+        # through `write`, and still consolidates the store at the end: a
+        # per-scan partitioning is what makes the node count worth one read.
+        @test isfile(joinpath(dir, "grid.ps.zarr", ".zmetadata"))
+
         # Band 1 of scan 1. The permutation putting the parallel hands first
         # runs the other way here: MSv4 polarization `p` came from the file's
         # `perm[p]`.

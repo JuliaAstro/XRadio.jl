@@ -20,6 +20,10 @@ The arrays are left on disk and read on demand, so opening a large store costs
 only its metadata. Pass `lazy = false`, or use `read`, to bring the data into
 memory instead.
 
+A store carrying consolidated metadata is opened from it, which is one read
+rather than one per node. [`write`](@ref) produces one; a store without it opens
+the slow way.
+
 ```julia
 ps = open(ProcessingSet, "track.ps.zarr")
 ```
@@ -52,7 +56,26 @@ Equivalent to `open(ProcessingSet, store; lazy = false)`.
 Base.read(::Type{ProcessingSet}, store) = open(ProcessingSet, store; lazy = false)
 
 _zarr_group(g::Zarr.ZGroup) = g
-_zarr_group(path::AbstractString) = Zarr.zopen(path)
+
+function _zarr_group(path::AbstractString)
+    store, subpath = Zarr.storefromstring(path, false)
+    consolidated = _use_consolidated(store, subpath)
+    return Zarr.zopen(store, "r"; path = subpath, consolidated)
+end
+
+# Whether this store's metadata should be read from its consolidated copy.
+#
+# Consolidated metadata is optional: a store written by another tool, or by an
+# older version of this package, has none, and its absence is not an error.
+#
+# Only Zarr v2's `.zmetadata` is believed. Zarr v3 keeps the same information in
+# the root `zarr.json`, and `Zarr.jl` reads that back as a group with no
+# attributes and no children, so a v3 store must be opened the slow way until
+# that is fixed.
+function _use_consolidated(store::Zarr.AbstractStore, path::AbstractString)
+    Zarr.ZarrFormat(store, path) isa Zarr.ZarrFormat{2} || return false
+    return store[path, ".zmetadata"] !== nothing
+end
 
 """
     dimension_names(array::Zarr.ZArray) -> Vector{Symbol}
