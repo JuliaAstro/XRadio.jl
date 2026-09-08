@@ -1040,6 +1040,7 @@ end
         gt = synthetic_fitsidi(joinpath(dir, "b50.idifits"); equinox = "1950.0B")
         @test IDI.source_frames(IDI.require_table(fits(gt.path), "SOURCE")) ==
             fill("fk4", length(gt.source_names))
+        @test_throws "no conforming store can record them" to_msv4(gt, "b50.ps.zarr")
 
         # The VLBA writes no EQUINOX column but a numeric EPOCH, which the memo
         # says must be read as an equinox rather than as an epoch.

@@ -76,6 +76,136 @@ the same kind as the standard names — see *Element types* below.
 `check` returns `XRadio.SchemaIssue`s; `validate` throws an
 `XRadio.SchemaError` carrying them.
 
+## Converting FITS-IDI
+
+FITS-IDI (AIPS Memo 114) is the interchange format VLBI correlators write.
+Loading `FITSFiles` alongside `XRadio` enables the converter:
+
+```julia
+using XRadio, FITSFiles
+
+fitsidi2msv4("observation.idifits", "observation.ps.zarr")
+ps = open(ProcessingSet, "observation.ps.zarr")
+```
+
+Each partition is written as it is built, so peak memory is one partition
+whatever the input weighs. A 24.73 GB file converts in about 4 GB.
+
+### What maps to what
+
+| FITS-IDI | MSv4 |
+| --- | --- |
+| `UV_DATA` | the `visibility` dataset: row-major `(time, baseline)` becomes a dense `(time, baseline_id, frequency, polarization)` array |
+| `ARRAY_GEOMETRY` + `ANTENNA` | `antenna_xds` — MSv4 merges antenna and feed, as FITS-IDI does |
+| `SOURCE` | `field_and_source_base_xds` |
+| `FREQUENCY` | the `frequency` coordinate's attributes |
+| `FLAG` | the `FLAG` array, expanded from ranges |
+| `SYSTEM_TEMPERATURE` | `system_calibration_xds` |
+| `PHASE-CAL` | `phase_calibration_xds` |
+| `WEATHER` | `weather_xds` |
+| `GAIN_CURVE` | `gain_curve_xds` |
+
+One Measurement Set covers a single spectral window, so the `BAND` axis is
+always split. A partition carries only the antennas its own baselines name and
+the fields its own rows observed, and carries a calibration or environment
+sub-dataset only where measurements cover its time span — a scan earlier than
+the first weather reading gets no `weather_xds`.
+
+Units become MSv4's throughout: seconds to meters for `UVW`, degrees to
+radians, centigrade to kelvin, millibars to pascals.
+
+### Scans, and how they are inferred
+
+AIPS Memo 114r defines no scan column, so by default a scan boundary is
+inferred where the source changes **or** where more than `gap = 60.0` seconds
+separate consecutive timestamps. A file that carries a `SCAN` column anyway is
+believed instead, since it states what an inference can only guess.
+
+Scans matter because `partition = (:scan,)` is the default. Splitting by scan
+makes each partition's baseline axis describe antennas that actually observed
+together, so no padding is needed; `(:source,)` splits only where the source
+changes, and `()` puts a whole observation in one partition per spectral
+window, which only a small file can afford.
+
+### What the converter invents
+
+MSv4 asks for several things FITS-IDI does not record. Each is listed here with
+the value used when the file is silent, and whether it says so:
+
+| MSv4 field | Value when the file does not say | Warns |
+| --- | --- | --- |
+| `observation_info.release_date` | `1858-11-17T00:00:00.000`, the MJD zero point | yes |
+| `VISIBILITY.units` | `uncalib`, when the `FLUX` column has no `TUNIT` | yes |
+| `gain_curve_xds` `measured_date` | the MJD zero point | yes |
+| `antenna_xds` `mount` | `OTHER`, for a mount MSv4 has no name for | yes |
+| `polarization` | the majority receptor basis, for an array that does not share one | yes |
+| `scan_intents` | `["UNSPECIFIED"]` | no |
+| `spectral_window_intents` | `["UNSPECIFIED"]` | no |
+| `gain_curve_xds` `GAIN_CURVE_INTERVAL` | the observation's whole duration, since FITS-IDI states one curve per file | no |
+| `processor_info.sub_type` | `UNKNOWN`, when there is no `CORRELAT` keyword | no |
+| `scan_name` | the inferred segmentation above | no |
+| `spectral_window_name` | `spw_0`, `spw_1`, … from the `BAND` index | no |
+
+`release_date`, `scan_intents` and `spectral_window_intents` are keywords of
+the same name, so a caller who knows the real values can state them. Only
+`release_date` warns, because a sentinel date could be mistaken for a real
+embargo.
+
+`INTTIM` is a fourth case, but the converter refuses to guess it: MSv4's time
+axis requires an integration time and FITS-IDI makes the column optional, so a
+file without one needs the `integration_time` keyword. Inferring it from the
+spacing of the timestamps would present a guess as a measurement.
+
+### What is dropped
+
+Five FITS-IDI tables have no MSv4 home. Where the file holds one, it is named
+in a warning and its content does not reach the store: `INTERFEROMETER_MODEL`,
+`MODEL_COMPS`, `BASELINE`, `CALIBRATION` and `BANDPASS`. A table the standard
+does not define at all — a correlator's own extension, such as DiFX's `CALC` —
+is ignored without comment.
+
+Four columns of tables that are otherwise carried have no MSv4 field, and are
+dropped silently: `ARRAY_GEOMETRY`'s `STAXOF`, `PHASE-CAL`'s `PC_RATE` and
+`STATE`, and `WEATHER`'s `PRECIPITATION`.
+
+A gain curve that is not a polynomial in elevation or in zenith angle — a
+tabulated curve, or a spherical-harmonic expansion — cannot be written at all,
+because MSv4 models only the polynomial. Such a file gets no `gain_curve_xds`
+and a warning saying so. `fitsidi_gain_curves` reads every curve
+whatever its shape, so one the store cannot hold is still reachable from the
+file.
+
+### What changes value
+
+Two conversions rescale the data rather than relabeling it. `WEIGHTYP =
+"CORRELAT"` means the `WEIGHT` column holds validity fractions rather than the
+`1/σ²` MSv4 wants, so each is converted by `f · 2Δν · τ · η²`, with `η` the
+correlator efficiency from the `weight_efficiency` keyword; `weight_mode`
+overrides the choice of whether to convert at all. And a `VIS_SCAL` keyword,
+which lets a near-real-time correlator write accumulated sums, divides into
+every visibility amplitude.
+
+Flagging leaves the weights alone: `FLAG` says a datum must not be used, and
+`WEIGHT` says how good it would have been.
+
+### Where the converter stops
+
+It fails rather than guessing, in every case with a message naming what it
+found:
+
+- **A B1950 phase center.** MSv4 restricts `UVW.frame` to `icrs`, `fk5` and
+  `APP`, so an fk4 direction has no conforming label. The error says to precess
+  the observation to J2000 first.
+- **`UU/VV/WW---NCP`.** Its `w` axis points at the north pole rather than at
+  the source, so reading it as `---SIN` would be wrong without complaining.
+- **More than one `ARRAY_GEOMETRY` table.** An antenna number is unique only
+  within its array, and the `256·a1 + a2` `BASELINE` packing carries no array,
+  so two numberings would go through one map.
+- **More than one row in `FREQUENCY`.** Several frequency setups would be
+  silently mixed onto one axis.
+- **No `INTTIM` column and no `integration_time` keyword**, as above.
+- **A non-positive `VIS_SCAL`**, which divides into every amplitude.
+
 ## Things worth knowing
 
 ### Names
