@@ -99,6 +99,16 @@ julia> gain(curve, 0.4)
 julia> gain(curve, (; elevation = 0.4))
 1.2
 ```
+
+A whole array of curves is evaluated by broadcasting, which needs nothing of
+its own:
+
+```julia
+gain.(gaincurves(ms)[:curve], deg2rad(45))
+```
+
+keeps the antenna and receptor axes, and is `NaN` for an antenna whose gain the
+store does not state.
 """
 function gain end
 
@@ -384,8 +394,16 @@ msv4_gain_curve(::AbstractGainCurve) = nothing
 function msv4_gain_curve(curve::GainPolynomial)
     type = get(_MSV4_GAIN_CURVE_TYPES, (curve.quantity, curve.variable), nothing)
     type === nothing && return nothing
-    return (; type, coefficients = rescale_gain_angle(curve.coefficients, π / 180))
+    coefficients = rescale_gain_angle(
+        curve.coefficients, _angle_factor(curve.coefficients, π / 180)
+    )
+    return (; type, coefficients)
 end
+
+# The degrees-to-radians scale in the coefficients' own precision. Taking it as
+# a bare `Float64` would widen a single-precision curve at every file boundary,
+# so a store holding `Float32` would read back as `Float64`.
+_angle_factor(coefficients, factor) = oftype(float(first(coefficients)), factor)
 
 msv4_gain_curve(w::AtDeclination) = msv4_gain_curve(w.curve)
 
@@ -400,7 +418,7 @@ The curve a conforming store's `gain_curve_type` and `GAIN_CURVE` row describe
 — the inverse of [`XRadio.msv4_gain_curve`](@ref).
 
 `coefficients` are against the angle in **degrees**, which is how MSv4 writes
-them, and come back against radians.
+them, and come back against radians in the precision they were held in.
 
 Trailing zeros are dropped. MSv4 pads every antenna's polynomial out to the
 longest one in its dataset and records no term count, so a trailing zero could
@@ -423,9 +441,9 @@ function gain_curve_from_msv4(type::AbstractString, coefficients)
             join(sort(collect(keys(_GAIN_CURVE_FROM_MSV4))), ", ")
     ))
     quantity, variable = known
+    kept = _drop_trailing_zeros(coefficients)
     return GainPolynomial(
-        variable, quantity,
-        rescale_gain_angle(_drop_trailing_zeros(coefficients), 180 / π),
+        variable, quantity, rescale_gain_angle(kept, _angle_factor(kept, 180 / π))
     )
 end
 

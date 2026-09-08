@@ -103,9 +103,56 @@ struct BareGain <: AbstractGainCurve end
         # throughout keeps it rather than becoming empty.
         @test gain_curve_from_msv4("POWER(EL)", zeros(4)).coefficients == [0.0]
 
+        # The coefficients come back in the precision they were held in: the
+        # degrees-to-radians rescaling takes their type rather than widening
+        # every store to `Float64`.
+        single = GainPolynomial(Float32[0.9, 0.01])
+        written = msv4_gain_curve(single)
+        @test eltype(written.coefficients) === Float32
+        @test eltype(gain_curve_from_msv4(written...).coefficients) === Float32
+        @test gain_curve_from_msv4("POWER(EL)", Float32[NaN]).coefficients[1] === NaN32
+
         @test_throws "is not a gain curve MSv4 names" gain_curve_from_msv4(
             "POWER(HA)", [1.0]
         )
+    end
+
+    @testset "a whole layer of curves is evaluated by broadcasting" begin
+        # A store states no curve for some antennas, and each of those holds a
+        # curve whose coefficients are `NaN` rather than a marker standing in
+        # for its absence. The layer is one concrete type throughout, so
+        # evaluating it gives an array of numbers with gaps.
+        over = (AntennaName(["AA", "BB"]), ReceptorLabel(["pol_0", "pol_1"]))
+        layer = DimArray(
+            [
+                GainPolynomial([1.0, 0.1])  GainPolynomial([NaN])
+                GainPolynomial([2.0, 0.2])  GainPolynomial([3.0, 0.3])
+            ],
+            over,
+        )
+        @test eltype(layer) === GainPolynomial{Vector{Float64}}
+
+        got = gain.(layer, 0.5)
+        @test dims(got) == over
+        @test got[At("AA"), At("pol_0")] ≈ 1.05
+        @test isnan(got[At("AA"), At("pol_1")])
+        @test got[At("BB"), At("pol_1")] ≈ 3.15
+
+        # Nothing in the layer needs a type of its own, so the result is
+        # concrete whatever precision the angle is asked in.
+        @test eltype(got) === Float64
+        @test eltype(gain.(layer, 0.5f0)) === Float64
+        @test eltype(gain.(layer, 1)) === Float64
+        @test eltype(gain.(layer, Ref((; elevation = 0.5)))) === Float64
+
+        # The precision follows the coefficients rather than being `Float64`,
+        # and a gap in single precision is `NaN32`.
+        small = DimArray(
+            [GainPolynomial(Float32[1, 0.1]), GainPolynomial(Float32[NaN])],
+            over[1],
+        )
+        @test eltype(gain.(small, 0.5f0)) === Float32
+        @test gain.(small, 0.5f0)[At("BB")] === NaN32
     end
 
     @testset "a store that names no angle is not a curve" begin

@@ -632,6 +632,23 @@ end
             @test XRadio.msv4_gain_curve(got[:curve][1, 2]).coefficients ≈
                 parent(stored)[2, :, 1]
 
+            # Evaluating the array's gains is a broadcast, not a function of
+            # its own, and gives one number per antenna and receptor.
+            evaluated = gain.(got[:curve], deg2rad(35))
+            @test dims(evaluated) == dims(got[:curve])
+            @test eltype(evaluated) === Float64
+            @test !any(isnan, evaluated)
+
+            # A conforming store holds only polynomials, and an antenna it
+            # states none for holds a `NaN` one, so the layer is a single
+            # concrete type. That is what lets the evaluation infer a concrete
+            # array instead of dispatching on every element.
+            @test isconcretetype(eltype(got[:sensitivity]))
+            @test eltype(got[:curve]) === GainPolynomial{Vector{Float64}}
+            @test only(Base.return_types(
+                (l, x) -> gain.(l, x), Tuple{typeof(parent(got[:curve])), Float64}
+            )) === Matrix{Float64}
+
             # The sub-dataset is the same read either way.
             @test collect(gaincurves(branches(ps[:cal_00])[:gain_curve])[:sensitivity]) ==
                 collect(got[:sensitivity])

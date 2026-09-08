@@ -164,8 +164,21 @@ file, minus that axis.
 
 Every curve is a [`GainPolynomial`](@ref), since a polynomial in elevation or
 in zenith angle is all a conforming store can hold. An antenna and receptor the
-store says nothing about holds `nothing` rather than an empty curve, and a
-Measurement Set with no gain curve dataset at all gives an empty result.
+store states no curve for has one whose coefficients are `NaN`, which is what
+this package says of any quantity it does not have: the layer is one type
+throughout rather than a curve beside a marker for its absence, and which
+antennas the store does state a curve for is the `sensitivity` layer's own
+`NaN`s. A Measurement Set with no gain curve dataset at all gives an empty
+result.
+
+Evaluating the whole array is a broadcast, and needs nothing of its own:
+
+```julia
+gain.(gaincurves(ms)[:curve], deg2rad(45))
+```
+
+keeps the antenna and receptor axes and is `NaN` where the store states no
+curve. Across a processing set, `map(gaincurves, ps)` does the same.
 
 The coefficients on disk are against the angle in degrees and come back against
 radians, so `gain(curve, elevation_in_radians)` is the gain directly.
@@ -195,19 +208,27 @@ function gaincurves(xds::Dataset)
     sensitivities = xds[:gain_curve_sensitivity]
 
     stations, receptors = val(antenna), val(receptor)
-    curve = Array{Union{Nothing, AbstractGainCurve}}(
-        nothing, length(stations), length(receptors)
+    # Every curve a conforming store can hold is a polynomial in one angle, and
+    # a combination it states none for is one whose gain is unknown, which is
+    # what `NaN` says of a measurement throughout this package. So the layer is
+    # one concrete type rather than a curve beside a marker for its absence,
+    # and evaluating it broadcasts without dispatching on every element.
+    K = Vector{float(eltype(coefficients))}
+    unknown = K([NaN])
+    curve = Array{GainPolynomial{K}}(undef, length(stations), length(receptors))
+    sensitivity = fill(
+        oftype(zero(eltype(sensitivities)), NaN),
+        length(stations), length(receptors),
     )
-    sensitivity = fill(NaN, length(stations), length(receptors))
     for (i, a) in enumerate(stations), (j, r) in enumerate(receptors)
         s = sensitivities[A(At(a)), R(At(r))]
         k = collect(coefficients[A(At(a)), R(At(r))])
         # The dataset spans every antenna and receptor it names, so one it
         # states no curve for is the padding the writer left: no coefficients
         # and no sensitivity.
-        all(iszero, k) && isnan(s) && continue
-        curve[i, j] = gain_curve_from_msv4(types[A(At(a))], k)
-        sensitivity[i, j] = s
+        stated = !(all(iszero, k) && isnan(s))
+        curve[i, j] = gain_curve_from_msv4(types[A(At(a))], stated ? k : unknown)
+        stated && (sensitivity[i, j] = s)
     end
 
     over = (antenna, receptor)
@@ -219,8 +240,9 @@ end
 
 function _no_gain_curves()
     over = (dimtype(:antenna_name)(String[]), dimtype(:receptor_label)(String[]))
+    empty = Array{GainPolynomial{Vector{Float64}}}(undef, 0, 0)
     return DimStack((;
-        curve = DimArray(Array{Union{Nothing, AbstractGainCurve}}(nothing, 0, 0), over),
+        curve = DimArray(empty, over),
         sensitivity = DimArray(fill(NaN, 0, 0), over),
     ))
 end
