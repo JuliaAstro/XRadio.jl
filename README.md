@@ -48,6 +48,15 @@ match, and an unrecognized keyword is an error rather than a selection that
 quietly keeps everything. The result is a `ProcessingSet`, so selections chain;
 `filter(f, ps)` remains for predicates the keywords do not reach.
 
+`transform(f, ps)` turns each Measurement Set into another one, keeping the
+names, so the result is a processing set again. Reading a value out of each
+instead gives them in order, as for any collection:
+
+```julia
+transform(ms -> delete!(deepcopy(ms), :weight), ps)   # ProcessingSet
+map(gaincurves, values(ps))                          # Vector, in ps's order
+```
+
 Within one Measurement Set, a `MeasurementSet` is a `DimensionalData.DimTree`,
 so everything that library offers applies:
 

@@ -172,3 +172,35 @@ function Base.filter(f, ps::ProcessingSet)
     )
     return ProcessingSet(kept, copy(metadata(ps)))
 end
+
+"""
+    transform(f, ps::ProcessingSet) -> ProcessingSet
+
+`f` applied to each Measurement Set of `ps`, keeping their names and the set's
+own attributes, so the result is a processing set again and composes with
+[`filter`](@ref) and anything else taking one.
+
+```julia
+transform(ms -> delete!(deepcopy(ms), :weight), ps)
+```
+
+`f` must return a `MeasurementSet`, since that is all a processing set holds.
+To read a value out of each Measurement Set rather than build a new one, map
+over the Measurement Sets themselves: `map(gaincurves, values(ps))`.
+"""
+function transform(f, ps::ProcessingSet)
+    made = OrderedDict{Symbol, MeasurementSet}()
+    for (name, ms) in pairs(ps)
+        got = f(ms)
+        got isa MeasurementSet || throw(
+            ArgumentError(
+                "`transform` builds a ProcessingSet, so `f` must return a " *
+                    "MeasurementSet; for `$name` it returned a $(nameof(typeof(got))). " *
+                    "Use `map(f, values(ps))` to read a value out of each " *
+                    "Measurement Set instead."
+            )
+        )
+        made[name] = got
+    end
+    return ProcessingSet(made, copy(metadata(ps)))
+end

@@ -387,3 +387,33 @@ end
         @test_throws "got 3" select(ps; field = 3)
     end
 end
+
+@testset "transforming every Measurement Set" begin
+    ps = synthetic_set(3)
+    got = transform(ms -> delete!(deepcopy(ms), :weight), ps)
+
+    @test got isa ProcessingSet
+    @test keys(got) == keys(ps)
+    @test metadata(got)[:type] == "processing_set"
+    @test !haskey(got[1], :weight)
+    # The originals are untouched; `transform` builds a new set from what `f`
+    # returns rather than modifying `ps`.
+    @test haskey(ps[1], :weight)
+
+    # The result is a processing set, so it composes with the rest.
+    @test length(filter(m -> true, got)) == 3
+    @test keys(select(got; field = "field_0")) == keys(got)
+
+    @testset "`f` must return a Measurement Set" begin
+        @test_throws ArgumentError transform(gaincurves, ps)
+        @test_throws "must return a MeasurementSet" transform(gaincurves, ps)
+        @test_throws "it returned a DimStack" transform(gaincurves, ps)
+        # The message points at the verb that does read values out.
+        @test_throws "map(f, values(ps))" transform(gaincurves, ps)
+    end
+
+    # `map` is untouched: reading a value out of each Measurement Set still
+    # gives them in order, as it does for any other iterable.
+    @test map(spectralwindow, ps) == fill("spw_0", 3)
+    @test map(gaincurves, values(ps)) isa Vector
+end
