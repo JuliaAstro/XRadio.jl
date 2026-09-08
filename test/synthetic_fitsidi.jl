@@ -3,9 +3,10 @@
 # The converter builds MSv4 datasets straight from a file's tables with no
 # model in between, so a fixture file is the only thing a conversion test can
 # assert against. This writer emits the five tables the conversion requires —
-# ARRAY_GEOMETRY, ANTENNA, FREQUENCY, SOURCE and UV_DATA — plus FLAG on
-# request, and returns the dense arrays it wrote so a test compares against the
-# values themselves rather than against a second derivation of them.
+# ARRAY_GEOMETRY, ANTENNA, FREQUENCY, SOURCE and UV_DATA — plus FLAG and the
+# four calibration and environment tables on request, and returns the dense
+# arrays it wrote so a test compares against the values themselves rather than
+# against a second derivation of them.
 #
 # It is a fixture generator, not a FITS-IDI writer: one FREQID, one array, no
 # scaled columns, and every band the same width. `UV_DATA`'s column order and
@@ -156,6 +157,26 @@ Provenance: `telescope`, `obscode`, `observer`, `uv_observer`, `correlator`,
 `flags` adds a FLAG table, one entry per row, each a named tuple that may set
 `source_id`, `ants`, `timerange`, `bands`, `chans`, `pflags`, `reason` and
 `severity`.
+
+`system_temperatures`, `phase_cals`, `weathers` and `gain_curves` add the four
+optional calibration and environment tables the same way. Their times are
+seconds from `rdate` midnight, as `scans` are, and `antenna` is a `NOSTA`
+number — zero, in a weather row, for the whole site.
+
+- a system temperature row sets `time`, `interval`, `antenna` and the
+  `(receptor, band)` matrices `tsys` and `tant`;
+- a phase-cal row sets `time`, `interval`, `antenna`, `cable`, and the
+  `(tone, receptor, band)` arrays `freq` and `cal`;
+- a weather row sets `time`, `interval`, `antenna` and any of `temperature`
+  (centigrade), `pressure` (millibars), `dewpoint`, `wind_velocity`,
+  `wind_direction` (degrees), `wvr_h2o` and `ionos_electron`;
+- a gain-curve row sets `antenna`, the `(receptor, band)` integer matrices
+  `type`, `nterm`, `x_typ` and `y_typ`, the `(term, receptor, band)` array
+  `gain` and the `(receptor, band)` matrix `sens`. `gain_curve_terms` is the
+  table's `NO_TABS`. A tabulated curve adds the `(term, receptor, band)` array
+  `y_val` of the angles it is tabulated against, and a curve against hour
+  angle the `(receptor, band)` matrix `x_val` of the declination it holds at;
+  the slots a row does not use are `NaN`, as the standard asks.
 """
 function synthetic_fitsidi(
         path;
@@ -212,6 +233,11 @@ function synthetic_fitsidi(
         weight_column = true,
         narrays = 1,
         flags = NamedTuple[],
+        system_temperatures = NamedTuple[],
+        phase_cals = NamedTuple[],
+        weathers = NamedTuple[],
+        gain_curves = NamedTuple[],
+        gain_curve_terms = 4,
     )
     nant = length(antenna_names)
     nband = length(band_freq)
@@ -478,6 +504,12 @@ function synthetic_fitsidi(
     append!(hdus, fill(array_geometry, narrays))
     append!(hdus, HDU[antenna, frequency, source, uv_data])
     isempty(flags) || push!(hdus, _synthetic_flag_hdu(flags, g, nchan, nband))
+    isempty(system_temperatures) ||
+        push!(hdus, _synthetic_syscal_hdu(system_temperatures, g))
+    isempty(phase_cals) || push!(hdus, _synthetic_phasecal_hdu(phase_cals, g))
+    isempty(weathers) || push!(hdus, _synthetic_weather_hdu(weathers, g))
+    isempty(gain_curves) ||
+        push!(hdus, _synthetic_gaincurve_hdu(gain_curves, g, gain_curve_terms))
     write(path, hdus)
 
     return (;
@@ -492,7 +524,7 @@ function synthetic_fitsidi(
         baselines, baseline_codes, present = mask,
         visibility = vis, weight = wts, uvw = uvws,
         telescope, obscode, observer, uv_observer, weightyp,
-        flags,
+        flags, system_temperatures, phase_cals, weathers, gain_curves,
     )
 end
 
@@ -517,6 +549,137 @@ function _synthetic_flag_hdu(flags, g, nchan::Integer, nband::Integer)
     cards = vcat(
         _idi_common_cards("FLAG", 2, g),
         Card[Card("TUNIT5", "DAYS")]
+    )
+    return HDU(Bintable, data, cards)
+end
+
+# The calibration and environment tables, each optional and each written only
+# when a test asks for it. FITS-IDI writes their times in days from `RDATE` and
+# splits every per-receptor quantity into a `_1` and a `_2` column.
+#
+# A per-receptor column of `n` values a band is written with `n` varying
+# fastest, so `(n, band)` arrays are flattened in column-major order, which is
+# what `vec` already does.
+_receptor_rows(::Type{T}, rows, key, p) where {T} = _idi_column(
+    [T.(vec(selectdim(r[key], ndims(r[key]) - 1, p))) for r in rows]
+)
+
+# SYSTEM_TEMPERATURE rows: `tsys` and `tant` are `(receptor, band)`.
+function _synthetic_syscal_hdu(rows, g)
+    n = length(rows)
+    data = (
+        TIME = Float64[r.time / 86400 for r in rows],
+        TIME_INTERVAL = Float32[get(r, :interval, 1.0) / 86400 for r in rows],
+        SOURCE_ID = Int32[get(r, :source_id, 1) for r in rows],
+        ANTENNA_NO = Int32[r.antenna for r in rows],
+        ARRAY = ones(Int32, n),
+        FREQID = ones(Int32, n),
+        TSYS_1 = _receptor_rows(Float32, rows, :tsys, 1),
+        TANT_1 = _receptor_rows(Float32, rows, :tant, 1),
+        TSYS_2 = _receptor_rows(Float32, rows, :tsys, 2),
+        TANT_2 = _receptor_rows(Float32, rows, :tant, 2),
+    )
+    cards = vcat(
+        _idi_common_cards("SYSTEM_TEMPERATURE", 1, g),
+        Card[Card("NO_POL", Int32(2)), Card("TUNIT1", "DAYS"), Card("TUNIT2", "DAYS")]
+    )
+    return HDU(Bintable, data, cards)
+end
+
+# PHASE-CAL rows: `freq` and `cal` are `(tone, receptor, band)`.
+function _synthetic_phasecal_hdu(rows, g)
+    n = length(rows)
+    part(::Type{T}, f, key, p) where {T} = _idi_column(
+        [T.(vec(f.(selectdim(r[key], 2, p)))) for r in rows]
+    )
+    data = (
+        TIME = Float64[r.time / 86400 for r in rows],
+        TIME_INTERVAL = Float32[get(r, :interval, 1.0) / 86400 for r in rows],
+        SOURCE_ID = Int32[get(r, :source_id, 1) for r in rows],
+        ANTENNA_NO = Int32[r.antenna for r in rows],
+        ARRAY = ones(Int32, n),
+        FREQID = ones(Int32, n),
+        CABLE_CAL = Float64[r.cable for r in rows],
+        PC_FREQ_1 = part(Float64, identity, :freq, 1),
+        PC_REAL_1 = part(Float32, real, :cal, 1),
+        PC_IMAG_1 = part(Float32, imag, :cal, 1),
+        PC_FREQ_2 = part(Float64, identity, :freq, 2),
+        PC_REAL_2 = part(Float32, real, :cal, 2),
+        PC_IMAG_2 = part(Float32, imag, :cal, 2),
+    )
+    cards = vcat(
+        _idi_common_cards("PHASE-CAL", 2, g),
+        Card[Card("NO_POL", Int32(2)), Card("TUNIT1", "DAYS"), Card("TUNIT2", "DAYS")]
+    )
+    return HDU(Bintable, data, cards)
+end
+
+# WEATHER rows. `antenna` zero means the whole site, and the three atmospheric
+# columns are optional in the standard, so a row that omits them is written
+# without them.
+function _synthetic_weather_hdu(rows, g)
+    n = length(rows)
+    scalar(key) = Float32[get(r, key, NaN32) for r in rows]
+    data = (;
+        TIME = Float64[r.time / 86400 for r in rows],
+        TIME_INTERVAL = Float32[get(r, :interval, 1.0) / 86400 for r in rows],
+        ANTENNA_NO = Int32[r.antenna for r in rows],
+        TEMPERATURE = scalar(:temperature),
+        PRESSURE = scalar(:pressure),
+        DEWPOINT = scalar(:dewpoint),
+        WIND_VELOCITY = scalar(:wind_velocity),
+        WIND_DIRECTION = scalar(:wind_direction),
+        (any(r -> haskey(r, :wvr_h2o), rows) ? (; WVR_H2O = scalar(:wvr_h2o)) : (;))...,
+        (any(r -> haskey(r, :ionos_electron), rows) ?
+            (; IONOS_ELECTRON = scalar(:ionos_electron)) : (;))...,
+    )
+    cards = vcat(
+        _idi_common_cards("WEATHER", 2, g),
+        Card[
+            Card("TUNIT1", "DAYS"), Card("TUNIT2", "DAYS"),
+            Card("TUNIT4", "CENTIGRADE"), Card("TUNIT5", "MILLIBARS"),
+            Card("TUNIT6", "CENTIGRADE"), Card("TUNIT7", "M/SEC"),
+            Card("TUNIT8", "DEGREES"),
+        ]
+    )
+    return HDU(Bintable, data, cards)
+end
+
+# `X_VAL` and `Y_VAL` are the values a tabulated curve is tabulated against and
+# the declination an hour-angle curve holds at, so a row that sets neither
+# writes the `NaN` the standard asks for in the slots it does not use.
+_gaincurve_values(::Type{T}, rows, key, p, len) where {T} = _idi_column(
+    [
+        haskey(r, key) ? T.(vec(selectdim(r[key], ndims(r[key]) - 1, p))) :
+            fill(T(NaN), len) for r in rows
+    ]
+)
+
+# GAIN_CURVE rows: `gain` is `(term, receptor, band)` and `sens`, `type`,
+# `nterm` and `y_typ` are `(receptor, band)`. A curve has no time.
+function _synthetic_gaincurve_hdu(rows, g, ntab::Integer)
+    n = length(rows)
+    ints(key, p) = _idi_column([Int32.(vec(r[key][p, :])) for r in rows])
+    data = (
+        ANTENNA_NO = Int32[r.antenna for r in rows],
+        ARRAY = ones(Int32, n),
+        FREQID = ones(Int32, n),
+        TYPE_1 = ints(:type, 1), NTERM_1 = ints(:nterm, 1),
+        X_TYP_1 = ints(:x_typ, 1), Y_TYP_1 = ints(:y_typ, 1),
+        X_VAL_1 = _gaincurve_values(Float32, rows, :x_val, 1, g.nband),
+        Y_VAL_1 = _gaincurve_values(Float32, rows, :y_val, 1, ntab * g.nband),
+        GAIN_1 = _receptor_rows(Float32, rows, :gain, 1),
+        SENS_1 = _idi_column([Float32.(r.sens[1, :]) for r in rows]),
+        TYPE_2 = ints(:type, 2), NTERM_2 = ints(:nterm, 2),
+        X_TYP_2 = ints(:x_typ, 2), Y_TYP_2 = ints(:y_typ, 2),
+        X_VAL_2 = _gaincurve_values(Float32, rows, :x_val, 2, g.nband),
+        Y_VAL_2 = _gaincurve_values(Float32, rows, :y_val, 2, ntab * g.nband),
+        GAIN_2 = _receptor_rows(Float32, rows, :gain, 2),
+        SENS_2 = _idi_column([Float32.(r.sens[2, :]) for r in rows]),
+    )
+    cards = vcat(
+        _idi_common_cards("GAIN_CURVE", 1, g),
+        Card[Card("NO_POL", Int32(2)), Card("NO_TABS", Int32(ntab))]
     )
     return HDU(Bintable, data, cards)
 end

@@ -306,7 +306,8 @@ end
 
         # The frequency axis describes the one spectral window it came from.
         fmeta = metadata(lookup(vis, Frequency))
-        @test fmeta[:spectral_window_name] == "band_0"
+        # MSv4's own word for the window, not the file's `BAND`.
+        @test fmeta[:spectral_window_name] == "spw_0"
         @test fmeta[:spectral_window_intents] == ["UNSPECIFIED"]
         @test XRadio.value(fmeta[:channel_width]) == gt.ch_width
         @test XRadio.value(fmeta[:reference_frequency]) == gt.ref_freq
@@ -450,6 +451,267 @@ end
         # data matrix, and a row that disagrees does not say what it flags.
         gt = synthetic_fitsidi(joinpath(dir, "flagbad.idifits"); flags = [(; bands = (1,))])
         @test_throws "1 BANDS values" to_msv4(gt, "flagbad.ps.zarr")
+    end
+
+    @testset "the calibration tables become sub-datasets" begin
+        # Values that are exact in Float32, since FITS-IDI writes these columns
+        # single precision and a test comparing against them should not be
+        # comparing rounding.
+        tsys(a) = Float64[100a + 10band + p for p in 1:2, band in 1:2]
+        tones(a) = ComplexF64[a + t + im * (10p + band)
+            for t in 1:2, p in 1:2, band in 1:2]
+        tone_freq(a) = Float64[1.0e9 * (a + t) + 1.0e6 * (10p + band)
+            for t in 1:2, p in 1:2, band in 1:2]
+
+        gt = synthetic_fitsidi(
+            joinpath(dir, "cal.idifits");
+            # The third antenna has no measurement of any kind, so every one of
+            # these datasets has to say so rather than pad with a value.
+            system_temperatures = [
+                (; time = 1.0, interval = 60.0, antenna = a,
+                    tsys = tsys(a), tant = tsys(a) ./ 4) for a in 1:2
+            ],
+            phase_cals = [
+                (; time = 1.0, interval = 30.0, antenna = a, cable = a * 1.0e-9,
+                    freq = tone_freq(a), cal = tones(a)) for a in 1:2
+            ],
+            weathers = [
+                # `ANTENNA_NO = 0` is the whole site; the second row is one
+                # station's own measurement at a later time.
+                (; time = 1.0, interval = 120.0, antenna = 0, temperature = 10.0,
+                    pressure = 900.0, dewpoint = 2.0, wind_velocity = 3.5,
+                    wind_direction = 90.0, wvr_h2o = 1.5),
+                (; time = 2.0, interval = 120.0, antenna = 2, temperature = 12.0,
+                    pressure = 901.0, dewpoint = 2.5, wind_velocity = 4.0,
+                    wind_direction = 180.0, wvr_h2o = 2.0),
+            ],
+            gain_curves = [
+                # The first antenna's first receptor has a shorter polynomial
+                # than the rest, which MSv4's single `poly_term` axis holds by
+                # padding with the zero coefficients it implies.
+                (; antenna = a,
+                    type = [2 2; 2 2], nterm = a == 1 ? [2 3; 3 3] : [3 3; 3 3],
+                    x_typ = [0 0; 0 0], y_typ = [1 1; 1 1],
+                    gain = Float64[t + 10p + 100band for t in 1:4, p in 1:2, band in 1:2],
+                    sens = Float64[0.5p + 0.25band for p in 1:2, band in 1:2])
+                    for a in 1:3
+            ],
+        )
+        dest = joinpath(dir, "cal.ps.zarr")
+        ps = @test_logs (:warn, r"does not say when the gain curves") match_mode = :any open(
+            ProcessingSet,
+            fitsidi2msv4(gt.path, dest; release_date = "2030-01-01T00:00:00.000")
+        )
+        @test isempty(conversion_issues(ps))
+
+        @testset "system temperatures" begin
+            sc = branches(ps[:cal_00])[:system_calibration]
+            @test lookup(sc[:tsys], AntennaName) == gt.antenna_names
+            @test lookup(sc[:tsys], ReceptorLabel) == ["pol_0", "pol_1"]
+            @test lookup(sc[:tsys], TimeSystemCal) ==
+                [datetime2unix(gt.datetimes[2])]
+            tmeta = metadata(lookup(sc[:tsys], TimeSystemCal))
+            @test (tmeta[:type], tmeta[:format], tmeta[:scale]) == ("time", "unix", "utc")
+            @test metadata(sc[:tsys])[:units] == "K"
+
+            # One partition is one band, and FITS-IDI states a temperature for
+            # each; a station that reported none is `NaN`, not zero.
+            @test parent(sc[:tsys])[:, 1, 1:2] == [tsys(1)[:, 1] tsys(2)[:, 1]]
+            @test parent(sc[:tant])[:, 1, 1:2] == [tsys(1)[:, 1] tsys(2)[:, 1]] ./ 4
+            @test all(isnan, parent(sc[:tsys])[:, 1, 3])
+            @test parent(branches(ps[:cal_01])[:system_calibration][:tsys])[:, 1, 1] ==
+                tsys(1)[:, 2]
+
+            # The identity coordinates are the antenna dataset's, less the
+            # mount and the telescope, which this dataset does not carry.
+            @test collect(sc[:station_name]) == gt.antenna_names
+            @test parent(sc[:polarization_type]) == ["R" "R" "R"; "L" "L" "L"]
+            @test !haskey(sc, :mount)
+        end
+
+        @testset "phase calibration" begin
+            pc = branches(ps[:cal_00])[:phase_calibration]
+            @test lookup(pc[:phase_cal], ToneLabel) == ["tone_0", "tone_1"]
+            @test parent(pc[:phase_cal])[:, :, 1, 2] == tones(2)[:, :, 1]
+            @test parent(pc[:phase_cal_tone_frequency])[:, :, 1, 2] ==
+                tone_freq(2)[:, :, 1]
+            @test metadata(pc[:phase_cal_tone_frequency])[:units] == "Hz"
+            @test parent(pc[:phase_cal_cable_cal])[1, 1:2] == [1.0e-9, 2.0e-9]
+            # `TIME_INTERVAL` is a single-precision count of days, so a
+            # duration in seconds comes back to within a microsecond.
+            @test parent(pc[:phase_cal_interval])[1, 1] ≈ 30.0 atol = 1.0e-4
+            @test all(isnan, parent(pc[:phase_cal_cable_cal])[:, 3])
+
+            # The second band's tones are its own.
+            @test parent(branches(ps[:cal_01])[:phase_calibration][:phase_cal])[:, :, 1, 2] ==
+                tones(2)[:, :, 2]
+        end
+
+        @testset "weather" begin
+            w = branches(ps[:cal_00])[:weather]
+            @test lookup(w[:temperature], StationName) == gt.antenna_names
+            @test metadata(lookup(w[:temperature], TimeWeather))[:type] == "time_weather"
+
+            # Centigrade, millibars and degrees on disk; kelvin, pascals and
+            # radians in MSv4.
+            @test parent(w[:temperature])[1, :] == fill(283.15, 3)
+            @test parent(w[:dew_point])[1, :] == fill(275.15, 3)
+            @test parent(w[:pressure])[1, :] == fill(90000.0, 3)
+            @test parent(w[:wind_speed])[1, :] == fill(3.5, 3)
+            @test parent(w[:wind_direction])[1, :] == fill(π / 2, 3)
+            @test parent(w[:h2o])[1, :] == fill(1.5, 3)
+
+            # The site-wide row describes every station; the second row is one
+            # station's own, so the others have nothing at that time.
+            @test parent(w[:temperature])[2, 2] == 285.15
+            @test all(isnan, parent(w[:temperature])[2, [1, 3]])
+            @test parent(w[:wind_direction])[2, 2] ≈ π
+
+            # A column the file does not carry is not invented.
+            @test !haskey(w, :ionos_electron)
+            @test !haskey(w, :rel_humidity)
+            @test parent(w[:station_position]) ≈ gt.positions
+        end
+
+        @testset "gain curves" begin
+            gc = branches(ps[:cal_00])[:gain_curve]
+            @test lookup(gc[:gain_curve], PolyTerm) == [0, 1, 2]
+            @test collect(gc[:gain_curve_type]) == fill("POWER(EL)", 3)
+            @test metadata(gc)[:measured_date] == "1858-11-17T00:00:00.000"
+
+            # Band 1's coefficients, and the short polynomial padded with the
+            # zero coefficient a missing term is. They come back the file's own
+            # numbers to within the rescaling that carries a polynomial in
+            # degrees into one in radians and out again.
+            @test parent(gc[:gain_curve])[:, :, 1] ≈ [111.0 112.0 0.0; 121.0 122.0 123.0]
+            @test parent(gc[:gain_curve])[:, :, 2] ≈ [111.0 112.0 113.0; 121.0 122.0 123.0]
+            @test parent(branches(ps[:cal_01])[:gain_curve][:gain_curve])[:, :, 2] ≈
+                [211.0 212.0 213.0; 221.0 222.0 223.0]
+
+            @test parent(gc[:gain_curve_sensitivity]) ==
+                Float64[0.5p + 0.25 for p in 1:2, _ in 1:3]
+            @test metadata(gc[:gain_curve_sensitivity])[:units] == "K/Jy"
+            # FITS-IDI states one curve for a file, so it holds for as long as
+            # the observation does.
+            @test all(x -> x ≈ gt.seconds[end] - gt.seconds[1], gc[:gain_curve_interval])
+        end
+
+        @testset "a partition no measurement covers carries none of them" begin
+            # The second scan starts ten minutes after the last calibration
+            # record ends, so its partitions have only the two sub-datasets
+            # that do not depend on time.
+            @test sort(collect(keys(branches(ps[:cal_02])))) ==
+                [:antenna, :field_and_source_base, :gain_curve]
+        end
+    end
+
+    @testset "a gain curve MSv4 cannot express is read but not written" begin
+        # Code 1 is a table of gain against elevation and code 3 a spherical
+        # harmonic expansion; MSv4 models only the polynomial, so a file
+        # carrying either gets no `gain_curve_xds` rather than having its
+        # curves mislabelled as coefficients. `fitsidi_gain_curves` still
+        # reads them, which is where they stay reachable.
+        curves(type, y_typ; kw...) = [
+            (; antenna = a, type = fill(type, 2, 2), nterm = fill(3, 2, 2),
+                x_typ = fill(0, 2, 2), y_typ = fill(y_typ, 2, 2),
+                gain = ones(4, 2, 2), sens = ones(2, 2), kw...) for a in 1:3
+        ]
+        # Gains of 1, 2 and 3 at 10, 20 and 40 degrees.
+        tabulated = curves(
+            1, 1;
+            gain = Float64[t for t in 1:4, _ in 1:2, _ in 1:2],
+            y_val = Float64[10t for t in 1:4, _ in 1:2, _ in 1:2],
+        )
+        gt = synthetic_fitsidi(joinpath(dir, "tabgain.idifits"); gain_curves = tabulated)
+        ps = @test_logs (:warn, r"polynomial in elevation") match_mode = :any open(
+            ProcessingSet, to_msv4(gt, "tabgain.ps.zarr")
+        )
+        @test !haskey(branches(ps[:tabgain_00]), :gain_curve)
+        @test isempty(conversion_issues(ps))
+
+        got = fitsidi_gain_curves(gt.path)
+        # Three antennas, two receptors, two spectral windows. A gain curve is
+        # stated per spectral window rather than per channel, so the frequency
+        # axis holds one entry for each, at its reference frequency.
+        @test size(got) == (3, 2, 2)
+        @test lookup(got, AntennaName) == gt.antenna_names
+        @test lookup(got, ReceptorLabel) == ["pol_0", "pol_1"]
+        @test lookup(got, Frequency) == gt.ref_freq .+ gt.band_freq
+        @test all(c -> c isa TabulatedGain, got[:curve])
+        first_curve = got[:curve][
+            AntennaName(At("AA")), ReceptorLabel(At("pol_0")),
+            Frequency(At(gt.ref_freq)),
+        ]
+        # Degrees on disk and radians in memory, so the tabulated angles move
+        # with the rest.
+        @test first_curve.angles ≈ deg2rad.([10, 20, 30])
+        @test gain(first_curve, deg2rad(15)) ≈ 1.5
+        @test XRadio.msv4_gain_curve(first_curve) === nothing
+
+        # A polynomial in zenith angle is a curve MSv4 does name.
+        gt = synthetic_fitsidi(joinpath(dir, "zagain.idifits"); gain_curves = curves(2, 2))
+        ps = open(ProcessingSet, to_msv4(gt, "zagain.ps.zarr"))
+        @test collect(branches(ps[:zagain_00])[:gain_curve][:gain_curve_type]) ==
+            fill("POWER(ZA)", 3)
+
+        # A spherical-harmonic curve is read as one, wherever the file puts
+        # its co-declination and hour-angle codes.
+        harmonic = [
+            (; antenna = a, type = fill(3, 2, 2), nterm = fill(10, 2, 2),
+                x_typ = fill(5, 2, 2), y_typ = fill(3, 2, 2),
+                gain = Float64[t == 1 for t in 1:10, _ in 1:2, _ in 1:2],
+                sens = ones(2, 2)) for a in 1:3
+        ]
+        gt = synthetic_fitsidi(
+            joinpath(dir, "shgain.idifits");
+            gain_curves = harmonic, gain_curve_terms = 10,
+        )
+        curve = first(fitsidi_gain_curves(gt.path)[:curve])
+        @test curve isa SphericalHarmonicGain
+        # Only A00 is set, so the curve is that constant everywhere.
+        @test gain(curve, (; hour_angle = 0.3, declination = 0.7)) == 1.0
+    end
+
+    @testset "gain curves the store keeps are the file's own numbers" begin
+        # The store holds coefficients against the angle in degrees, which is
+        # what casacore and AIPS write; XRadio holds the same polynomial
+        # against radians. The two are the same curve and the round trip is
+        # the file's own values.
+        degrees = Float64[0.683, 0.0165, -0.000214]
+        gt = synthetic_fitsidi(
+            joinpath(dir, "gcround.idifits");
+            gain_curves = [
+                (; antenna = a, type = fill(2, 2, 2), nterm = fill(3, 2, 2),
+                    x_typ = fill(0, 2, 2), y_typ = fill(2, 2, 2),
+                    gain = Float64[degrees[min(t, 3)] * (t <= 3) for t in 1:4, _ in 1:2, _ in 1:2],
+                    sens = fill(0.093, 2, 2)) for a in 1:3
+            ],
+        )
+        ps = open(ProcessingSet, to_msv4(gt, "gcround.ps.zarr"))
+        stored = parent(branches(ps[:gcround_00])[:gain_curve][:gain_curve])
+        @test stored[1, :, 1] ≈ Float32.(degrees)
+
+        curves = fitsidi_gain_curves(gt.path)
+        # A curve's spectral window is identified by the same frequency on both
+        # sides of the conversion, so a store and a reading of the file it came
+        # from can be lined up.
+        @test lookup(curves, Frequency) == [
+            XRadio.value(metadata(lookup(ps[k][:visibility], Frequency))[:reference_frequency])
+                for k in (:gcround_00, :gcround_01)
+        ]
+        @test metadata(curves[:sensitivity])[:units] == "K/Jy"
+        # `SENS` is single precision on disk and survives as that value.
+        @test all(==(Float64(0.093f0)), curves[:sensitivity])
+        curve = first(curves[:curve])
+        @test gain(curve, deg2rad(45)) ≈ evalpoly(45.0, Float32.(degrees))
+        @test XRadio.msv4_gain_curve(curve).coefficients ≈ stored[1, :, 1]
+    end
+
+    @testset "a file without them has no calibration sub-datasets" begin
+        gt = synthetic_fitsidi(joinpath(dir, "nocal.idifits"))
+        ps = open(ProcessingSet, to_msv4(gt, "nocal.ps.zarr"))
+        @test sort(collect(keys(branches(ps[:nocal_00])))) ==
+            [:antenna, :field_and_source_base]
     end
 
     @testset "a mount MSv4 cannot name is written as OTHER" begin
@@ -912,5 +1174,51 @@ if isfile(QBAND_PATH)
         # independent count of what the gap heuristic has to recover.
         njobs = count(c -> startswith(string(c), "HISTORY DIFXJOB"), hdus[1].cards)
         @test length(scan_ranges(rows.source_id, jd)) == njobs
+
+        @testset "the calibration tables" begin
+            layout = IDI.uv_matrix_layout(uv)
+
+            sc = IDI.read_system_calibration(hdus, layout, 1)
+            @test length(sc.time) == 2043
+            @test size(sc.values.tsys) == (2, 4, 2043)
+            # Q-band VLBA system temperatures, which rise across the four
+            # bands; a handful of records are spoiled and are passed through
+            # as the file wrote them.
+            @test 200 < sc.values.tsys[1, 1, 1] < 250
+
+            pc = IDI.read_phase_calibration(hdus, layout, 1)
+            @test length(pc.time) == 2368
+            # Two receptors, four bands, and the tones of each band lie in it,
+            # which is the check that the packing is read the right way round.
+            @test size(pc.values.tone)[2:3] == (2, 4)
+            @test all(f -> 4.29e10 < f < 4.35e10, filter(isfinite, pc.values.tone))
+
+            w = IDI.read_weather(hdus, 1)
+            @test length(w.time) == 899
+            @test sort(unique(w.antenna)) == 1:10
+            # Centigrade and millibars on disk, kelvin and pascals here.
+            @test all(t -> 250 < t < 320, filter(isfinite, w.values.temperature))
+            @test maximum(filter(isfinite, w.values.pressure)) > 90_000
+            # `WVR_H2O` and `IONOS_ELECTRON` are declared `0E` — present as
+            # columns, holding nothing — which is not a measurement.
+            @test w.values.h2o === nothing
+            @test w.values.ionos_electron === nothing
+
+            gc = IDI.read_gain_curves(hdus, layout, 1)
+            # A polynomial in zenith angle for each of ten antennas, two
+            # receptors and four bands.
+            @test length(gc) == 80
+            @test all(r -> r.curve isa GainPolynomial, gc)
+            @test all(r -> XRadio.gain_variable(r.curve) == :zenith_angle, gc)
+            @test all(r -> 0 < r.sensitivity < 1, gc)
+
+            # The VLBA writes a quadratic in degrees peaking near the middle of
+            # the sky; XRadio holds it in radians and hands the file's own
+            # coefficients back at the write boundary.
+            curve = first(gc).curve
+            @test 0.9 < gain(curve, deg2rad(45)) < 1.05
+            @test XRadio.msv4_gain_curve(curve).coefficients ≈
+                Float64.(Float32[0.683, 0.01649, -0.0002142])
+        end
     end
 end

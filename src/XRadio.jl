@@ -34,7 +34,7 @@ using Reexport
 @reexport using DimensionalData
 
 using DimensionalData: @dim, Dimension, DimArray, DimStack, DimTree, branches, val
-using DimensionalData.Lookups: Lookups
+using DimensionalData.Lookups: Lookups, Categorical, Sampled
 using OrderedCollections: OrderedDict
 
 import JSON3
@@ -43,7 +43,9 @@ import Zarr
 export ProcessingSet, MeasurementSet, Dataset, Measure
 export AbstractMount, Mount, MountAltAz, MountEquatorial, MountNasmythR, MountNasmythL,
     MountXY, MountOrbiting, MountOther
-export fitsidi2msv4
+export AbstractGainCurve, GainPolynomial, TabulatedGain, SphericalHarmonicGain,
+    AtDeclination, gain
+export fitsidi2msv4, fitsidi_gain_curves
 export datagroups, datagroup, correlated, flags, weights, uvw
 export antennas, scans, fields, intents, frequencies, polarizations, times, spectralwindow
 export BaselineId, Frequency, Polarization, UVWLabel, AntennaName, StationName,
@@ -60,7 +62,9 @@ include("schema/correlated.jl")
 include("schema/subdatasets.jl")
 include("schema/registry.jl")
 include("types.jl")
+include("build.jl")
 include("mount.jl")
+include("gaincurve.jl")
 include("check.jl")
 include("zarr/read.jl")
 include("zarr/write.jl")

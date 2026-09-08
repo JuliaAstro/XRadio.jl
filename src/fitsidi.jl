@@ -34,6 +34,34 @@ that subset rather than the whole. `STAXOF` has no field in MSv4's `antenna`
 dataset and is dropped; every other column of `ARRAY_GEOMETRY`, `ANTENNA` and
 `SOURCE` that MSv4 defines a home for is carried.
 
+The four optional calibration and environment tables become sub-datasets of
+every partition they have something to say about: `SYSTEM_TEMPERATURE` becomes
+`system_calibration_xds`, `PHASE-CAL` becomes `phase_calibration_xds`,
+`WEATHER` becomes `weather_xds` and `GAIN_CURVE` becomes `gain_curve_xds`.
+FITS-IDI samples the first three on the instrument's own clock, and each keeps
+that clock rather than being interpolated onto the visibilities' time axis. A
+partition takes the rows whose interval overlaps its own time span, so a scan
+is described by the measurements covering it, and carries no such sub-dataset
+where nothing does. Weather measured for the site as a whole — `ANTENNA_NO` of
+zero — is recorded against every station.
+
+Units become MSv4's: kelvin, pascals and radians rather than FITS-IDI's
+centigrade, millibars and degrees. A measurement the file writes as `NaN` stays
+`NaN`, which is what the standard means by one it does not have.
+
+Four things these tables carry have no MSv4 field and are dropped:
+`PHASE-CAL`'s `PC_RATE` and `STATE`, `WEATHER`'s `PRECIPITATION`, and any
+`GAIN_CURVE` curve that is not a polynomial in elevation or in zenith angle —
+MSv4 models only the polynomial, so a file whose curves are tabulated or are
+spherical-harmonic expansions gets no `gain_curve_xds` and is told so.
+[`fitsidi_gain_curves`](@ref) reads all of them whatever their shape, so a
+curve the store cannot hold is still reachable from the file. MSv4 also asks
+when a gain curve was measured and FITS-IDI does not say, so `measured_date` is
+the MJD zero point, with a warning. Its `GAIN_CURVE_INTERVAL` is the
+observation's own duration, since FITS-IDI states one curve for a whole file,
+and its coefficients are against the angle in **degrees**, which is the
+convention casacore and AIPS write and MSv4 inherits without stating.
+
 A `FLAG` table is expanded onto the dense `FLAG` array. Its rows are *ranges* —
 a source, an antenna pair with `0` as a wildcard, a frequency setup, a time
 range, a band selector, a channel range and a polarization selector — and
@@ -83,3 +111,47 @@ ps = open(ProcessingSet, "observation.ps.zarr")
 ```
 """
 function fitsidi2msv4 end
+
+"""
+    fitsidi_gain_curves(path) -> DimStack
+
+Every gain curve the FITS-IDI file at `path` records, over the antennas,
+receptors and spectral windows it describes them for.
+
+The result has two layers — `curve`, holding an
+[`XRadio.AbstractGainCurve`](@ref), and `sensitivity`, its `SENS` in kelvin per
+jansky, which turns a dimensionless curve into a flux scale — selected the same
+way as anything else in XRadio:
+
+```julia
+curves = fitsidi_gain_curves("observation.idifits")
+curves[:curve][AntennaName(At("BR")), ReceptorLabel(At("pol_0")), Frequency(Near(43e9))]
+```
+
+The `frequency` axis holds one entry per spectral window rather than per
+channel, since that is the resolution a gain curve is stated at, and each entry
+is that window's reference frequency — the same value a converted store carries
+on its own frequency axis. One Measurement Set covers one spectral window, so
+[`fitsidi2msv4`](@ref) splits across what this keeps together. A combination
+the file states no curve for holds `nothing` rather than an empty curve.
+
+This reads every shape AIPS Memo 114r defines — a polynomial in an angle, a
+table of measured values, and the spherical-harmonic expansion in hour angle
+and co-declination the Green Bank 140-foot used — and so it reads curves that
+[`fitsidi2msv4`](@ref) cannot write. MSv4's `gain_curve_xds` holds a polynomial
+in elevation or in zenith angle and nothing else, so a converted store keeps
+only those; this is how the rest stay reachable.
+
+Angles are radians, where FITS-IDI writes degrees. A polynomial's coefficients
+are scaled to match, so `gain(curve, elevation_in_radians)` is the gain
+directly.
+
+Requires `FITSFiles`:
+
+```julia
+using XRadio, FITSFiles
+curves = fitsidi_gain_curves("observation.idifits")
+g = gain(first(curves[:curve]), deg2rad(45))   # gain at 45 degrees elevation
+```
+"""
+function fitsidi_gain_curves end

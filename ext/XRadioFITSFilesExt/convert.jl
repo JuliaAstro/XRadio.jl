@@ -49,6 +49,18 @@ const _IDI_FRAMES = Dict(
 # release date is unknown.
 const _UNKNOWN_RELEASE_DATE = "1858-11-17T00:00:00.000"
 
+# What MSv4 calls the spectral window a FITS-IDI band is. `NO_BAND` counts
+# spectral windows — AIPS calls them bands, or IFs — and the file says nothing
+# to tell one from another but its position on that axis, so the name carries
+# the index in MSv4's own words rather than in the file's.
+spectral_window_name(window::Integer) = "spw_$(window - 1)"
+
+# The reference frequency of each spectral window: the file's `REF_FREQ` plus
+# the window's own offset from the `FREQUENCY` table. It is what a store
+# carries as the frequency axis's `reference_frequency`, and the physical
+# quantity that identifies a spectral window wherever one must be labelled.
+reference_frequencies(ref_freq, band_freq) = ref_freq .+ band_freq
+
 _iso8601(t::DateTime) = Dates.format(t, "yyyy-mm-ddTHH:MM:SS.sss")
 
 """
@@ -436,51 +448,566 @@ function _apply_flags!(flag, ranges, codes, times, source_at, band, freqid, ncha
     return flag
 end
 
+# ── Calibration and environment tables ───────────────────────────────────────
+#
+# FITS-IDI samples these on the instrument's own clock rather than on the
+# correlated data's time axis, and MSv4 gives each of them a time dimension of
+# its own for that reason. Every one of these tables is at most a few thousand
+# rows, so each is read once in full and every partition selects from it the
+# rows whose interval overlaps its own time span and whose antenna it
+# describes.
+
+# One time-sampled calibration table: the columns they all share, already
+# restricted to the file's frequency setup, and `values` holding the rest.
+struct CalTable{V}
+    time::Vector{Float64}       # POSIX seconds, centre of the interval
+    interval::Vector{Float64}   # seconds
+    antenna::Vector{Int}        # NOSTA; 0 stands for every antenna
+    values::V
+end
+
+# The first of `names` the table carries. Revision 1 of the WEATHER and
+# PHASE-CAL tables spells several columns differently from revision 2 and the
+# standard names both spellings, so a reader that knows only one rejects files
+# that are in the standard.
+function _cal_column(hdu, names::Symbol...)
+    data = hdu.data
+    for name in names
+        hascol(data, name) && return collect(column(data, name))
+    end
+    throw(ArgumentError(
+        "FITS-IDI $(card_string(hdu, "EXTNAME")) table has no " *
+            join(names, " or ") * " column, which the standard requires"
+    ))
+end
+
+# The first of `names` the table carries as one value a row, or `nothing` where
+# it carries none of them. A column of `leng` values a row comes back as an
+# `(nrow, leng)` matrix, and `leng` may be zero: the VLBA declares `WVR_H2O`
+# and `IONOS_ELECTRON` that way in tracks that measured neither, so a column
+# being present is not the same as its holding anything.
+function _cal_optional(hdu, names::Symbol...)
+    data = hdu.data
+    for name in names
+        hascol(data, name) || continue
+        col = collect(column(data, name))
+        col isa AbstractVector && return col
+    end
+    return nothing
+end
+
+# The same, where the standard requires the column.
+function _cal_scalar(hdu, names::Symbol...)
+    col = _cal_optional(hdu, names...)
+    col === nothing && throw(ArgumentError(
+        "FITS-IDI $(card_string(hdu, "EXTNAME")) table has no " *
+            join(names, " or ") * " column of one value a row, which the " *
+            "standard requires"
+    ))
+    return col
+end
+
+# A column FITS-IDI writes once per receptor, as `NAME_1` and `NAME_2`, read as
+# a `(value, receptor, row)` array. A table of one polarization leaves the
+# second receptor unmeasured, which is `NaN` rather than a repeat of the first.
+# Integer-coded columns come back as floats so that the same absence is
+# expressible in them.
+function _receptor_column(hdu, name::AbstractString, npol::Int, len::Int, keep)
+    out = fill(NaN, len, 2, length(keep))
+    for p in 1:npol
+        col = _cal_column(hdu, Symbol(name, "_", p), Symbol(name, " ", p))
+        for (i, r) in enumerate(keep)
+            v = rowvalues(col, r)
+            length(v) == len || throw(ArgumentError(
+                "FITS-IDI $(card_string(hdu, "EXTNAME")) row $r gives $(length(v)) " *
+                    "$(name)_$p values, expected $len"
+            ))
+            out[:, p, i] = v
+        end
+    end
+    return out
+end
+
+# How many receptors the table describes. `NO_POL` states it; a file that
+# omits the keyword still has the second receptor's columns exactly when it
+# describes two.
+function _no_pol(hdu, probe::AbstractString)
+    n = Int(card(hdu, "NO_POL", hascol(hdu.data, Symbol(probe, "_2")) ? 2 : 1))
+    n in (1, 2) || throw(ArgumentError(
+        "FITS-IDI $(card_string(hdu, "EXTNAME")) table has NO_POL = $n; a feed " *
+            "has one or two receptors"
+    ))
+    return n
+end
+
+# The number of entries a per-band column packs for each band. FITS-IDI writes
+# these columns as `(n, nband)` matrices with `n` varying fastest, and states
+# `n` in a keyword the memo names two ways; the column's own width states it
+# unambiguously.
+function _per_band_width(hdu, name::Symbol, nband::Int)
+    col = _cal_column(hdu, name)
+    width, rem = divrem(length(rowvalues(col, 1)), nband)
+    (rem == 0 && width >= 1) || throw(ArgumentError(
+        "FITS-IDI $(card_string(hdu, "EXTNAME")) column $name holds " *
+            "$(length(rowvalues(col, 1))) values per row, which is not a whole " *
+            "number of entries for each of $nband bands"
+    ))
+    return width
+end
+
+# The rows of a calibration table another frequency setup does not claim, and
+# their times as POSIX seconds. FITS-IDI measures them in days from the table's
+# own `RDATE`.
+function _cal_rows(hdu, freqid::Int)
+    time = Float64.(_cal_scalar(hdu, :TIME))
+    interval = Float64.(_cal_scalar(hdu, :TIME_INTERVAL))
+    antenna = Int.(_cal_scalar(hdu, :ANTENNA_NO, :ANTENNA_NUMBER))
+    keep = if hascol(hdu.data, :FREQID)
+        f = Int.(_cal_scalar(hdu, :FREQID))
+        findall(x -> x == 0 || x == freqid, f)
+    else
+        collect(eachindex(time))
+    end
+    epoch = datetime2unix(reference_date(hdu))
+    return keep, epoch .+ time[keep] .* 86400, interval[keep] .* 86400, antenna[keep]
+end
+
+# Where a table's rows land on the `(antenna, time)` grid one partition wants,
+# as `(row, antenna index, time index)` triples. A row is taken when its
+# interval overlaps the partition's time span, so a scan is described by the
+# measurements that cover it rather than by the whole track's. `0` in the
+# antenna column stands for every antenna, which WEATHER writes for conditions
+# measured once for the site.
+function _cal_grid(tab::CalTable, numbers, span)
+    index = Dict(a => i for (i, a) in enumerate(numbers))
+    keep = [
+        r for r in eachindex(tab.time)
+            if tab.time[r] + tab.interval[r] / 2 >= span[1] &&
+                tab.time[r] - tab.interval[r] / 2 <= span[2] &&
+                (tab.antenna[r] == 0 || haskey(index, tab.antenna[r]))
+    ]
+    isempty(keep) && return nothing
+    times = sort!(unique(tab.time[keep]))
+    at = Dict(t => k for (k, t) in enumerate(times))
+    places = NTuple{3, Int}[]
+    for r in keep
+        k = at[tab.time[r]]
+        if tab.antenna[r] == 0
+            append!(places, ((r, i, k) for i in eachindex(numbers)))
+        else
+            push!(places, (r, index[tab.antenna[r]], k))
+        end
+    end
+    return (; times, places)
+end
+
+"""
+    read_system_calibration(hdus, layout, freqid) -> CalTable or nothing
+
+The `SYSTEM_TEMPERATURE` table's system and antenna temperatures, as
+`(receptor, band, row)` arrays, or `nothing` where the file omits the table.
+"""
+function read_system_calibration(hdus, layout, freqid::Int)
+    hdu = table(hdus, "SYSTEM_TEMPERATURE")
+    hdu === nothing && return nothing
+    keep, time, interval, antenna = _cal_rows(hdu, freqid)
+    npol, nband = _no_pol(hdu, "TSYS"), layout.no_band
+    receptor(name) = permutedims(
+        _receptor_column(hdu, name, npol, nband, keep), (2, 1, 3)
+    )
+    return CalTable(
+        time, interval, antenna, (; tsys = receptor("TSYS"), tant = receptor("TANT"))
+    )
+end
+
+"""
+    read_phase_calibration(hdus, layout, freqid) -> CalTable or nothing
+
+The `PHASE-CAL` table's injected tones and cable delay, or `nothing` where the
+file omits the table.
+
+`cable` is one delay per row; `tone`, `real` and `imag` are
+`(tone, receptor, band, row)`. `PC_RATE` and `STATE` have no MSv4 field and are
+not read.
+"""
+function read_phase_calibration(hdus, layout, freqid::Int)
+    hdu = table(hdus, "PHASE-CAL")
+    hdu === nothing && return nothing
+    keep, time, interval, antenna = _cal_rows(hdu, freqid)
+    npol, nband = _no_pol(hdu, "PC_FREQ"), layout.no_band
+    ntone = _per_band_width(hdu, :PC_FREQ_1, nband)
+    receptor(name) = permutedims(
+        reshape(
+            _receptor_column(hdu, name, npol, ntone * nband, keep),
+            ntone, nband, 2, length(keep)
+        ),
+        (1, 3, 2, 4)
+    )
+    cable = Float64.(_cal_scalar(hdu, :CABLE_CAL))[keep]
+    return CalTable(
+        time, interval, antenna,
+        (;
+            cable, tone = receptor("PC_FREQ"),
+            real = receptor("PC_REAL"), imag = receptor("PC_IMAG"),
+        )
+    )
+end
+
+"""
+    read_weather(hdus, freqid) -> CalTable or nothing
+
+The `WEATHER` table, in MSv4's units — kelvin, pascals and radians rather than
+FITS-IDI's centigrade, millibars and degrees — or `nothing` where the file
+omits the table.
+
+Each field is `nothing` where the file omits its column; MSv4 makes them all
+optional too. `PRECIPITATION` has no MSv4 field and is not read.
+"""
+function read_weather(hdus, freqid::Int)
+    hdu = table(hdus, "WEATHER")
+    hdu === nothing && return nothing
+    keep, time, interval, antenna = _cal_rows(hdu, freqid)
+    take(f, names...) = let col = _cal_optional(hdu, names...)
+        col === nothing ? nothing : f.(Float64.(col[keep]))
+    end
+    return CalTable(
+        time, interval, antenna,
+        (;
+            temperature = take(c -> c + 273.15, :TEMPERATURE),
+            dew_point = take(c -> c + 273.15, :DEWPOINT),
+            pressure = take(mbar -> mbar * 100, :PRESSURE),
+            wind_speed = take(identity, :WIND_VELOCITY),
+            wind_direction = take(deg2rad, :WIND_DIRECTION),
+            h2o = take(identity, :WVR_H2O, :H2O_COLUMN),
+            ionos_electron = take(identity, :IONOS_ELECTRON, :ELECTRON_COLUMN),
+        )
+    )
+end
+
+# The angle a FITS-IDI gain curve is a function of, from its `Y_TYP` code.
+# AIPS Memo 114r's table of value types also admits 0, which is no angle at
+# all and appears where a curve does not use the slot.
+const _IDI_GAIN_VARIABLES = Dict(
+    1 => :elevation, 2 => :zenith_angle, 3 => :hour_angle,
+    4 => :declination, 5 => :codeclination,
+)
+
+# A curve's own variable, refusing a code that names none. FITS-IDI writes
+# these angles in degrees and XRadio holds them in radians.
+function _idi_gain_variable(code, what::AbstractString)
+    v = isfinite(code) ? get(_IDI_GAIN_VARIABLES, Int(code), nothing) : nothing
+    v === nothing && throw(ArgumentError(
+        "FITS-IDI GAIN_CURVE gives $what = $code, which names no angle a gain " *
+            "curve can depend on; the standard defines 1 to 5"
+    ))
+    return v
+end
+
+"""
+    read_gain_curves(hdus, layout, freqid) -> Vector{<:NamedTuple}
+
+Every gain curve the `GAIN_CURVE` table holds, one row per antenna, receptor
+and band: `(; antenna, receptor, band, curve, sensitivity)`, where `antenna` is
+a `NOSTA` number and `curve` an [`XRadio.AbstractGainCurve`](@ref).
+
+All three shapes AIPS Memo 114r defines are read — the polynomial, the table of
+measured values, and the spherical-harmonic expansion in hour angle and
+co-declination — whether or not MSv4 can store them. `sensitivity` is the
+curve's `SENS` in kelvin per jansky, which is what turns a dimensionless curve
+into a flux scale and which both formats state beside the curve rather than
+within it.
+"""
+function read_gain_curves(hdus, layout, freqid::Int)
+    hdu = table(hdus, "GAIN_CURVE")
+    hdu === nothing && return NamedTuple[]
+    data = hdu.data
+    nband = layout.no_band
+    antenna = Int.(_cal_scalar(hdu, :ANTENNA_NO))
+    keep = if hascol(data, :FREQID)
+        f = Int.(_cal_scalar(hdu, :FREQID))
+        findall(r -> f[r] == 0 || f[r] == freqid, eachindex(f))
+    else
+        collect(eachindex(antenna))
+    end
+    npol = _no_pol(hdu, "TYPE")
+    ntab = _per_band_width(hdu, :GAIN_1, nband)
+
+    type = _receptor_column(hdu, "TYPE", npol, nband, keep)
+    nterm = _receptor_column(hdu, "NTERM", npol, nband, keep)
+    xtyp = _receptor_column(hdu, "X_TYP", npol, nband, keep)
+    ytyp = _receptor_column(hdu, "Y_TYP", npol, nband, keep)
+    xval = _receptor_column(hdu, "X_VAL", npol, nband, keep)
+    sens = _receptor_column(hdu, "SENS", npol, nband, keep)
+    shape(name) = reshape(
+        _receptor_column(hdu, name, npol, ntab * nband, keep),
+        ntab, nband, 2, length(keep)
+    )
+    yval, gain = shape("Y_VAL"), shape("GAIN")
+
+    rows = NamedTuple[]
+    for (i, r) in enumerate(keep), p in 1:npol, band in 1:nband
+        isnan(type[band, p, i]) && continue
+        n = nterm[band, p, i]
+        (isfinite(n) && 1 <= n <= ntab) || throw(ArgumentError(
+            "FITS-IDI GAIN_CURVE row $r gives NTERM_$p = $n for band $band; a " *
+                "curve has between one and the table's $ntab entries"
+        ))
+        n = Int(n)
+        coefficients = Float64.(gain[1:n, band, p, i])
+        # Codes 1, 2 and 3 are a table of measured values, a polynomial, and a
+        # spherical-harmonic expansion.
+        curve = if type[band, p, i] == 1
+            TabulatedGain(
+                _idi_gain_variable(ytyp[band, p, i], "Y_TYP_$p"), :power,
+                deg2rad.(Float64.(yval[1:n, band, p, i])), coefficients
+            )
+        elseif type[band, p, i] == 2
+            GainPolynomial(
+                _idi_gain_variable(ytyp[band, p, i], "Y_TYP_$p"), :power,
+                XRadio.rescale_gain_angle(coefficients, 180 / pi)
+            )
+        elseif type[band, p, i] == 3
+            # Memo 114r lists ten coefficients and lets a file state fewer; a
+            # term the expansion stops before contributes nothing.
+            SphericalHarmonicGain(:power, append!(coefficients, zeros(10 - n)))
+        else
+            throw(ArgumentError(
+                "FITS-IDI GAIN_CURVE row $r gives TYPE_$p = $(type[band, p, i]) " *
+                    "for band $band; the standard defines 1 (tabulated), " *
+                    "2 (polynomial) and 3 (spherical harmonic)"
+            ))
+        end
+        # A curve against hour angle holds at one declination, which the
+        # standard puts in `X_VAL` and names in `X_TYP`.
+        if isfinite(xtyp[band, p, i]) && Int(xtyp[band, p, i]) == 4
+            curve = AtDeclination(curve, deg2rad(Float64(xval[band, p, i])))
+        end
+        push!(
+            rows,
+            (;
+                antenna = antenna[r], receptor = p, band,
+                curve, sensitivity = Float64(sens[band, p, i]),
+            )
+        )
+    end
+    return rows
+end
+
+# The gain curves a conforming store can hold, keyed the way a partition asks
+# for them, or `nothing` where the file has none it can. A curve MSv4 cannot
+# express costs the whole dataset rather than part of it: an antenna dataset
+# describing some of the array's gain curves and silently not others would be
+# read as though the rest had none.
+function msv4_gain_curves(rows, path::AbstractString)
+    isempty(rows) && return nothing
+    curves = Dict{Tuple{Int, Int, Int}, NamedTuple}()
+    for row in rows
+        written = XRadio.msv4_gain_curve(row.curve)
+        if written === nothing
+            @warn "MSv4 models a gain curve as a polynomial in elevation or in \
+                   zenith angle, and this file holds one of another shape. No \
+                   `gain_curve_xds` is written; `fitsidi_gain_curves` reads \
+                   them all." file = path curve = typeof(row.curve)
+            return nothing
+        end
+        curves[(row.antenna, row.receptor, row.band)] =
+            (; written.type, written.coefficients, row.sensitivity)
+    end
+    return curves
+end
+
+# A measurement FITS-IDI writes as `NaN` is one it does not have, so an array
+# of nothing else says nothing and is left out rather than written.
+_all_nan(x) = all(isnan, x)
+
+# The identity coordinates every antenna-keyed sub-dataset repeats: what the
+# antenna is called, where it stands, and what its receptors carry. MSv4's
+# system calibration dataset is the one that leaves out the mount and the
+# telescope, which is why they are separable here.
+function _antenna_identity(s, numbers; mount::Bool = true)
+    names = [s.antenna_name[a] for a in numbers]
+    identity = (;
+        antenna_name = names,
+        station_name = copy(names),
+        receptor_label = ["pol_0", "pol_1"],
+        polarization_type = [s.bases[a][i] for i in 1:2, a in numbers],
+    )
+    mount || return identity
+    return (;
+        identity...,
+        mount = [XRadio.msv4_mount(s.mounts[a]) for a in numbers],
+        telescope_name = fill(s.telescope_name, length(numbers)),
+    )
+end
+
+# A calibration dataset's own time axis is the instrument's clock, not the
+# correlated data's. The standard fixes what a `time` coordinate carries and
+# leaves `time_phase_cal` open, so that one is stated here.
+const _CAL_CLOCK = (; units = "s", scale = "utc", format = "unix", type = "time")
+
+# The system and antenna temperatures covering one partition. FITS-IDI states
+# one temperature per band, and a partition is one band.
+function _system_calibration_dataset(s, numbers, span, band::Int)
+    s.system_calibration === nothing && return nothing
+    grid = _cal_grid(s.system_calibration, numbers, span)
+    grid === nothing && return nothing
+    vals = s.system_calibration.values
+
+    nant, ntime = length(numbers), length(grid.times)
+    tsys, tant = fill(NaN, 2, ntime, nant), fill(NaN, 2, ntime, nant)
+    for (r, a, k) in grid.places
+        tsys[:, k, a] = vals.tsys[:, band, r]
+        tant[:, k, a] = vals.tant[:, band, r]
+    end
+    # The memo writes an unmeasured temperature as `NaN`, so a partition whose
+    # every entry is one has nothing to say and the array is left out.
+    _all_nan(tsys) && _all_nan(tant) && return nothing
+
+    return XRadio.subdataset(
+        :system_calibration;
+        _antenna_identity(s, numbers; mount = false)...,
+        time_system_cal = grid.times,
+        tsys = _all_nan(tsys) ? nothing : tsys,
+        tant = _all_nan(tant) ? nothing : tant,
+    )
+end
+
+# The injected phase-calibration tones covering one partition.
+function _phase_calibration_dataset(s, numbers, span, band::Int)
+    s.phase_calibration === nothing && return nothing
+    grid = _cal_grid(s.phase_calibration, numbers, span)
+    grid === nothing && return nothing
+    vals = s.phase_calibration.values
+
+    nant, ntime = length(numbers), length(grid.times)
+    ntone = size(vals.tone, 1)
+    tone_freq = fill(NaN, ntone, 2, ntime, nant)
+    tones = fill(ComplexF64(NaN, NaN), ntone, 2, ntime, nant)
+    cable, interval = fill(NaN, ntime, nant), fill(NaN, ntime, nant)
+    for (r, a, k) in grid.places
+        tone_freq[:, :, k, a] = vals.tone[:, :, band, r]
+        tones[:, :, k, a] =
+            complex.(vals.real[:, :, band, r], vals.imag[:, :, band, r])
+        cable[k, a] = vals.cable[r]
+        interval[k, a] = s.phase_calibration.interval[r]
+    end
+
+    return XRadio.subdataset(
+        :phase_calibration;
+        _antenna_identity(s, numbers)...,
+        time_phase_cal = grid.times,
+        tone_label = ["tone_$(i - 1)" for i in 1:ntone],
+        phase_cal = tones,
+        phase_cal_tone_frequency = tone_freq,
+        phase_cal_cable_cal = cable,
+        phase_cal_interval = interval,
+        array_metadata = (; time_phase_cal = _CAL_CLOCK),
+    )
+end
+
+# The weather covering one partition. MSv4 keys it by station rather than by
+# antenna, and a FITS-IDI row whose `ANTENNA_NO` is zero describes the whole
+# site, so it is spread across every station the partition names.
+function _weather_dataset(s, numbers, span)
+    s.weather === nothing && return nothing
+    grid = _cal_grid(s.weather, numbers, span)
+    grid === nothing && return nothing
+    vals = s.weather.values
+
+    nant, ntime = length(numbers), length(grid.times)
+    measured = Dict{Symbol, Any}()
+    for key in keys(vals)
+        col = vals[key]
+        col === nothing && continue
+        field = fill(NaN, ntime, nant)
+        for (r, a, k) in grid.places
+            field[k, a] = col[r]
+        end
+        _all_nan(field) || (measured[key] = field)
+    end
+    # Only the station positions would be left when the file measured nothing,
+    # and positions are already in the antenna dataset.
+    isempty(measured) && return nothing
+
+    return XRadio.subdataset(
+        :weather;
+        station_name = [s.antenna_name[a] for a in numbers],
+        cartesian_pos_label = ["x", "y", "z"],
+        time_weather = grid.times,
+        station_position = [s.positions[a][i] for i in 1:3, a in numbers],
+        pairs(measured)...,
+    )
+end
+
+# The gain curves of one partition's antennas for its spectral window. The
+# file states a curve for each, and MSv4's gain curve dataset has no frequency
+# axis at all, so a partition takes its own window's — as it does for the
+# receptor angles.
+function _gain_curve_dataset(s, numbers, band::Int)
+    s.gain_curve === nothing && return nothing
+    curves = s.gain_curve
+    present = [(a, p) for a in numbers for p in 1:2 if haskey(curves, (a, p, band))]
+    isempty(present) && return nothing
+
+    types = unique(curves[(a, p, band)].type for (a, p) in present)
+    length(types) == 1 || throw(ArgumentError(
+        "FITS-IDI GAIN_CURVE gives band $band curves of more than one kind " *
+            "($(join(types, ", "))); MSv4 states one `gain_curve_type` for " *
+            "each antenna"
+    ))
+    nterm = maximum(length(curves[(a, p, band)].coefficients) for (a, p) in present)
+
+    nant = length(numbers)
+    # A polynomial that stops early has no further terms, which is a zero
+    # coefficient rather than an absent one. These are against the angle in
+    # degrees, which is what casacore and AIPS write and MSv4 inherits.
+    coefficients = zeros(2, nterm, nant)
+    sensitivity = fill(NaN, 2, nant)
+    for (i, a) in enumerate(numbers), p in 1:2
+        curve = get(curves, (a, p, band), nothing)
+        curve === nothing && continue
+        coefficients[p, eachindex(curve.coefficients), i] = curve.coefficients
+        sensitivity[p, i] = curve.sensitivity
+    end
+
+    return XRadio.subdataset(
+        :gain_curve;
+        _antenna_identity(s, numbers)...,
+        poly_term = collect(Int64, 0:(nterm - 1)),
+        gain_curve_type = fill(only(types), nant),
+        gain_curve = coefficients,
+        gain_curve_sensitivity = sensitivity,
+        # FITS-IDI states one gain curve for a file, so it holds for as long as
+        # the file's observation lasts.
+        gain_curve_interval = fill(s.observation_span, nant),
+        metadata = (; measured_date = s.gain_curve_date),
+    )
+end
+
 # The antennas of one partition, in antenna-number order. A scan's baselines
 # name the antennas that actually observed together, which is fewer than the
 # array whenever a station was down.
-function _antenna_dataset(s, codes, band::Int)
-    numbers = sort!(unique(Iterators.flatten(map(baseline_antennas, codes))))
-    names = [s.antenna_name[a] for a in numbers]
-    mounts = [s.mounts[a] for a in numbers]
+function _antenna_dataset(s, numbers, band::Int)
+    identity = _antenna_identity(s, numbers)
 
-    unnamed = [n for (n, m) in zip(names, mounts) if m isa XRadio.MountOrbiting ||
-        m isa XRadio.MountOther]
+    unnamed = [
+        n for (n, a) in zip(identity.antenna_name, numbers)
+            if s.mounts[a] isa XRadio.MountOrbiting || s.mounts[a] isa XRadio.MountOther
+    ]
     isempty(unnamed) || @warn "MSv4 has no `mount` name for these antennas' \
                                mounts; writing \"OTHER\", which does not say \
                                which they are." antennas = unnamed maxlog = 1
 
-    antenna = AntennaName(Categorical(names))
-    receptor = ReceptorLabel(Categorical(["pol_0", "pol_1"]))
-    cart = CartesianPosLabel(Categorical(["x", "y", "z"]))
-
-    ds = Dataset(; metadata = Dict{Symbol, Any}(:type => "antenna"))
-    ds[:antenna_position] = DimArray(
-        [s.positions[a][i] for i in 1:3, a in numbers], (cart, antenna);
-        metadata = Dict{Symbol, Any}(
-            :type => "location", :units => "m", :frame => "ITRS",
-            :coordinate_system => "geocentric", :origin_object_name => "earth",
-        )
+    return XRadio.subdataset(
+        :antenna;
+        identity...,
+        cartesian_pos_label = ["x", "y", "z"],
+        antenna_position = [s.positions[a][i] for i in 1:3, a in numbers],
+        antenna_receptor_angle =
+            [s.receptor_angles[a][i, band] for i in 1:2, a in numbers],
+        antenna_dish_diameter = s.diameters === nothing ? nothing :
+            [s.diameters[a] for a in numbers],
     )
-    # FITS-IDI names an antenna once. A VLBI antenna does not move between
-    # stations, so the one name is both.
-    ds[:station_name] = DimArray(copy(names), (antenna,))
-    ds[:mount] = DimArray([XRadio.msv4_mount(m) for m in mounts], (antenna,))
-    ds[:telescope_name] = DimArray(fill(s.telescope_name, length(numbers)), (antenna,))
-    ds[:polarization_type] = DimArray(
-        [s.bases[a][i] for i in 1:2, a in numbers], (receptor, antenna)
-    )
-    ds[:antenna_receptor_angle] = DimArray(
-        [s.receptor_angles[a][i, band] for i in 1:2, a in numbers], (receptor, antenna);
-        metadata = Dict{Symbol, Any}(:type => "quantity", :units => "rad")
-    )
-    s.diameters === nothing || (
-        ds[:antenna_dish_diameter] = DimArray(
-            [s.diameters[a] for a in numbers], (antenna,);
-            metadata = Dict{Symbol, Any}(:type => "quantity", :units => "m")
-        )
-    )
-    return ds
 end
 
 # The fields of one partition. FITS-IDI states one direction per source, which
@@ -488,18 +1015,87 @@ end
 # format has no notion of pointing somewhere other than at the source.
 function _field_and_source_dataset(s, sources, frame::AbstractString)
     names = [s.source_names[i] for i in sources]
-    direction = permutedims([deg2rad.(s.source_ra[sources]) deg2rad.(s.source_dec[sources])])
-    attrs = Dict{Symbol, Any}(:type => "sky_coord", :units => "rad", :frame => frame)
+    direction = permutedims(
+        [deg2rad.(s.source_ra[sources]) deg2rad.(s.source_dec[sources])]
+    )
+    return XRadio.subdataset(
+        :field_and_source;
+        field_name = names,
+        sky_dir_label = ["ra", "dec"],
+        source_name = copy(names),
+        field_phase_center_direction = direction,
+        source_direction = copy(direction),
+        array_metadata = (;
+            field_phase_center_direction = (; frame),
+            source_direction = (; frame),
+        ),
+    )
+end
 
-    field = FieldName(Categorical(names))
-    skylabel = SkyDirLabel(Categorical(["ra", "dec"]))
+"""
+    fitsidi_gain_curves(path) -> Vector{<:NamedTuple}
 
-    ds = Dataset(; metadata = Dict{Symbol, Any}(:type => "field_and_source"))
-    ds[:source_name] = DimArray(copy(names), (field,))
-    ds[:field_phase_center_direction] =
-        DimArray(direction, (skylabel, field); metadata = attrs)
-    ds[:source_direction] = DimArray(copy(direction), (skylabel, field); metadata = copy(attrs))
-    return ds
+See [`XRadio.fitsidi_gain_curves`](@ref).
+"""
+function XRadio.fitsidi_gain_curves(path::AbstractString)
+    hdus = fits(path)
+    uv = require_table(hdus, "UV_DATA")
+    fq = require_table(hdus, "FREQUENCY")
+    freqid = Int(column(fq.data, :FREQID)[1])
+    agd = require_table(hdus, "ARRAY_GEOMETRY").data
+    named = Dict{Int, String}(
+        Int(n) => _trim(a)
+            for (n, a) in zip(column(agd, :NOSTA), column(agd, :ANNAME))
+    )
+    layout = uv_matrix_layout(uv)
+    rows = read_gain_curves(hdus, layout, freqid)
+
+    numbers = sort!(unique(row.antenna for row in rows))
+    antenna = AntennaName(Categorical([get(named, a, string(a)) for a in numbers]))
+    receptor = ReceptorLabel(Categorical(["pol_0", "pol_1"]))
+
+    # MSv4 has no dimension for a spectral window — a Measurement Set is one —
+    # and states which window a frequency axis describes in that axis's own
+    # attributes. So the axis here is `frequency`, one entry a window, carrying
+    # the reference frequency the store carries for the same window.
+    freqs = reference_frequencies(
+        Float64(card(uv, "REF_FREQ", 0.0)),
+        Float64.(rowvalues(column(fq.data, :BANDFREQ), 1)),
+    )
+    allunique(freqs) || throw(ArgumentError(
+        "FITS-IDI FREQUENCY gives $(length(freqs)) spectral windows sharing " *
+            "reference frequencies ($(join(freqs, ", ")) Hz), so no frequency " *
+            "tells them apart"
+    ))
+    frequency = Frequency(
+        Sampled(
+            freqs;
+            metadata = Dict{Symbol, Any}(
+                :type => "spectral_coord", :units => "Hz", :observer => "TOPO"
+            )
+        )
+    )
+    at = Dict(a => i for (i, a) in enumerate(numbers))
+
+    # A file need not describe every antenna, receptor and spectral window, and
+    # a combination it does not describe has no curve rather than an empty one.
+    curve = Array{Union{Nothing, XRadio.AbstractGainCurve}}(
+        nothing, length(numbers), 2, layout.no_band
+    )
+    sensitivity = fill(NaN, length(numbers), 2, layout.no_band)
+    for row in rows
+        curve[at[row.antenna], row.receptor, row.band] = row.curve
+        sensitivity[at[row.antenna], row.receptor, row.band] = row.sensitivity
+    end
+
+    dims = (antenna, receptor, frequency)
+    return DimStack((;
+        curve = DimArray(curve, dims),
+        sensitivity = DimArray(
+            sensitivity, dims;
+            metadata = Dict{Symbol, Any}(:type => "quantity", :units => "K/Jy")
+        ),
+    ))
 end
 
 """
@@ -583,6 +1179,7 @@ function XRadio.fitsidi2msv4(
     fqd = fq.data
     ref_freq = Float64(card(uv, "REF_FREQ", 0.0))
     band_freq = Float64.(rowvalues(column(fqd, :BANDFREQ), 1))
+    reference_frequency = reference_frequencies(ref_freq, band_freq)
     ch_width = Float64.(rowvalues(column(fqd, :CH_WIDTH), 1))
     length(band_freq) == layout.no_band || throw(ArgumentError(
         "FITS-IDI FREQUENCY gives $(length(band_freq)) bands, the UV_DATA " *
@@ -596,6 +1193,17 @@ function XRadio.fitsidi2msv4(
     fl = table(hdus, "FLAG")
     flag_ranges = fl === nothing ? FlagRange[] :
         read_flag_ranges(fl, perm, layout, reference_date(fl))
+
+    # Calibration and environment measurements, each on its own clock and each
+    # absent from plenty of files.
+    system_calibration = read_system_calibration(hdus, layout, freqid)
+    phase_calibration = read_phase_calibration(hdus, layout, freqid)
+    weather = read_weather(hdus, freqid)
+    gain_curve = msv4_gain_curves(read_gain_curves(hdus, layout, freqid), path)
+    if gain_curve !== nothing
+        @warn "FITS-IDI GAIN_CURVE does not say when the gain curves were \
+               measured; writing the MJD zero point as `measured_date`." file = path
+    end
 
     # Sources, by SOURCE_ID, which is what UV_DATA's SOURCE column holds.
     srd = sr.data
@@ -656,7 +1264,11 @@ function XRadio.fitsidi2msv4(
         products, bases, antenna_name, source_names, frames, source_of, scan_of,
         source_ra, source_dec, positions, mounts, diameters, telescope_name,
         receptor_angles = receptor_angle, flag_ranges, freqid,
-        ref_freq, band_freq, ch_width, radiometer, vis_scal, weight_scal, inttim,
+        system_calibration, phase_calibration, weather, gain_curve,
+        gain_curve_date = _UNKNOWN_RELEASE_DATE,
+        observation_span = maximum(times) - minimum(times),
+        ref_freq, band_freq, reference_frequency,
+        ch_width, radiometer, vis_scal, weight_scal, inttim,
         efficiency = Float64(weight_efficiency), perm, layout,
         scan_intents = collect(String, scan_intents),
         spectral_window_intents = collect(String, spectral_window_intents),
@@ -784,10 +1396,11 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
             collect(freqs);
             metadata = Dict{Symbol, Any}(
                 :type => "spectral_coord", :units => "Hz", :observer => "TOPO",
-                :spectral_window_name => "band_$(band - 1)",
+                :spectral_window_name => spectral_window_name(band),
+
                 :spectral_window_intents => s.spectral_window_intents,
                 :reference_frequency => XRadio.Measure(
-                    s.ref_freq + s.band_freq[band],
+                    s.reference_frequency[band],
                     Dict{Symbol, Any}(
                         :units => "Hz", :type => "spectral_coord", :observer => "TOPO"
                     )
@@ -846,7 +1459,20 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
         )
     end
 
-    branches(ms)[:antenna] = _antenna_dataset(s, codes, band)
+    numbers = sort!(unique(Iterators.flatten(antennas)))
+    branches(ms)[:antenna] = _antenna_dataset(s, numbers, band)
     branches(ms)[:field_and_source_base] = _field_and_source_dataset(s, sources, frame)
+
+    # The calibration and environment sub-datasets, each left out where the
+    # file has no such table or where nothing it holds covers this partition.
+    span = (first(grid_times), last(grid_times))
+    for (key, sub) in (
+            :system_calibration => _system_calibration_dataset(s, numbers, span, band),
+            :phase_calibration => _phase_calibration_dataset(s, numbers, span, band),
+            :weather => _weather_dataset(s, numbers, span),
+            :gain_curve => _gain_curve_dataset(s, numbers, band),
+        )
+        sub === nothing || (branches(ms)[key] = sub)
+    end
     return ms
 end
