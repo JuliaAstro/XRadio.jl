@@ -394,15 +394,28 @@ msv4_gain_curve(::AbstractGainCurve) = nothing
 function msv4_gain_curve(curve::GainPolynomial)
     type = get(_MSV4_GAIN_CURVE_TYPES, (curve.quantity, curve.variable), nothing)
     type === nothing && return nothing
-    coefficients = rescale_gain_angle(
-        curve.coefficients, _angle_factor(curve.coefficients, π / 180)
-    )
-    return (; type, coefficients)
+    return (; type, coefficients = to_degree_angle(curve.coefficients))
 end
 
-# The degrees-to-radians scale in the coefficients' own precision. Taking it as
-# a bare `Float64` would widen a single-precision curve at every file boundary,
-# so a store holding `Float32` would read back as `Float64`.
+"""
+    XRadio.to_radian_angle(coefficients) -> Vector
+    XRadio.to_degree_angle(coefficients) -> Vector
+
+The same polynomial against the other angle unit: FITS-IDI and casacore write a
+gain curve against degrees, XRadio evaluates against radians, and the term of
+order `k` differs by the ratio to the `k`th power.
+
+The ratio takes the coefficients' own precision. As a bare `Float64` it would
+widen a single-precision curve at every file boundary, so a file or a store
+holding `Float32` could not be read back as one.
+"""
+to_radian_angle(coefficients) =
+    rescale_gain_angle(coefficients, _angle_factor(coefficients, 180 / π))
+
+@doc (@doc to_radian_angle)
+to_degree_angle(coefficients) =
+    rescale_gain_angle(coefficients, _angle_factor(coefficients, π / 180))
+
 _angle_factor(coefficients, factor) = oftype(float(first(coefficients)), factor)
 
 msv4_gain_curve(w::AtDeclination) = msv4_gain_curve(w.curve)
@@ -441,9 +454,8 @@ function gain_curve_from_msv4(type::AbstractString, coefficients)
             join(sort(collect(keys(_GAIN_CURVE_FROM_MSV4))), ", ")
     ))
     quantity, variable = known
-    kept = _drop_trailing_zeros(coefficients)
     return GainPolynomial(
-        variable, quantity, rescale_gain_angle(kept, _angle_factor(kept, 180 / π))
+        variable, quantity, to_radian_angle(_drop_trailing_zeros(coefficients))
     )
 end
 

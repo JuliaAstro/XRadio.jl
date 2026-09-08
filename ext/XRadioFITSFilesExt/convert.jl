@@ -513,9 +513,14 @@ end
 # Integer-coded columns come back as floats so that the same absence is
 # expressible in them.
 function _receptor_column(hdu, name::AbstractString, npol::Int, len::Int, keep)
-    out = fill(NaN, len, 2, length(keep))
-    for p in 1:npol
-        col = _cal_column(hdu, Symbol(name, "_", p), Symbol(name, " ", p))
+    cols = [_cal_column(hdu, Symbol(name, "_", p), Symbol(name, " ", p)) for p in 1:npol]
+    # The file's own precision, not `Float64`. An MSv4 array these feed is
+    # `Float64` and the dataset builders convert to it; a gain curve reaches a
+    # caller through `fitsidi_gain_curves` without passing through a store, and
+    # FITS-IDI writes these columns in single precision.
+    T = float(mapreduce(eltype, promote_type, cols))
+    out = fill(convert(T, NaN), len, 2, length(keep))
+    for (p, col) in pairs(cols)
         for (i, r) in enumerate(keep)
             v = rowvalues(col, r)
             length(v) == len || throw(ArgumentError(
@@ -612,8 +617,10 @@ function read_system_calibration(hdus, layout, freqid::Int)
     hdu === nothing && return nothing
     keep, time, interval, antenna = _cal_rows(hdu, freqid)
     npol, nband = _no_pol(hdu, "TSYS"), layout.no_band
-    receptor(name) = permutedims(
-        _receptor_column(hdu, name, npol, nband, keep), (2, 1, 3)
+    # MSv4 states these as `Float64`, so the conversion happens here, where the
+    # arrays are being shaped for a store.
+    receptor(name) = Float64.(
+        permutedims(_receptor_column(hdu, name, npol, nband, keep), (2, 1, 3))
     )
     return CalTable(
         time, interval, antenna, (; tsys = receptor("TSYS"), tant = receptor("TANT"))
@@ -636,12 +643,16 @@ function read_phase_calibration(hdus, layout, freqid::Int)
     keep, time, interval, antenna = _cal_rows(hdu, freqid)
     npol, nband = _no_pol(hdu, "PC_FREQ"), layout.no_band
     ntone = _per_band_width(hdu, :PC_FREQ_1, nband)
-    receptor(name) = permutedims(
-        reshape(
-            _receptor_column(hdu, name, npol, ntone * nband, keep),
-            ntone, nband, 2, length(keep)
-        ),
-        (1, 3, 2, 4)
+    # MSv4 states these as `Float64`, so the conversion happens here, where the
+    # arrays are being shaped for a store.
+    receptor(name) = Float64.(
+        permutedims(
+            reshape(
+                _receptor_column(hdu, name, npol, ntone * nband, keep),
+                ntone, nband, 2, length(keep)
+            ),
+            (1, 3, 2, 4)
+        )
     )
     cable = Float64.(_cal_scalar(hdu, :CABLE_CAL))[keep]
     return CalTable(
@@ -717,7 +728,13 @@ curve's `SENS` in kelvin per jansky, which is what turns a dimensionless curve
 into a flux scale and which both formats state beside the curve rather than
 within it.
 """
-function read_gain_curves(hdus, layout, freqid::Int)
+# The precision a value read from the table is carried in. Keeping the file's
+# own is the default, since nothing `fitsidi_gain_curves` returns passes through
+# a store.
+_at_precision(::Nothing, x) = x
+_at_precision(T::Type, x) = T.(x)
+
+function read_gain_curves(hdus, layout, freqid::Int, T = nothing)
     hdu = table(hdus, "GAIN_CURVE")
     hdu === nothing && return NamedTuple[]
     data = hdu.data
@@ -753,18 +770,18 @@ function read_gain_curves(hdus, layout, freqid::Int)
                 "curve has between one and the table's $ntab entries"
         ))
         n = Int(n)
-        coefficients = Float64.(gain[1:n, band, p, i])
+        coefficients = _at_precision(T, gain[1:n, band, p, i])
         # Codes 1, 2 and 3 are a table of measured values, a polynomial, and a
         # spherical-harmonic expansion.
         curve = if type[band, p, i] == 1
             TabulatedGain(
                 _idi_gain_variable(ytyp[band, p, i], "Y_TYP_$p"), :power,
-                deg2rad.(Float64.(yval[1:n, band, p, i])), coefficients
+                deg2rad.(_at_precision(T, yval[1:n, band, p, i])), coefficients
             )
         elseif type[band, p, i] == 2
             GainPolynomial(
                 _idi_gain_variable(ytyp[band, p, i], "Y_TYP_$p"), :power,
-                XRadio.rescale_gain_angle(coefficients, 180 / pi)
+                XRadio.to_radian_angle(coefficients)
             )
         elseif type[band, p, i] == 3
             # Memo 114r lists ten coefficients and lets a file state fewer; a
@@ -784,13 +801,13 @@ function read_gain_curves(hdus, layout, freqid::Int)
         # A curve against hour angle holds at one declination, which the
         # standard puts in `X_VAL` and names in `X_TYP`.
         if isfinite(xtyp[band, p, i]) && Int(xtyp[band, p, i]) == 4
-            curve = AtDeclination(curve, deg2rad(Float64(xval[band, p, i])))
+            curve = AtDeclination(curve, deg2rad(_at_precision(T, xval[band, p, i])))
         end
         push!(
             rows,
             (;
                 antenna = antenna[r], receptor = p, band,
-                curve, sensitivity = Float64(sens[band, p, i]),
+                curve, sensitivity = _at_precision(T, sens[band, p, i]),
             )
         )
     end
@@ -1086,7 +1103,10 @@ function XRadio.fitsidi_gain_curves(path::AbstractString)
     curve = Array{Union{Nothing, XRadio.AbstractGainCurve}}(
         nothing, length(numbers), 2, layout.no_band
     )
-    sensitivity = fill(NaN, length(numbers), 2, layout.no_band)
+    # The file's own precision, as the curves themselves keep: nothing here
+    # passes through a store, whose `Float64` this would otherwise impose.
+    S = isempty(rows) ? Float64 : float(mapreduce(r -> typeof(r.sensitivity), promote_type, rows))
+    sensitivity = fill(convert(S, NaN), length(numbers), 2, layout.no_band)
     for row in rows
         curve[at[row.antenna], row.receptor, row.band] = row.curve
         sensitivity[at[row.antenna], row.receptor, row.band] = row.sensitivity
@@ -1203,7 +1223,13 @@ function XRadio.fitsidi2msv4(
     system_calibration = read_system_calibration(hdus, layout, freqid)
     phase_calibration = read_phase_calibration(hdus, layout, freqid)
     weather = read_weather(hdus, freqid)
-    gain_curve = msv4_gain_curves(read_gain_curves(hdus, layout, freqid), path)
+    # MSv4 states `GAIN_CURVE` as `Float64`. Building the curves in it keeps the
+    # store the file's own numbers: the coefficients are held here against
+    # radians and written back against the degrees the file gave, and in single
+    # precision that scaling out and back costs a part in 1e7.
+    gain_curve = msv4_gain_curves(
+        read_gain_curves(hdus, layout, freqid, Float64), path
+    )
     if gain_curve !== nothing
         @warn "FITS-IDI GAIN_CURVE does not say when the gain curves were \
                measured; writing the MJD zero point as `measured_date`." file = path

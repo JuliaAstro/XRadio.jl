@@ -701,9 +701,11 @@ end
             Frequency(At(gt.ref_freq)),
         ]
         # Degrees on disk and radians in memory, so the tabulated angles move
-        # with the rest.
+        # with the rest. The file states them in single precision and they are
+        # read as that, so the interpolated gain is accurate to single
+        # precision rather than to the tolerance a `Float64` literal suggests.
         @test first_curve.angles ≈ deg2rad.([10, 20, 30])
-        @test gain(first_curve, deg2rad(15)) ≈ 1.5
+        @test gain(first_curve, deg2rad(15)) ≈ 1.5 rtol = sqrt(eps(Float32))
         @test XRadio.msv4_gain_curve(first_curve) === nothing
 
         # A polynomial in zenith angle is a curve MSv4 does name.
@@ -772,11 +774,22 @@ end
                 for k in (:gcround_00, :gcround_01)
         ]
         @test metadata(curves[:sensitivity])[:units] == "K/Jy"
-        # `SENS` is single precision on disk and survives as that value.
-        @test all(==(Float64(0.093f0)), curves[:sensitivity])
+        # `SENS` is single precision on disk and reaches a caller as that,
+        # value and type alike: nothing read here passes through a store, whose
+        # `GAIN_CURVE` and `GAIN_CURVE_SENSITIVITY` are `Float64`.
+        @test all(==(0.093f0), curves[:sensitivity])
+        @test eltype(curves[:sensitivity]) === Float32
+        @test eltype(first(curves[:curve]).coefficients) === Float32
+        @test eltype(stored) === Float64
         curve = first(curves[:curve])
-        @test gain(curve, deg2rad(45)) ≈ evalpoly(45.0, Float32.(degrees))
-        @test XRadio.msv4_gain_curve(curve).coefficients ≈ stored[1, :, 1]
+        # The curve carries the file's single precision, so its gain matches
+        # the file's own polynomial to that precision. The store's copy is
+        # exact, because the scaling into it is done in the `Float64` the
+        # standard states for `GAIN_CURVE`.
+        @test gain(curve, deg2rad(45)) ≈ evalpoly(45.0, Float32.(degrees)) rtol =
+            sqrt(eps(Float32))
+        @test XRadio.msv4_gain_curve(curve).coefficients ≈ stored[1, :, 1] rtol =
+            sqrt(eps(Float32))
     end
 
     @testset "a file without them has no calibration sub-datasets" begin
@@ -899,6 +912,23 @@ end
         # UVW does not follow `element_type`: Float32 cannot resolve a VLBI
         # baseline to the fraction of a wavelength the phase needs.
         @test eltype(ms[:uvw]) == Float64
+
+        # The default is single precision and survives the write and the read:
+        # a store keeps the dtype it was written with, and neither side
+        # promotes it.
+        small = open(ProcessingSet, to_msv4(gt, "f32.ps.zarr"))[:eltype_00]
+        @test eltype(small[:visibility]) == ComplexF32
+        @test eltype(small[:weight]) == Float32
+        @test eltype(small[:flag]) == Bool
+        @test eltype(small[:uvw]) == Float64
+
+        # MSv4 leaves the width open for the science arrays alone; every other
+        # float array is `Float64` in a conforming store whatever
+        # `element_type` says. These are the standard's dtypes, not an accident
+        # of the converter.
+        @test eltype(branches(small)[:antenna][:antenna_position]) == Float64
+        @test eltype(lookup(small, Ti)) == Float64
+        @test eltype(lookup(small, Frequency)) == Float64
 
         @test_throws "element_type must be" to_msv4(gt, "int.ps.zarr"; element_type = Int)
     end
