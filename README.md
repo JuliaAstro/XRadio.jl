@@ -47,6 +47,19 @@ ms[Ti(At(t))]                        # a time step, across every layer
 ms.antenna[:antenna_position]        # a sub-dataset
 ```
 
+Baselines are named by their two antennas, rather than by the integer
+`baseline_id` the store indexes them with:
+
+```julia
+baselines(ms)                                   # [("DV02_A015", "DV06_T704"), …]
+vis[baseline(ms, ("DV02_A015", "DV06_T704"))]   # one baseline, either order
+vis[baseline(ms, "DV02_A015-DV06_T704")]        # the same pair as one label
+vis[baselines(ms, "DV02_A015"; auto = false)]   # one antenna's cross-correlations
+```
+
+Both return a selector rather than data, so they compose with everything above
+and leave the choice of layer to the caller.
+
 ## Writing
 
 ```julia

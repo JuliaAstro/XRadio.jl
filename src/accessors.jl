@@ -93,6 +93,148 @@ function antennas(ms::MeasurementSet)
 end
 
 """
+    baselines(ms) -> Vector{Tuple{String, String}}
+
+The antenna pair of every baseline in `ms`, in `baseline_id` order.
+
+MSv4 stores the two names as the `baseline_antenna1_name` and
+`baseline_antenna2_name` coordinates over `baseline_id`; this pairs them up.
+
+See also [`baseline`](@ref).
+"""
+function baselines(ms::MeasurementSet)
+    a1, a2 = _baseline_antennas(ms)
+    return collect(zip(a1, a2))
+end
+
+"""
+    baseline(ms, key) -> BaselineID
+
+A selector for the one baseline of `ms` that `key` names, for use anywhere a
+dimension selector goes:
+
+```julia
+vis = correlated(ms)
+vis[baseline(ms, ("BR", "LA"))]
+uvw(ms)[baseline(ms, "BR-LA")]
+```
+
+The key is an antenna-name pair, the dash label `"BR-LA"` spelling that pair,
+or an `Integer` `baseline_id` from the store. Pair matching ignores the order
+of the two names, since MSv4 records each pair once in whichever order the
+correlator gave.
+
+The dash label is an input convenience only. MSv4 defines no such label, and a
+separator that no antenna name may contain does not exist, so a name containing
+a dash has to be passed as a pair.
+
+Returning a selector rather than data leaves it to the caller which layers are
+wanted, and composes with every other selector.
+
+See also [`baselines`](@ref).
+"""
+function baseline(ms::MeasurementSet, key::Tuple{AbstractString, AbstractString})
+    a, b = key
+    ids = _baseline_ids(ms)
+    a1, a2 = _baseline_antennas(ms)
+    for i in eachindex(a1, a2, ids)
+        ((a1[i] == a && a2[i] == b) || (a1[i] == b && a2[i] == a)) &&
+            return dimtype(:baseline_id)(At(ids[i]))
+    end
+    throw(
+        ArgumentError(
+            "no baseline $a-$b in this Measurement Set; its baselines are over " *
+                join(_baseline_antenna_names(a1, a2), ", ")
+        )
+    )
+end
+
+function baseline(ms::MeasurementSet, label::AbstractString)
+    return baseline(ms, _split_baseline_label(label))
+end
+
+function baseline(ms::MeasurementSet, id::Integer)
+    ids = _baseline_ids(ms)
+    id in ids && return dimtype(:baseline_id)(At(id))
+    throw(
+        ArgumentError(
+            "no baseline_id $id in this Measurement Set; it has " *
+                "$(length(ids)) baselines, with ids from $(minimum(ids)) to $(maximum(ids))"
+        )
+    )
+end
+
+"""
+    baselines(ms, antenna; auto = true) -> BaselineID
+
+A selector for every baseline of `ms` that `antenna` takes part in, in
+`baseline_id` order. `auto = false` drops the autocorrelation.
+
+```julia
+correlated(ms)[baselines(ms, "LA"; auto = false)]
+```
+
+An antenna that no baseline names is an error; an antenna whose only baseline
+is its autocorrelation selects nothing under `auto = false`.
+"""
+function baselines(ms::MeasurementSet, antenna::AbstractString; auto::Bool = true)
+    ids = _baseline_ids(ms)
+    a1, a2 = _baseline_antennas(ms)
+    seen = false
+    wanted = eltype(ids)[]
+    for i in eachindex(a1, a2, ids)
+        (a1[i] == antenna || a2[i] == antenna) || continue
+        seen = true
+        (auto || a1[i] != a2[i]) && push!(wanted, ids[i])
+    end
+    seen || throw(
+        ArgumentError(
+            "no baseline of this Measurement Set names antenna $antenna; its " *
+                "baselines are over " * join(_baseline_antenna_names(a1, a2), ", ")
+        )
+    )
+    return dimtype(:baseline_id)(At(wanted))
+end
+
+# The two antenna-name coordinates, materialized: on a store read lazily they
+# are disk-backed, and matching walks them repeatedly.
+function _baseline_antennas(ms::MeasurementSet)
+    (haskey(ms, :baseline_antenna1_name) && haskey(ms, :baseline_antenna2_name)) || throw(
+        ArgumentError(
+            "this Measurement Set names no baseline antennas; MSv4 states them as " *
+                "`baseline_antenna1_name` and `baseline_antenna2_name`, and this one " *
+                "has " * join(sort(string.(collect(keys(ms)))), ", ")
+        )
+    )
+    return collect(ms[:baseline_antenna1_name]), collect(ms[:baseline_antenna2_name])
+end
+
+function _baseline_ids(ms::MeasurementSet)
+    d = dims(ms, dimtype(:baseline_id))
+    d === nothing && throw(
+        ArgumentError(
+            "this Measurement Set has no `baseline_id` dimension, so it has no " *
+                "baselines; single-dish data is stated over antennas instead"
+        )
+    )
+    return collect(val(d))
+end
+
+_baseline_antenna_names(a1, a2) = sort(unique(vcat(a1, a2)))
+
+function _split_baseline_label(label::AbstractString)
+    parts = split(label, '-')
+    length(parts) == 2 || throw(
+        ArgumentError(
+            "`$label` is not a baseline label; the form is \"A1-A2\", two antenna " *
+                "names separated by a dash. Pass the pair as a tuple if a name " *
+                "contains a dash."
+        )
+    )
+    return (String(parts[1]), String(parts[2]))
+end
+
+"""
     scans(ms) -> Vector{String}
 
 The distinct scan names in `ms`, in the order they first occur.

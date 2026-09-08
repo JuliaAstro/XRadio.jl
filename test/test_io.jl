@@ -221,3 +221,99 @@ end
     @test uvw(ms) === ms[:uvw]
     @test_throws KeyError datagroup(ms, :nonexistent)
 end
+
+@testset "baseline selection" begin
+    ms = synthetic_set(1)[1]
+
+    # A selector holding a vector compares by identity, so assertions about a
+    # multi-baseline selection are made on the ids it names.
+    selected(sel) = DimensionalData.val(DimensionalData.val(sel))
+
+    @test baselines(ms) == [("AA", "BB"), ("AA", "CC"), ("BB", "CC")]
+
+    @testset "the three key shapes agree" begin
+        @test baseline(ms, ("AA", "CC")) == baseline(ms, "AA-CC") == baseline(ms, 2)
+        # MSv4 records each pair once in whichever order the correlator gave,
+        # so matching cannot depend on the caller guessing that order.
+        @test baseline(ms, ("CC", "AA")) == baseline(ms, ("AA", "CC"))
+        @test baseline(ms, "CC-AA") == baseline(ms, ("AA", "CC"))
+    end
+
+    @testset "the selector slices" begin
+        vis = correlated(ms)
+        @test size(vis[baseline(ms, ("AA", "BB"))]) == (2, 5, 4)
+        @test vis[baseline(ms, ("AA", "BB"))] == vis[BaselineID(At(1))]
+        @test size(uvw(ms)[baselines(ms, "AA")]) == (3, 2, 4)
+        @test size(uvw(ms)[baselines(ms, "CC")]) == (3, 2, 4)
+    end
+
+    @testset "an absent baseline names what is present" begin
+        @test_throws ArgumentError baseline(ms, ("AA", "ZZ"))
+        @test_throws "no baseline AA-ZZ" baseline(ms, ("AA", "ZZ"))
+        @test_throws "its baselines are over AA, BB, CC" baseline(ms, ("AA", "ZZ"))
+
+        @test_throws "no baseline_id 9" baseline(ms, 9)
+        @test_throws "3 baselines, with ids from 1 to 3" baseline(ms, 9)
+
+        @test_throws "names antenna ZZ" baselines(ms, "ZZ")
+        @test_throws "its baselines are over AA, BB, CC" baselines(ms, "ZZ")
+    end
+
+    @testset "a dash label spells exactly two names" begin
+        @test_throws "is not a baseline label" baseline(ms, "AA")
+        @test_throws "is not a baseline label" baseline(ms, "AA-BB-CC")
+        @test_throws "Pass the pair as a tuple" baseline(ms, "AA-BB-CC")
+    end
+
+    @testset "autocorrelations" begin
+        # A converted store holds them, so `auto = false` is not a rare path.
+        selfed = synthetic_set(1)[1]
+        base = dims(selfed, BaselineID)
+        selfed[:baseline_antenna1_name] = DimArray(["AA", "AA", "BB"], (base,))
+        selfed[:baseline_antenna2_name] = DimArray(["AA", "CC", "BB"], (base,))
+
+        @test baselines(selfed) == [("AA", "AA"), ("AA", "CC"), ("BB", "BB")]
+        @test baseline(selfed, ("AA", "AA")) == BaselineID(At(1))
+        @test selected(baselines(selfed, "AA")) == [1, 2]
+        @test selected(baselines(selfed, "AA"; auto = false)) == [2]
+        # An antenna present only in its own autocorrelation selects nothing
+        # once autocorrelations are dropped, which is a true answer rather than
+        # an error.
+        @test selected(baselines(selfed, "BB")) == [3]
+        @test isempty(selected(baselines(selfed, "BB"; auto = false)))
+    end
+
+    @testset "a Measurement Set without baselines" begin
+        bare = MeasurementSet(; metadata = Dict{Symbol, Any}(:type => "spectrum"))
+        @test_throws "no `baseline_id` dimension" baseline(bare, 1)
+        @test_throws "no `baseline_id` dimension" baselines(bare, "AA")
+
+        noname = synthetic_set(1)[1]
+        delete!(noname, :baseline_antenna1_name)
+        @test_throws "names no baseline antennas" baselines(noname)
+    end
+end
+
+# A store read from disk holds its antenna-name coordinates lazily, and states
+# `baseline_id` from zero, so neither materialization nor 1-based ids can be
+# assumed.
+let path = joinpath(@__DIR__, "..", "testdata", "Antennae_North.cal.lsrk.split.v8.ps.zarr")
+    if isdir(path)
+        @testset "baseline selection on a store" begin
+            ms = open(ProcessingSet, path)[1]
+            bl = baselines(ms)
+            @test length(bl) == 45
+            @test allunique(bl)
+
+            ids = collect(DimensionalData.val(dims(ms, BaselineID)))
+            @test first(ids) == 0
+            @test baseline(ms, first(ids)) == BaselineID(At(first(ids)))
+
+            a, b = first(bl)
+            @test baseline(ms, (b, a)) == baseline(ms, (a, b)) == BaselineID(At(first(ids)))
+
+            @test size(uvw(ms)[baselines(ms, a)]) == (3, 9, size(uvw(ms), Ti))
+            @test_throws "no baseline_id $(length(ids))" baseline(ms, length(ids))
+        end
+    end
+end
