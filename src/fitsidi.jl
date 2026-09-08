@@ -140,7 +140,8 @@ table of measured values, and the spherical-harmonic expansion in hour angle
 and co-declination the Green Bank 140-foot used — and so it reads curves that
 [`fitsidi2msv4`](@ref) cannot write. MSv4's `gain_curve_xds` holds a polynomial
 in elevation or in zenith angle and nothing else, so a converted store keeps
-only those; this is how the rest stay reachable.
+only those; this is how the rest stay reachable. [`gaincurves`](@ref) reads what
+a converted store does keep, in the same shape minus the frequency axis.
 
 Angles are radians, where FITS-IDI writes degrees. A polynomial's coefficients
 are scaled to match, so `gain(curve, elevation_in_radians)` is the gain

@@ -48,7 +48,8 @@ export AbstractGainCurve, GainPolynomial, TabulatedGain, SphericalHarmonicGain,
     AtDeclination, gain
 export fitsidi2msv4, fitsidi_gain_curves
 export datagroups, datagroup, correlated, flags, weights, uvw
-export antennas, scans, fields, intents, frequencies, polarizations, times, spectralwindow
+export antennas, scans, fields, intents, frequencies, polarizations, times, spectralwindow,
+    gaincurves
 export BaselineID, Frequency, Polarization, UVWLabel, AntennaName, StationName,
     FieldName, ReceptorLabel, ElementID, CartesianPosLabel, CartesianPosLabelLocal,
     EllipsoidDirLabel, EllipsoidDisLabel, SkyDirLabel, SkyDisLabel, LocalSkyDirLabel,

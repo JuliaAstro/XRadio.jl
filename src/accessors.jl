@@ -141,6 +141,91 @@ coordinate declares.
 times(ms::MeasurementSet) = _lookup_values(ms, :time)
 
 """
+    gaincurves(ms) -> DimStack
+    gaincurves(gain_curve_xds) -> DimStack
+
+The gain curves a Measurement Set records, over the antennas and receptors it
+states them for.
+
+The result has two layers — `curve`, holding an
+[`XRadio.AbstractGainCurve`](@ref), and `sensitivity`, in kelvin per jansky,
+which turns a dimensionless curve into a flux scale. Both formats state the
+sensitivity beside the curve rather than within it, so this does too.
+
+```julia
+curves = gaincurves(ms)
+curves[:curve][AntennaName(At("BR")), ReceptorLabel(At("pol_0"))]
+```
+
+There is no frequency axis: MSv4's gain curve dataset has none, and one
+Measurement Set covers one spectral window, which [`spectralwindow`](@ref)
+names. This is the shape [`fitsidi_gain_curves`](@ref) returns for a whole
+file, minus that axis.
+
+Every curve is a [`GainPolynomial`](@ref), since a polynomial in elevation or
+in zenith angle is all a conforming store can hold. An antenna and receptor the
+store says nothing about holds `nothing` rather than an empty curve, and a
+Measurement Set with no gain curve dataset at all gives an empty result.
+
+The coefficients on disk are against the angle in degrees and come back against
+radians, so `gain(curve, elevation_in_radians)` is the gain directly.
+"""
+function gaincurves(ms::MeasurementSet)
+    haskey(branches(ms), :gain_curve) || return _no_gain_curves()
+    return gaincurves(branches(ms)[:gain_curve])
+end
+
+function gaincurves(xds::Dataset)
+    A, R = dimtype(:antenna_name), dimtype(:receptor_label)
+    antenna, receptor = dims(xds, A), dims(xds, R)
+    (antenna === nothing || receptor === nothing) && throw(ArgumentError(
+        "a `gain_curve` dataset is stated over antenna_name and " *
+            "receptor_label; this one has " *
+            join(string.(DimensionalData.name(dims(xds))), ", ")
+    ))
+    # MSv4 makes `gain_curve_type` optional, but coefficients that name no
+    # angle are not a curve: nothing says whether they are against elevation or
+    # against zenith angle, and the two disagree everywhere but the horizon.
+    haskey(xds, :gain_curve_type) || throw(ArgumentError(
+        "this `gain_curve` dataset carries no `gain_curve_type`, so nothing " *
+            "says which angle its coefficients are a polynomial in"
+    ))
+
+    coefficients, types = xds[:gain_curve], xds[:gain_curve_type]
+    sensitivities = xds[:gain_curve_sensitivity]
+
+    stations, receptors = val(antenna), val(receptor)
+    curve = Array{Union{Nothing, AbstractGainCurve}}(
+        nothing, length(stations), length(receptors)
+    )
+    sensitivity = fill(NaN, length(stations), length(receptors))
+    for (i, a) in enumerate(stations), (j, r) in enumerate(receptors)
+        s = sensitivities[A(At(a)), R(At(r))]
+        k = collect(coefficients[A(At(a)), R(At(r))])
+        # The dataset spans every antenna and receptor it names, so one it
+        # states no curve for is the padding the writer left: no coefficients
+        # and no sensitivity.
+        all(iszero, k) && isnan(s) && continue
+        curve[i, j] = gain_curve_from_msv4(types[A(At(a))], k)
+        sensitivity[i, j] = s
+    end
+
+    over = (antenna, receptor)
+    return DimStack((;
+        curve = DimArray(curve, over),
+        sensitivity = DimArray(sensitivity, over; metadata = metadata(sensitivities)),
+    ))
+end
+
+function _no_gain_curves()
+    over = (dimtype(:antenna_name)(String[]), dimtype(:receptor_label)(String[]))
+    return DimStack((;
+        curve = DimArray(Array{Union{Nothing, AbstractGainCurve}}(nothing, 0, 0), over),
+        sensitivity = DimArray(fill(NaN, 0, 0), over),
+    ))
+end
+
+"""
     spectralwindow(ms) -> String
 
 The name of the spectral window `ms` covers. MSv4 replaces MSv2's numeric data

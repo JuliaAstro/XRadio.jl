@@ -596,6 +596,47 @@ end
             @test all(x -> x ≈ gt.seconds[end] - gt.seconds[1], gc[:gain_curve_interval])
         end
 
+        @testset "the curves come back from the store" begin
+            # `@testset` bodies do not share bindings, so the stored dataset is
+            # fetched again rather than taken from the block above.
+            stored = branches(ps[:cal_00])[:gain_curve][:gain_curve]
+            got = gaincurves(ps[:cal_00])
+            @test keys(got) == (:curve, :sensitivity)
+            @test lookup(got, AntennaName) == antennas(ps[:cal_00])
+            @test lookup(got, ReceptorLabel) == ["pol_0", "pol_1"]
+            @test metadata(got[:sensitivity])[:units] == "K/Jy"
+            @test collect(got[:sensitivity]) ==
+                Float64[0.5p + 0.25 for _ in 1:3, p in 1:2]
+
+            # MSv4 pads every antenna's polynomial out to the longest in the
+            # dataset, so the first antenna's first receptor is stored with a
+            # third coefficient of zero. It comes back with the two terms the
+            # file gave, since a zero top-order term cannot change a gain.
+            @test length(got[:curve][1, 1].coefficients) == 2
+            @test length(got[:curve][1, 2].coefficients) == 3
+            @test length(got[:curve][2, 1].coefficients) == 3
+
+            # A store holds the coefficients against degrees and XRadio holds
+            # them against radians, so what a curve says about a given angle is
+            # what the store's own polynomial says about it.
+            for i in 1:3, p in 1:2
+                @test gain(got[:curve][i, p], deg2rad(35)) ≈
+                    evalpoly(35.0, parent(stored)[p, :, i])
+            end
+
+            # Every curve a conforming store holds is a polynomial in one of
+            # the angles MSv4 names, and writing it back out gives the store's
+            # own numbers.
+            @test all(c -> c isa GainPolynomial, got[:curve])
+            @test all(c -> XRadio.gain_variable(c) === :elevation, got[:curve])
+            @test XRadio.msv4_gain_curve(got[:curve][1, 2]).coefficients ≈
+                parent(stored)[2, :, 1]
+
+            # The sub-dataset is the same read either way.
+            @test collect(gaincurves(branches(ps[:cal_00])[:gain_curve])[:sensitivity]) ==
+                collect(got[:sensitivity])
+        end
+
         @testset "a partition no measurement covers carries none of them" begin
             # The second scan starts ten minutes after the last calibration
             # record ends, so its partitions have only the two sub-datasets
@@ -726,6 +767,12 @@ end
         ps = open(ProcessingSet, to_msv4(gt, "nocal.ps.zarr"))
         @test sort(collect(keys(branches(ps[:nocal_00])))) ==
             [:antenna, :field_and_source_base]
+
+        # A Measurement Set with no gain curve dataset has no gain curves,
+        # which is an empty result of the usual shape rather than an error.
+        none = gaincurves(ps[:nocal_00])
+        @test keys(none) == (:curve, :sensitivity)
+        @test isempty(none[:curve])
     end
 
     @testset "a mount MSv4 cannot name is written as OTHER" begin

@@ -389,6 +389,56 @@ end
 
 msv4_gain_curve(w::AtDeclination) = msv4_gain_curve(w.curve)
 
+# The inverse of `_MSV4_GAIN_CURVE_TYPES`, so a store's `gain_curve_type` says
+# what the coefficients beside it are a gain of and a function of.
+const _GAIN_CURVE_FROM_MSV4 = Dict(v => k for (k, v) in _MSV4_GAIN_CURVE_TYPES)
+
+"""
+    XRadio.gain_curve_from_msv4(type, coefficients) -> GainPolynomial
+
+The curve a conforming store's `gain_curve_type` and `GAIN_CURVE` row describe
+— the inverse of [`XRadio.msv4_gain_curve`](@ref).
+
+`coefficients` are against the angle in **degrees**, which is how MSv4 writes
+them, and come back against radians.
+
+Trailing zeros are dropped. MSv4 pads every antenna's polynomial out to the
+longest one in its dataset and records no term count, so a trailing zero could
+be padding or a real coefficient and nothing in the store tells them apart. A
+zero top-order coefficient contributes nothing to the gain, so the shortest
+polynomial giving the same gain is taken; a curve that is zero throughout keeps
+its constant term.
+
+```jldoctest
+julia> curve = XRadio.gain_curve_from_msv4("POWER(ZA)", [0.99, 0.0, 0.0]);
+
+julia> XRadio.gain_variable(curve), length(curve.coefficients)
+(:zenith_angle, 1)
+```
+"""
+function gain_curve_from_msv4(type::AbstractString, coefficients)
+    known = get(_GAIN_CURVE_FROM_MSV4, String(type), nothing)
+    known === nothing && throw(ArgumentError(
+        "`$type` is not a gain curve MSv4 names; it holds one of " *
+            join(sort(collect(keys(_GAIN_CURVE_FROM_MSV4))), ", ")
+    ))
+    quantity, variable = known
+    return GainPolynomial(
+        variable, quantity,
+        rescale_gain_angle(_drop_trailing_zeros(coefficients), 180 / π),
+    )
+end
+
+# Everything from the last non-zero coefficient down, and never less than the
+# constant term — a gain polynomial has at least one.
+function _drop_trailing_zeros(coefficients)
+    stop = lastindex(coefficients)
+    while stop > firstindex(coefficients) && iszero(coefficients[stop])
+        stop -= 1
+    end
+    return coefficients[firstindex(coefficients):stop]
+end
+
 """
     XRadio.rescale_gain_angle(coefficients, factor) -> Vector
 

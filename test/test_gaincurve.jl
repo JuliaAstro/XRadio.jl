@@ -1,6 +1,7 @@
 using OffsetArrays: OffsetVector
 
 using XRadio: gain_variable, gain_quantity, msv4_gain_curve, rescale_gain_angle
+using XRadio: gain_curve_from_msv4
 
 # A curve of a shape XRadio does not define, which is the whole of what an
 # outside package has to write: the gain at the angle, and the angle's name.
@@ -71,6 +72,55 @@ struct BareGain <: AbstractGainCurve end
         @test msv4_gain_curve(SphericalHarmonicGain(zeros(10))) === nothing
         # A curve from outside says nothing to MSv4 unless it says otherwise.
         @test msv4_gain_curve(SquaredCosineGain()) === nothing
+    end
+
+    @testset "what a store holds comes back as the curve it was" begin
+        coefficients = [1.0, 0.1]
+        for (variable, quantity, type) in (
+                (:elevation, :power, "POWER(EL)"),
+                (:zenith_angle, :power, "POWER(ZA)"),
+                (:elevation, :voltage, "VOLTAGE(EL)"),
+                (:zenith_angle, :voltage, "VOLTAGE(ZA)"),
+            )
+            curve = GainPolynomial(coefficients; variable, quantity)
+            back = gain_curve_from_msv4(msv4_gain_curve(curve)...)
+            @test gain_variable(back) === variable
+            @test gain_quantity(back) === quantity
+            @test back.coefficients ≈ coefficients
+        end
+
+        # A store pads every antenna's polynomial out to the longest one in its
+        # dataset and records no term count. A zero top-order coefficient
+        # cannot change a gain, so the shortest polynomial saying the same
+        # thing is what comes back.
+        padded = gain_curve_from_msv4("POWER(EL)", [0.99, 0.01, 0.0, 0.0])
+        @test length(padded.coefficients) == 2
+        @test gain(padded, 0.5) ≈ gain(
+            gain_curve_from_msv4("POWER(EL)", [0.99, 0.01]), 0.5
+        )
+
+        # A gain polynomial has at least a constant term, so one that is zero
+        # throughout keeps it rather than becoming empty.
+        @test gain_curve_from_msv4("POWER(EL)", zeros(4)).coefficients == [0.0]
+
+        @test_throws "is not a gain curve MSv4 names" gain_curve_from_msv4(
+            "POWER(HA)", [1.0]
+        )
+    end
+
+    @testset "a store that names no angle is not a curve" begin
+        # MSv4 makes `gain_curve_type` optional, but coefficients that name no
+        # angle could be against elevation or against zenith angle, and the two
+        # disagree everywhere but the horizon.
+        xds = XRadio.subdataset(
+            :gain_curve;
+            antenna_name = ["AA", "BB"], receptor_label = ["pol_0", "pol_1"],
+            poly_term = Int64[0, 1],
+            gain_curve = reshape(Float64[1, 2, 3, 4, 5, 6, 7, 8], 2, 2, 2),
+            gain_curve_sensitivity = fill(0.1, 2, 2),
+            gain_curve_interval = fill(60.0, 2),
+        )
+        @test_throws "carries no `gain_curve_type`" gaincurves(xds)
     end
 
     @testset "a tabulated curve interpolates and does not extrapolate" begin
