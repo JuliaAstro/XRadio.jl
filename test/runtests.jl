@@ -16,6 +16,7 @@ include("synthetic.jl")
 include("synthetic_fitsidi.jl")
 
 @testset "XRadio" begin
+    include("test_api.jl")
     include("test_schema.jl")
     include("test_io.jl")
     include("test_check.jl")

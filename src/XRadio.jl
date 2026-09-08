@@ -25,6 +25,7 @@ ms[:visibility]                             # the science array
 """
 module XRadio
 
+using Compat: @compat
 using Dates
 using Reexport
 
@@ -48,11 +49,19 @@ export AbstractGainCurve, GainPolynomial, TabulatedGain, SphericalHarmonicGain,
 export fitsidi2msv4, fitsidi_gain_curves
 export datagroups, datagroup, correlated, flags, weights, uvw
 export antennas, scans, fields, intents, frequencies, polarizations, times, spectralwindow
-export BaselineId, Frequency, Polarization, UVWLabel, AntennaName, StationName,
-    FieldName, ReceptorLabel, ElementId, CartesianPosLabel, CartesianPosLabelLocal,
+export BaselineID, Frequency, Polarization, UVWLabel, AntennaName, StationName,
+    FieldName, ReceptorLabel, ElementID, CartesianPosLabel, CartesianPosLabelLocal,
     EllipsoidDirLabel, EllipsoidDisLabel, SkyDirLabel, SkyDisLabel, LocalSkyDirLabel,
     LineLabel, ToneLabel, PolyTerm, NPolynomial, TimeEphemeris, TimePointing,
     TimeSystemCal, TimeWeather, TimePhaseCal, FrequencySystemCal
+
+# Public, but not exported: reachable as `XRadio.name`, and part of what the
+# package promises. Checking a store against the standard is not what most work
+# with one involves, and the gain-curve interface is what an outside curve type
+# implements rather than what a caller types, so neither earns a name in the
+# caller's namespace.
+@compat public check, validate, SchemaIssue, SchemaError
+@compat public gain_variable, gain_quantity, msv4_gain_curve
 
 include("dimensions.jl")
 include("schema/spec.jl")

@@ -57,7 +57,7 @@ function synthetic_visibility(;
         )
     )
     pol = Polarization(Categorical(["XX", "YY"]))
-    base = BaselineId(Sampled(collect(1:nbaseline)))
+    base = BaselineID(Sampled(collect(1:nbaseline)))
     uvwlab = UVWLabel(Categorical(["u", "v", "w"]))
     npol = length(val(pol))
 

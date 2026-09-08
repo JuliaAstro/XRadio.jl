@@ -9,6 +9,10 @@ XRadio.gain_variable(::SquaredCosineGain) = :zenith_angle
 XRadio.gain_quantity(::SquaredCosineGain) = :power
 XRadio.gain(::SquaredCosineGain, x::Real) = cos(x)^2
 
+# A curve that implements none of the interface, which is how a curve defined
+# outside XRadio arrives before it says anything about itself.
+struct BareGain <: AbstractGainCurve end
+
 @testset "gain curves" begin
     @testset "a polynomial is evaluated where it says it is" begin
         # A VLBA Q-band curve: 0.683 + 0.0165 za - 0.000214 za^2 in degrees,
@@ -125,6 +129,17 @@ XRadio.gain(::SquaredCosineGain, x::Real) = cos(x)^2
         @test gain_quantity(curve) == :power
         @test gain(curve, 0.4) == gain(inner, 0.4)
         @test gain(curve, (; hour_angle = 0.4)) == gain(inner, 0.4)
+
+        # The declination it carries is the one the wrapped curve sees, so
+        # wrapping a curve that needs a declination makes it evaluable at a
+        # position that gives only the hour angle.
+        harmonic = SphericalHarmonicGain([1.0, 0.5, zeros(8)...])
+        at = AtDeclination(harmonic, deg2rad(30))
+        @test gain(at, (; hour_angle = 0.3)) ==
+            gain(harmonic, (; hour_angle = 0.3, declination = deg2rad(30)))
+        # A caller who says where the source is keeps their own declination.
+        @test gain(at, (; hour_angle = 0.3, declination = 0.9)) ==
+            gain(harmonic, (; hour_angle = 0.3, declination = 0.9))
         # Wrapping does not make a curve writable, and does not make one
         # unwritable either.
         @test msv4_gain_curve(curve) === nothing
@@ -139,6 +154,14 @@ XRadio.gain(::SquaredCosineGain, x::Real) = cos(x)^2
         # position, which is all an outside curve has to say.
         @test gain(curve, (; elevation = π / 2)) == 1.0
         @test gain(curve, (; elevation = 0.0)) ≈ 0.0 atol = 1.0e-15
+    end
+
+    @testset "a curve that says neither what it is nor what of" begin
+        # Both halves of the interface an outside curve implements fail the
+        # same way when it implements neither: a sentence naming what is
+        # missing.
+        @test_throws "defines neither `XRadio.gain_variable`" gain_variable(BareGain())
+        @test_throws "does not define `XRadio.gain_quantity`" gain_quantity(BareGain())
     end
 
     @testset "what a curve refuses" begin

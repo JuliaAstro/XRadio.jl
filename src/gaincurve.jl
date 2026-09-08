@@ -32,9 +32,10 @@ A new curve implements one of
 - `gain(curve, sky::NamedTuple)` directly, where no single angle determines the
   gain.
 
-and optionally `XRadio.msv4_gain_curve(curve)`, which says how to write the
-curve to a conforming store and defaults to `nothing` — the honest answer for
-every shape but the polynomial.
+together with `XRadio.gain_quantity(curve)`, saying whether it is a power gain
+or a voltage gain, and optionally `XRadio.msv4_gain_curve(curve)`, which says
+how to write the curve to a conforming store and defaults to `nothing` — the
+honest answer for every shape but the polynomial.
 
 Angles are radians throughout, as everywhere else in XRadio. FITS-IDI and
 casacore both write these curves against degrees, so a polynomial's
@@ -126,7 +127,12 @@ end
 Whether `curve` is a power gain or a voltage gain, one of
 [`XRadio.GAIN_QUANTITIES`](@ref).
 """
-gain_quantity(curve::AbstractGainCurve) = curve.quantity
+function gain_quantity(curve::AbstractGainCurve)
+    throw(ArgumentError(
+        "$(typeof(curve)) does not define `XRadio.gain_quantity`, so there " *
+            "is no saying whether it is a power gain or a voltage gain"
+    ))
+end
 
 # The angle a curve asks for, from the position a caller gave. Elevation and
 # declination are the ones a position states; their complements are arithmetic
@@ -188,6 +194,7 @@ GainPolynomial(coefficients; variable::Symbol = :elevation, quantity::Symbol = :
     GainPolynomial(variable, quantity, coefficients)
 
 gain_variable(curve::GainPolynomial) = curve.variable
+gain_quantity(curve::GainPolynomial) = curve.quantity
 
 function gain(curve::GainPolynomial, x::Real)
     # Horner over the values rather than the indices, so a polynomial whose
@@ -242,6 +249,7 @@ TabulatedGain(angles, gains; variable::Symbol = :elevation, quantity::Symbol = :
     TabulatedGain(variable, quantity, angles, gains)
 
 gain_variable(curve::TabulatedGain) = curve.variable
+gain_quantity(curve::TabulatedGain) = curve.quantity
 
 function gain(curve::TabulatedGain, x::Real)
     angles, gains = curve.angles, curve.gains
@@ -298,6 +306,8 @@ SphericalHarmonicGain(quantity, coefficients) =
 SphericalHarmonicGain(coefficients; quantity::Symbol = :power) =
     SphericalHarmonicGain(quantity, coefficients)
 
+gain_quantity(curve::SphericalHarmonicGain) = curve.quantity
+
 function gain(curve::SphericalHarmonicGain, sky::NamedTuple)
     θ = _sky_angle(sky, :codeclination)
     φ = _sky_angle(sky, :hour_angle)
@@ -325,9 +335,11 @@ is a different elevation. FITS-IDI records the declination beside such a curve
 and this carries it, so that a curve read from a file states the conditions it
 was measured under rather than losing them.
 
-Evaluating this is evaluating the curve it wraps. Nothing here checks that the
-position asked about is at `declination` — an antenna's gain is not undefined
-half a degree away, and where the tolerance lies is the caller's to judge.
+Evaluating this is evaluating the curve it wraps, at a position that carries
+`declination`: a caller who names a declination of their own keeps it, and one
+who does not gets this one. Nothing here checks that the position asked about
+is at `declination` — an antenna's gain is not undefined half a degree away,
+and where the tolerance lies is the caller's to judge.
 """
 struct AtDeclination{C <: AbstractGainCurve, T} <: AbstractGainCurve
     curve::C
@@ -335,7 +347,8 @@ struct AtDeclination{C <: AbstractGainCurve, T} <: AbstractGainCurve
 end
 
 gain(w::AtDeclination, x::Real) = gain(w.curve, x)
-gain(w::AtDeclination, sky::NamedTuple) = gain(w.curve, sky)
+gain(w::AtDeclination, sky::NamedTuple) =
+    gain(w.curve, merge((; declination = w.declination), sky))
 gain_variable(w::AtDeclination) = gain_variable(w.curve)
 gain_quantity(w::AtDeclination) = gain_quantity(w.curve)
 

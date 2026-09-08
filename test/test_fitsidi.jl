@@ -281,7 +281,7 @@ end
         @test lookup(vis, Polarization) == ["RR", "RL", "LR", "LL"]
         @test lookup(vis, Frequency) == gt.frequencies[:, band]
         @test lookup(vis, Ti) == datetime2unix.(gt.datetimes[times])
-        @test lookup(vis, BaselineId) == 1:length(gt.baselines)
+        @test lookup(vis, BaselineID) == 1:length(gt.baselines)
         @test collect(ms[:baseline_antenna1_name]) ==
             [gt.antenna_names[a] for (a, _) in gt.baselines]
         @test collect(ms[:baseline_antenna2_name]) ==
@@ -670,6 +670,20 @@ end
         @test curve isa SphericalHarmonicGain
         # Only A00 is set, so the curve is that constant everywhere.
         @test gain(curve, (; hour_angle = 0.3, declination = 0.7)) == 1.0
+
+        # The expansion has ten terms and a file claiming more is told which
+        # part of it the reader cannot believe.
+        wide = [
+            (; antenna = a, type = fill(3, 2, 2), nterm = fill(12, 2, 2),
+                x_typ = fill(5, 2, 2), y_typ = fill(3, 2, 2),
+                gain = Float64[t == 1 for t in 1:12, _ in 1:2, _ in 1:2],
+                sens = ones(2, 2)) for a in 1:3
+        ]
+        gt = synthetic_fitsidi(
+            joinpath(dir, "shwide.idifits");
+            gain_curves = wide, gain_curve_terms = 12,
+        )
+        @test_throws "has ten coefficients" fitsidi_gain_curves(gt.path)
     end
 
     @testset "gain curves the store keeps are the file's own numbers" begin
@@ -755,7 +769,7 @@ end
         # which only `polarization_mixed` can say.
         @test lookup(ms[:visibility], Polarization) == ["RR", "RL", "LR", "LL"]
         mixed = ms[:polarization_mixed]
-        @test lookup(mixed, BaselineId) == 1:length(gt.baselines)
+        @test lookup(mixed, BaselineID) == 1:length(gt.baselines)
         @test collect(mixed[:, 1]) == ["RR", "RL", "LR", "LL"]   # AA-AA
         @test collect(mixed[:, 3]) == ["RX", "RY", "LX", "LY"]   # AA-CC
         @test collect(mixed[:, 6]) == ["XX", "XY", "YX", "YY"]   # CC-CC

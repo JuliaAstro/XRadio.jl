@@ -768,8 +768,12 @@ function read_gain_curves(hdus, layout, freqid::Int)
             )
         elseif type[band, p, i] == 3
             # Memo 114r lists ten coefficients and lets a file state fewer; a
-            # term the expansion stops before contributes nothing.
-            SphericalHarmonicGain(:power, append!(coefficients, zeros(10 - n)))
+            # term the expansion stops before contributes nothing. More than
+            # ten is not an expansion of this shape, which the constructor
+            # says.
+            SphericalHarmonicGain(
+                :power, append!(coefficients, zeros(max(10 - n, 0)))
+            )
         else
             throw(ArgumentError(
                 "FITS-IDI GAIN_CURVE row $r gives TYPE_$p = $(type[band, p, i]) " *
@@ -1413,7 +1417,7 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
         )
     )
     polarization = Polarization(Categorical(labels))
-    baseline = BaselineId(Sampled(collect(Int64, 1:nbase)))
+    baseline = BaselineID(Sampled(collect(Int64, 1:nbase)))
     uvwlabel = UVWLabel(Categorical(["u", "v", "w"]))
 
     ms = MeasurementSet(;

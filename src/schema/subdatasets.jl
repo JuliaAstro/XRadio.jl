@@ -343,9 +343,9 @@ end
 """
     GAIN_CURVE_SCHEMA
 
-Antenna gain as a polynomial in elevation, together with the sensitivity needed
-to convert it to a flux scale. Used mainly for VLBI, where no single calibrator
-is visible to the whole array.
+Antenna gain as a polynomial in elevation or in zenith angle, together with the
+sensitivity in kelvin per jansky needed to convert it to a flux scale. Used
+mainly for VLBI, where no single calibrator is visible to the whole array.
 """
 const GAIN_CURVE_SCHEMA = DatasetSpec(
     :gain_curve, "gain_curve";
@@ -365,7 +365,8 @@ const GAIN_CURVE_SCHEMA = DatasetSpec(
     vars = ArraySpec[
         ArraySpec(
             "GAIN_CURVE", (:antenna_name, :poly_term, :receptor_label), Float64;
-            doc = "Polynomial coefficients of the gain against elevation."
+            doc = "Polynomial coefficients of the gain against the angle \
+                   `gain_curve_type` names."
         ),
         ArraySpec(
             "GAIN_CURVE_INTERVAL", (:antenna_name,), Float64;
@@ -375,14 +376,15 @@ const GAIN_CURVE_SCHEMA = DatasetSpec(
         ArraySpec(
             "GAIN_CURVE_SENSITIVITY", (:antenna_name, :receptor_label), Float64;
             attrs = quantity("K/Jy"),
-            doc = "Degrees per jansky, converting the gain curve to a flux scale."
+            doc = "Kelvin per jansky, converting the gain curve to a flux scale."
         ),
     ],
     attrs = AttrSpec[
         AttrSpec(:measured_date, :str; doc = "ISO 8601 date the gain curve was measured."),
         AttrSpec(:type, :str; values = ["gain_curve"], default = "gain_curve"),
     ],
-    doc = "Antenna gain against elevation. Replaces MSv2's GAIN_CURVE table."
+    doc = "Antenna gain against elevation or zenith angle. Replaces MSv2's \
+           GAIN_CURVE table."
 )
 
 """

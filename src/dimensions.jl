@@ -8,7 +8,7 @@ spellings. `time` maps to `DimensionalData`'s built-in `Ti` so that its time
 selectors work on MSv4 data.
 """
 
-@dim BaselineId "Baseline identifier"
+@dim BaselineID "Baseline identifier"
 @dim Frequency "Frequency (Hz)"
 @dim Polarization "Polarization product"
 @dim UVWLabel "UVW component"
@@ -17,7 +17,7 @@ selectors work on MSv4 data.
 @dim StationName "Station name"
 @dim FieldName "Field name"
 @dim ReceptorLabel "Receptor (feed) label"
-@dim ElementId "Phased-array element identifier"
+@dim ElementID "Phased-array element identifier"
 
 @dim CartesianPosLabel "Cartesian position component"
 @dim CartesianPosLabelLocal "Cartesian position component, antenna-local frame"
@@ -50,7 +50,7 @@ See also [`dimtype`](@ref) and [`msv4name`](@ref).
 """
 const MSV4_DIMS = (
     time = Ti,
-    baseline_id = BaselineId,
+    baseline_id = BaselineID,
     frequency = Frequency,
     polarization = Polarization,
     uvw_label = UVWLabel,
@@ -58,7 +58,7 @@ const MSV4_DIMS = (
     station_name = StationName,
     field_name = FieldName,
     receptor_label = ReceptorLabel,
-    element_id = ElementId,
+    element_id = ElementID,
     cartesian_pos_label = CartesianPosLabel,
     cartesian_pos_label_local = CartesianPosLabelLocal,
     ellipsoid_dir_label = EllipsoidDirLabel,
@@ -91,7 +91,7 @@ The `Dimension` type for MSv4 dimension `name`, given as a `Symbol` or
 
 ```jldoctest
 julia> XRadio.dimtype("baseline_id")
-BaselineId
+BaselineID
 ```
 """
 dimtype(name::Symbol) = get(MSV4_DIMS, name) do
@@ -106,7 +106,7 @@ The MSv4 dimension name for a `Dimension` type or instance — the inverse of
 [`dimtype`](@ref).
 
 ```jldoctest
-julia> XRadio.msv4name(BaselineId)
+julia> XRadio.msv4name(BaselineID)
 :baseline_id
 ```
 """
