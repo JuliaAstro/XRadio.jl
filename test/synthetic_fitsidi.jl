@@ -56,10 +56,12 @@ end
 const _IDI_UV_UNITS = Dict(
     :DATE => "DAYS", :TIME => "DAYS", :INTTIM => "SECONDS", :FLUX => "UNCALIB"
 )
-function _tunit_cards(columns::NamedTuple)
+# `flux_units` of `nothing` omits `FLUX`'s `TUNIT` entirely, which FITS permits.
+function _tunit_cards(columns::NamedTuple, flux_units)
     cards = Card[]
     for (n, name) in enumerate(keys(columns))
-        units = any(p -> startswith(String(name), p), ("UU", "VV", "WW")) ? "SECONDS" :
+        units = name === :FLUX ? flux_units :
+            any(p -> startswith(String(name), p), ("UU", "VV", "WW")) ? "SECONDS" :
             get(_IDI_UV_UNITS, name, nothing)
         units === nothing || push!(cards, Card("TUNIT$n", units))
     end
@@ -152,7 +154,8 @@ column `:SOURCE`, `:SOURCE_ID` or `Symbol("SOURCE ID")`, `narrays` repeats the
 reader has to divide out.
 
 Provenance: `telescope`, `obscode`, `observer`, `uv_observer`, `correlator`,
-`weightyp`.
+`weightyp`, and `flux_units`, which is the `FLUX` column's `TUNIT` and may be
+`nothing` to omit it.
 
 `flags` adds a FLAG table, one entry per row, each a named tuple that may set
 `source_id`, `ants`, `timerange`, `bands`, `chans`, `pflags`, `reason` and
@@ -222,6 +225,7 @@ function synthetic_fitsidi(
         uv_observer = observer,
         correlator = "TESTCORR",
         weightyp = "CORRELAT",
+        flux_units = "UNCALIB",
         vis_scal = nothing,
         uvw_suffix = "---SIN",
         equinox_column = :EQUINOX,
@@ -496,7 +500,7 @@ function synthetic_fitsidi(
                     Card[Card("VIS_SCAL", Float64(vis_scal))])...,
                 Card("SORT", "T*"),
             ],
-            _tunit_cards(uv_columns)
+            _tunit_cards(uv_columns, flux_units)
         )
     )
 

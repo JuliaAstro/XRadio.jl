@@ -336,6 +336,34 @@ end
         @test collect(ps[:grid_02][:scan_name]) == fill("2", 2)
     end
 
+    @testset "visibility units come from the FLUX column" begin
+        # MSv4 pins `units` to one permitted value for every array but
+        # `VISIBILITY` and `SPECTRUM`, so this is the file's to state and `Jy`
+        # would be a claim the file never made.
+        gt = synthetic_fitsidi(joinpath(dir, "uncal.idifits"))
+        ps = open(ProcessingSet, to_msv4(gt, "uncal.ps.zarr"))
+        @test metadata(ps[:uncal_00][:visibility])[:units] == "UNCALIB"
+        @test isempty(conversion_issues(ps))
+
+        # FITS spells janskys `JY`; the rest of MSv4 spells them `Jy`.
+        gt = synthetic_fitsidi(joinpath(dir, "jy.idifits"); flux_units = "JY")
+        ps = open(ProcessingSet, to_msv4(gt, "jy.ps.zarr"))
+        @test metadata(ps[:jy_00][:visibility])[:units] == "Jy"
+
+        # Anything else passes through as the file spells it.
+        gt = synthetic_fitsidi(joinpath(dir, "kelvin.idifits"); flux_units = "K")
+        ps = open(ProcessingSet, to_msv4(gt, "kelvin.ps.zarr"))
+        @test metadata(ps[:kelvin_00][:visibility])[:units] == "K"
+
+        # `TUNIT` is optional in FITS. An absent one is unstated units, not
+        # janskys, and the invention is announced.
+        gt = synthetic_fitsidi(joinpath(dir, "nounit.idifits"); flux_units = nothing)
+        ps = @test_logs (:warn, r"no TUNIT") match_mode = :any open(
+            ProcessingSet, to_msv4(gt, "nounit.ps.zarr")
+        )
+        @test metadata(ps[:nounit_00][:visibility])[:units] == "uncalib"
+    end
+
     @testset "the antennas come from ARRAY_GEOMETRY and ANTENNA" begin
         gt = synthetic_fitsidi(
             joinpath(dir, "ant.idifits");

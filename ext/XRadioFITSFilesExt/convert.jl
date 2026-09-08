@@ -1122,6 +1122,22 @@ function XRadio.fitsidi_gain_curves(path::AbstractString)
     ))
 end
 
+# MSv4 constrains `units` to a single literal for every array but `VISIBILITY` and
+# `SPECTRUM`, where it is a free string defaulting to `Jy`. Correlator output is
+# rarely in janskys, so the value comes from the `FLUX` column's `TUNIT`, spelled
+# as the file spells it. `JY` becomes `Jy` so a calibrated store agrees with the
+# rest of MSv4 on the name of a jansky.
+function _visibility_units(uv, path)
+    u = column_units(uv, "FLUX")
+    if u === nothing
+        @warn "FITS-IDI FLUX column carries no TUNIT; writing `uncalib` as \
+               `VISIBILITY.units`. Data calibrated elsewhere needs its units \
+               stated in the file." file = path
+        return "uncalib"
+    end
+    return uppercase(u) == "JY" ? "Jy" : u
+end
+
 """
     fitsidi2msv4(path, dest; kwargs...) -> dest
 
@@ -1290,6 +1306,7 @@ function XRadio.fitsidi2msv4(
     observer = let o = card_string(primary, "OBSERVER")
         isempty(o) ? card_string(uv, "OBSERVER") : o
     end
+    visibility_units = _visibility_units(uv, path)
     shared = (;
         products, bases, antenna_name, source_names, frames, source_of, scan_of,
         source_ra, source_dec, positions, mounts, diameters, telescope_name,
@@ -1303,6 +1320,7 @@ function XRadio.fitsidi2msv4(
         scan_intents = collect(String, scan_intents),
         spectral_window_intents = collect(String, spectral_window_intents),
         creation_date = _iso8601(now(UTC)),
+        visibility_units,
         observation_info = Dict{Symbol, Any}(
             :observer => [observer],
             :release_date => String(release_date),
@@ -1469,7 +1487,7 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
         )
     )
     grid = (polarization, frequency, baseline, time)
-    ms[:visibility] = DimArray(vis, grid; metadata = Dict{Symbol, Any}(:units => "Jy"))
+    ms[:visibility] = DimArray(vis, grid; metadata = Dict{Symbol, Any}(:units => s.visibility_units))
     ms[:flag] = DimArray(flag, grid)
     ms[:weight] = DimArray(weight, grid)
     ms[:uvw] = DimArray(

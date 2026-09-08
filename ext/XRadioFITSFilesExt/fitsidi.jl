@@ -48,6 +48,20 @@ end
 card(hdu, key, default) = haskey(hdu.cards, key) ? hdu.cards[key] : default
 card_string(hdu, key, default = "") = _trim(card(hdu, key, default))
 
+# The `TUNIT` of the column named `name`, or `nothing` where the column has none.
+# FITS makes `TUNIT` optional, so an absent one means the units are unstated
+# rather than dimensionless.
+function column_units(hdu, name::AbstractString)
+    i = 1
+    while haskey(hdu.cards, "TTYPE$i")
+        card_string(hdu, "TTYPE$i") == name && return let u = card_string(hdu, "TUNIT$i")
+            isempty(u) ? nothing : u
+        end
+        i += 1
+    end
+    return nothing
+end
+
 # A `LazyStructuredData` answers `keys` but not `haskey`, so optional columns
 # have to be guarded against the key list.
 hascol(data, name::Symbol) = name in keys(data)

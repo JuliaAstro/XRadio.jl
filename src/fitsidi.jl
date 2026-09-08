@@ -49,6 +49,14 @@ Units become MSv4's: kelvin, pascals and radians rather than FITS-IDI's
 centigrade, millibars and degrees. A measurement the file writes as `NaN` stays
 `NaN`, which is what the standard means by one it does not have.
 
+`VISIBILITY` is the exception, because MSv4 fixes the units of every other array
+to one permitted value but leaves this one a free string with `Jy` as its
+default. Correlator output is usually not in janskys, so the store says what the
+`FLUX` column's `TUNIT` says — `UNCALIB` for uncalibrated correlation
+coefficients, which is what a VLBI correlator writes. `TUNIT` is optional in
+FITS, and a file that omits it gets `uncalib` and a warning, since the
+alternative is to claim a calibration the file never asserted.
+
 Four things these tables carry have no MSv4 field and are dropped:
 `PHASE-CAL`'s `PC_RATE` and `STATE`, `WEATHER`'s `PRECIPITATION`, and any
 `GAIN_CURVE` curve that is not a polynomial in elevation or in zenith angle —

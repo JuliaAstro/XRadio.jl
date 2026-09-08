@@ -160,6 +160,18 @@ Python environment: a store written here passes `xradio`'s own
 `check_datatree` with no issues, and `xradio` reads it with the dimensions in
 MSv4 order and the data unchanged.
 
+That check has been run at full scale on real correlator output. A 24.73 GB
+VLBA FITS-IDI file (project BT164A, Q band, ten antennas, four spectral
+windows, 752,160 `UV_DATA` rows) converts to a processing set of 144
+Measurement Sets — four spectral windows by thirty-six inferred scans — and
+`check_datatree` reports no issues across its 1004 datasets. Three properties
+the schema checker cannot see hold as well: the `time`×`baseline_id` cells sum
+to exactly the file's row count in each spectral window, so the conversion
+neither loses nor duplicates a row; none of the 3,080,847,360 visibility cells
+is padding, which is what partitioning by scan is for; and the phase center
+reads back as 3C273's catalogue position, which exercises the
+degrees-to-radians conversion against a number that can be looked up.
+
 Regenerate the reference against a new `xradio` release with:
 
 ```python
