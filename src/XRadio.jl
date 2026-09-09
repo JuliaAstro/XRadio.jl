@@ -27,6 +27,7 @@ module XRadio
 
 using Compat: @compat
 using Dates
+using EnumX: @enumx
 using Reexport
 
 # A MeasurementSet is a DimTree and a Dataset a DimStack, so selecting, slicing
@@ -48,7 +49,9 @@ export AbstractGainCurve, GainPolynomial, TabulatedGain, SphericalHarmonicGain,
     AtDeclination, gain
 export fitsidi2msv4, fitsidi_gain_curves
 export datagroups, datagroup, correlated, flags, weights, uvw
-export antennas, scans, fields, intents, frequencies, polarizations, times, spectralwindow,
+export antennas, scans, fields, scan_intents, spectral_window_intents,
+    Intent, ScanIntents, SubscanIntents,
+    frequencies, polarizations, times, spectralwindow,
     gaincurves, baseline, baselines, select, transform
 export BaselineID, Frequency, Polarization, UVWLabel, AntennaName, StationName,
     FieldName, ReceptorLabel, ElementID, CartesianPosLabel, CartesianPosLabelLocal,
@@ -71,6 +74,7 @@ include("schema/infodicts.jl")
 include("schema/correlated.jl")
 include("schema/subdatasets.jl")
 include("schema/registry.jl")
+include("intents.jl")
 include("types.jl")
 include("build.jl")
 include("mount.jl")

@@ -249,15 +249,41 @@ The distinct field names in `ms`, in the order they first occur.
 fields(ms::MeasurementSet) = haskey(ms, :field_name) ? unique(parent(ms[:field_name])) : String[]
 
 """
-    intents(ms) -> Vector{String}
+    scan_intents(ms) -> Vector{Intent}
 
-What the observation was for, from `observation_info`. Values look like
-`"OBSERVE_TARGET#ON_SOURCE"` or `"CALIBRATE_BANDPASS#ON_SOURCE"`.
+What the scans of `ms` were observed for, as [`Intent`](@ref)s — the store's
+`"OBSERVE_TARGET#ON_SOURCE"` parsed into the ASDM enumeration members it names.
+
+MSv4 states these on the `scan_name` coordinate, one list for the Measurement
+Set rather than one per scan. The attribute is required, so a store stating
+none is not conforming and [`XRadio.check`](@ref) is what says so; this gives
+an empty result.
+
+An intent outside the ASDM enumerations throws, naming the value. It cannot
+have been written by this package, whose converter takes `Intent`s.
+
+See also [`spectral_window_intents`](@ref), which stays strings because its
+vocabulary is not enumerated.
 """
-function intents(ms::MeasurementSet)
-    info = get(metadata(ms), :observation_info, nothing)
-    info isa AbstractDict || return String[]
-    return String.(get(info, :intents, String[]))
+function scan_intents(ms::MeasurementSet)
+    haskey(ms, :scan_name) || return Intent[]
+    return Intent.(get(metadata(ms[:scan_name]), :scan_intents, String[]))
+end
+
+"""
+    spectral_window_intents(ms) -> Vector{String}
+
+What the spectral window of `ms` was set up to observe, such as
+`"CONTINUUM"` or `"LINE"`.
+
+MSv4 states these on the `frequency` coordinate, beside the spectral window's
+name. Intents sit on two different axes and mean different things, which is why
+this is separate from [`scan_intents`](@ref) rather than pooled with it.
+"""
+function spectral_window_intents(ms::MeasurementSet)
+    d = dims(ms, dimtype(:frequency))
+    d === nothing && return String[]
+    return String.(get(metadata(lookup(d)), :spectral_window_intents, String[]))
 end
 
 """

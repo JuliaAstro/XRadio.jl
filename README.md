@@ -28,7 +28,20 @@ correlated(ms)          # the visibilities, via the base data group
 antennas(ms)            # ["DV02_A015", "DV06_T704", …]
 frequencies(ms)         # channel centres, in Hz
 scans(ms), fields(ms)
+scan_intents(ms)        # [Intent("OBSERVE_TARGET#ON_SOURCE")]
 ```
+
+Scan intents come back as `Intent`s rather than strings. Both halves are closed
+ASDM enumerations, so they are compared against names the compiler checks
+instead of strings a typo makes silently unequal:
+
+```julia
+Intent(ScanIntents.OBSERVE_TARGET, SubscanIntents.ON_SOURCE) in scan_intents(ms)
+```
+
+An intent outside those enumerations throws when read, naming the value.
+`spectral_window_intents(ms)` stays strings, since that vocabulary is not
+enumerated.
 
 `read(ProcessingSet, path)` does the same but brings every array into memory.
 
@@ -183,7 +196,9 @@ the value used when the file is silent, and whether it says so:
 | `spectral_window_name` | `spw_0`, `spw_1`, … from the `BAND` index | no |
 
 `release_date`, `scan_intents` and `spectral_window_intents` are keywords of
-the same name, so a caller who knows the real values can state them. Only
+the same name, so a caller who knows the real values can state them.
+`scan_intents` takes `Intent`s, or strings that parse as one, so an intent
+outside the ASDM enumerations is rejected rather than written. Only
 `release_date` warns, because a sentinel date could be mistaken for a real
 embargo.
 

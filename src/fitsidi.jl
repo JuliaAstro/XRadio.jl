@@ -84,7 +84,11 @@ says the datum must not be used and `WEIGHT` says how good it would have been.
   only a small file can afford.
 - `gap = 60.0`: seconds between timestamps above which a scan is taken to have
   ended.
-- `scan_intents = ["UNSPECIFIED"]`, `spectral_window_intents = ["UNSPECIFIED"]`.
+- `scan_intents = [Intent(ScanIntents.UNSPECIFIED)]`: [`Intent`](@ref)s, or
+  strings that parse as one. An intent outside the ASDM enumerations is
+  rejected here rather than written to the store.
+- `spectral_window_intents = ["UNSPECIFIED"]`: strings, since that vocabulary
+  is not enumerated.
 - `release_date`: ISO 8601 date on which the data may become public. Defaults
   to the MJD zero point, with a warning.
 - `weight_mode = :auto`: how the on-disk `WEIGHT` column becomes an MSv4

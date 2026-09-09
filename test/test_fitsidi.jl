@@ -988,6 +988,16 @@ end
         @test metadata(ms[:scan_name])[:scan_intents] == ["OBSERVE_TARGET#ON_SOURCE"]
         @test metadata(lookup(ms[:visibility], Frequency))[:spectral_window_intents] ==
             ["CONTINUUM"]
+
+        # The keyword takes `Intent`s, so the converter cannot write a scan
+        # intent that reading the store back would reject.
+        @test_throws "is not an ASDM scan intent" to_msv4(
+            gt, "badintent.ps.zarr"; scan_intents = ["NOT_AN_INTENT"]
+        )
+        @test scan_intents(open(ProcessingSet, to_msv4(
+            gt, "typedintents.ps.zarr";
+            scan_intents = [Intent(ScanIntents.CALIBRATE_BANDPASS, SubscanIntents.ON_SOURCE)],
+        ))[:invent_00]) == [Intent("CALIBRATE_BANDPASS#ON_SOURCE")]
     end
 
     @testset "an unconvertible file is refused" begin

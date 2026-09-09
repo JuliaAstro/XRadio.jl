@@ -123,7 +123,7 @@ ps = open(ProcessingSet, "track.ps.zarr")
 length(ps)
 ps[1]
 ps[:track_00]
-filter(ms -> "CALIBRATE_BANDPASS" in intents(ms), ps)
+filter(ms -> "CALIBRATE_BANDPASS#ON_SOURCE" in scan_intents(ms), ps)
 ```
 """
 struct ProcessingSet

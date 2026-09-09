@@ -183,8 +183,8 @@ end
     @test eltype(collect(ps)) == MeasurementSet
     @test ps[1] === ps[:test_00] === ps.test_00
     @test haskey(ps, :test_01)
-    @test length(filter(ms -> "OBSERVE_TARGET#ON_SOURCE" in intents(ms), ps)) == 3
-    @test length(filter(ms -> isempty(intents(ms)), ps)) == 0
+    @test length(filter(ms -> Intent("OBSERVE_TARGET#ON_SOURCE") in scan_intents(ms), ps)) == 3
+    @test length(filter(ms -> isempty(scan_intents(ms)), ps)) == 0
     @test occursin("ProcessingSet", sprint(show, MIME("text/plain"), ps))
 end
 
@@ -203,12 +203,61 @@ end
     @test write(path, ps; overwrite = true) == path
 end
 
+@testset "scan intents" begin
+    @testset "the ASDM enumerations" begin
+        # Both are closed, and both define TEST and UNSPECIFIED, which is why
+        # they are separate modules.
+        @test length(instances(ScanIntents.T)) == 30
+        @test length(instances(SubscanIntents.T)) == 11
+        @test ScanIntents.TEST isa ScanIntents.T
+        @test SubscanIntents.TEST isa SubscanIntents.T
+    end
+
+    @testset "parsing and round-trip" begin
+        i = Intent("OBSERVE_TARGET#ON_SOURCE")
+        @test i == Intent(ScanIntents.OBSERVE_TARGET, SubscanIntents.ON_SOURCE)
+        @test string(i) == "OBSERVE_TARGET#ON_SOURCE"
+
+        # An omitted subintent is not `UNSPECIFIED`: the first says the store
+        # names no subintent, the second says it names that one. Writing back
+        # what was read must not turn one into the other.
+        bare = Intent("UNSPECIFIED")
+        @test bare.subintent === nothing
+        @test string(bare) == "UNSPECIFIED"
+        @test bare != Intent(ScanIntents.UNSPECIFIED, SubscanIntents.UNSPECIFIED)
+        @test string(Intent(ScanIntents.UNSPECIFIED, SubscanIntents.UNSPECIFIED)) ==
+            "UNSPECIFIED#UNSPECIFIED"
+
+        @test all(s -> string(Intent(s)) == s,
+            ("OBSERVE_TARGET#ON_SOURCE", "CALIBRATE_BANDPASS#UNSPECIFIED",
+                "CALIBRATE_DIFFGAIN", "TEST#TEST"))
+    end
+
+    @testset "a value outside the enumerations throws" begin
+        # This exact misspelling appears in the reference implementation's own
+        # schema docstring, where it is silently just another string.
+        @test_throws ArgumentError Intent("OBSERVE_TARGE#UNSPECIFIED")
+        @test_throws "`OBSERVE_TARGE` is not an ASDM scan intent" Intent(
+            "OBSERVE_TARGE#UNSPECIFIED"
+        )
+        @test_throws "the 30 it defines are" Intent("OBSERVE_TARGE#UNSPECIFIED")
+
+        @test_throws "`ONSOURCE` is not an ASDM subscan intent" Intent(
+            "OBSERVE_TARGET#ONSOURCE"
+        )
+        @test_throws "the 11 it defines are" Intent("OBSERVE_TARGET#ONSOURCE")
+
+        @test_throws "is not a scan intent" Intent("A#B#C")
+    end
+end
+
 @testset "accessors" begin
     ms = synthetic_set(1)[1]
     @test antennas(ms) == ["AA", "BB", "CC"]
     @test scans(ms) == ["1"]
     @test fields(ms) == ["field_0"]
-    @test intents(ms) == ["OBSERVE_TARGET#ON_SOURCE"]
+    @test scan_intents(ms) == [Intent(ScanIntents.OBSERVE_TARGET, SubscanIntents.ON_SOURCE)]
+    @test spectral_window_intents(ms) == ["CONTINUUM"]
     @test polarizations(ms) == ["XX", "YY"]
     @test spectralwindow(ms) == "spw_0"
     @test length(frequencies(ms)) == 5

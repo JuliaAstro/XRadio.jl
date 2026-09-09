@@ -1147,7 +1147,7 @@ function XRadio.fitsidi2msv4(
         path::AbstractString, dest::AbstractString;
         partition = (:scan,),
         gap::Real = 60.0,
-        scan_intents::AbstractVector{<:AbstractString} = ["UNSPECIFIED"],
+        scan_intents = [XRadio.Intent(XRadio.ScanIntents.UNSPECIFIED)],
         spectral_window_intents::AbstractVector{<:AbstractString} = ["UNSPECIFIED"],
         release_date::Union{Nothing, AbstractString} = nothing,
         weight_mode::Symbol = :auto,
@@ -1317,7 +1317,9 @@ function XRadio.fitsidi2msv4(
         ref_freq, band_freq, reference_frequency,
         ch_width, radiometer, vis_scal, weight_scal, inttim,
         efficiency = Float64(weight_efficiency), perm, layout,
-        scan_intents = collect(String, scan_intents),
+        # Stored as MSv4 states them, but validated on the way in: an intent
+        # outside the ASDM enumerations cannot reach the store.
+        scan_intents = [string(XRadio.Intent(i)) for i in scan_intents],
         spectral_window_intents = collect(String, spectral_window_intents),
         creation_date = _iso8601(now(UTC)),
         visibility_units,

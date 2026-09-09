@@ -84,7 +84,6 @@ function synthetic_visibility(;
                 :observer => ["Nobody"],
                 :release_date => "2027-01-01T00:00:00.000",
                 :project_UID => "uid://X0/X1/X2",
-                :intents => ["OBSERVE_TARGET#ON_SOURCE"],
             ),
             :processor_info => Dict{Symbol, Any}(:type => "CORRELATOR", :sub_type => "TEST"),
             :data_groups => Dict{Symbol, Any}(
