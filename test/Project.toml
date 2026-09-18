@@ -11,12 +11,12 @@ XRadio = "8f21e5d1-474f-4c64-bef4-ed78edb0e816"
 Zarr = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
 
 [sources]
-FITSFiles = {path = "/home/ptiede/.julia/dev/FITSFiles"}
+FITSFiles = {url = "https://github.com/ptiede/FITSFiles.jl", rev = "ptiede-uvfixes"}
 
 [compat]
 Dates = "1"
 DimensionalData = "0.30"
-FITSFiles = "0.3.2"
+FITSFiles = "0.4"
 JSON = "1.8.0"
 LinearAlgebra = "1"
 OffsetArrays = "1.12"
