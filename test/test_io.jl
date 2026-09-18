@@ -35,9 +35,13 @@ end
 
     # The extension is reported as a conformance issue rather than raised as an
     # error: whether the schema covers an array is a separate question from
-    # whether the data can be described at all.
+    # whether the data can be described at all. What is reported is the
+    # dimensions, not the array — an extra array is always allowed, but only
+    # over dimensions the dataset already has.
     issues = check(back)
-    @test any(i -> occursin("solution_gain", i.path), issues)
+    @test any(i -> occursin("`solution_interval`", i.message), issues)
+    @test any(i -> occursin("`solution_basis`", i.message), issues)
+    @test !any(i -> occursin("solution_gain", i.path), issues)
 end
 
 @testset "round trip through zarr v$fmt" for fmt in (2, 3)

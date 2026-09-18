@@ -31,6 +31,9 @@ when deliberately writing a store that does not conform.
   wrong for large ones — a store meant for partial reads needs chunking.
 - `overwrite = false`: whether to replace an existing store at `path`.
 - `validate = true`: whether to check conformance before writing.
+- `schemas = ()`: dataset specifications of the caller's own, for sub-dataset
+  types the standard does not define. They decide both what conforms and what
+  each layer is named on disk; see [`schema_types`](@ref).
 
 ```julia
 write("track.ps.zarr", ps; chunks = Dict(:time => 64, :frequency => 128))
@@ -43,12 +46,14 @@ function Base.write(
         chunks = Dict{Symbol, Int}(),
         overwrite::Bool = false,
         validate::Bool = true,
+        schemas = (),
     )
-    validate && XRadio.validate(ps)
+    validate && XRadio.validate(ps; schemas)
 
+    table = schema_types(schemas)
     root = _create_store(path, metadata(ps); zarr_format, overwrite)
     for (name, ms) in pairs(ps)
-        _write_tree(root, string(name), ms; zarr_format, compressor, chunks)
+        _write_tree(root, string(name), ms; zarr_format, compressor, chunks, table)
     end
     _consolidate(root)
     return path
@@ -90,7 +95,10 @@ function _create_store(path::AbstractString, meta; zarr_format::Integer, overwri
     return Zarr.zgroup(store, "", zarr_format; attrs = _to_attrs(meta))
 end
 
-function _write_tree(parent::Zarr.ZGroup, name::AbstractString, tree; zarr_format, compressor, chunks)
+function _write_tree(
+        parent::Zarr.ZGroup, name::AbstractString, tree;
+        zarr_format, compressor, chunks, table = MSV4_SCHEMA_TYPES
+    )
     group = Zarr.zgroup(parent, name; attrs = _to_attrs(metadata(tree)))
 
     # Index coordinates are dimensions of the tree rather than layers, so they
@@ -107,17 +115,17 @@ function _write_tree(parent::Zarr.ZGroup, name::AbstractString, tree; zarr_forma
     # only those sharing a variable's dimensions would leave a coordinate such
     # as `polarization_type`, whose `receptor_label` no data variable spans,
     # mentioned nowhere and read back as a variable.
-    auxiliary = _auxiliary_coords(tree)
+    auxiliary = _auxiliary_coords(tree, table)
     allcoords = sort!(collect(values(auxiliary)))
     for key in keys(tree)
         coords = haskey(auxiliary, key) ? String[] : allcoords
         _write_array(
-            group, _diskname(tree, key), tree[key];
+            group, _diskname(tree, key, table), tree[key];
             zarr_format, compressor, chunks, coords
         )
     end
     for (subkey, sub) in branches(tree)
-        _write_tree(group, nodename(subkey), sub; zarr_format, compressor, chunks)
+        _write_tree(group, nodename(subkey), sub; zarr_format, compressor, chunks, table)
     end
     return group
 end
@@ -126,32 +134,28 @@ end
 # them coordinates, but they span a dimension they are not named after, so
 # `DimensionalData` holds them as layers. `field_name` and `scan_name` label
 # the time axis this way.
-function _auxiliary_coords(tree)
-    type = get(metadata(tree), :type, nothing)
-    type isa AbstractString || return Dict{Symbol, String}()
-    spec = try
-        schema(type)
-    catch
-        return Dict{Symbol, String}()
-    end
+function _auxiliary_coords(tree, table)
+    spec = _spec(tree, table)
+    spec === nothing && return Dict{Symbol, String}()
     return Dict{Symbol, String}(
         c.name => c.diskname for c in spec.coords if haskey(tree, c.name)
     )
 end
 
+# The specification a tree's `type` attribute names, or `nothing` when it names
+# none. A dataset whose type nothing describes is still written; it just gets
+# no help with its names.
+function _spec(tree, table)
+    type = get(metadata(tree), :type, nothing)
+    return type isa AbstractString ? get(table, type, nothing) : nothing
+end
+
 # The on-disk name of a layer. The schema knows it; a variable the schema does
 # not define — an extra version of the visibilities, say — is written upper
 # case, which is how MSv4 spells its data variables.
-function _diskname(tree, key::Symbol)
-    type = get(metadata(tree), :type, nothing)
-    if type isa AbstractString
-        spec = try
-            schema(type)
-        catch
-            nothing
-        end
-        spec !== nothing && haskey(spec, key) && return spec[key].diskname
-    end
+function _diskname(tree, key::Symbol, table)
+    spec = _spec(tree, table)
+    spec !== nothing && haskey(spec, key) && return spec[key].diskname
     return uppercase(string(key))
 end
 

@@ -22,8 +22,13 @@ One entry in a dataset's or array's attribute dictionary.
 `values` lists the permitted values when the standard restricts them — it does
 this for reference frames, time scales, and the like — and is `nothing` when
 any value of `type` is allowed. `type` is the attribute's type as the standard
-states it: `:str`, `:bool`, `:int`, `:float`, `:list`, `:dict`, or
-`:dataarray` for an attribute that is itself a labelled array.
+states it: `:str`, `:bool`, `:int`, `:float`, `Symbol("list[str]")`, `:dict`,
+or `:dataarray` for an attribute that is itself a labelled array.
+
+`nested` describes the inside of a structured value — the [`DictSpec`](@ref) of
+a `:dict` attribute, the [`ArraySpec`](@ref) of a `:dataarray` one — and is
+`nothing` for a scalar. Without it a `:dict` attribute is checked only for
+being a dictionary.
 """
 struct AttrSpec
     name::Symbol
@@ -31,15 +36,17 @@ struct AttrSpec
     values::Union{Nothing, Vector{String}}
     default::Any
     optional::Bool
+    nested::Any
     doc::String
 end
 
 function AttrSpec(
         name::Symbol, type::Symbol;
-        values = nothing, default = nothing, optional::Bool = false, doc::AbstractString = ""
+        values = nothing, default = nothing, optional::Bool = false,
+        nested = nothing, doc::AbstractString = ""
     )
     vals = values === nothing ? nothing : collect(String.(values))
-    return AttrSpec(name, type, vals, default, optional, String(doc))
+    return AttrSpec(name, type, vals, default, optional, nested, String(doc))
 end
 
 """
@@ -141,6 +148,22 @@ function dimensions(spec::DatasetSpec)
     out = Symbol[]
     for a in arrays(spec), ds in a.dims, d in ds
         d in out || push!(out, d)
+    end
+    return out
+end
+
+"""
+    required_dimensions(spec::DatasetSpec) -> Set{Symbol}
+
+The dimensions every conforming dataset of this kind spans: those a required
+array names in each of its permitted shapes. The rest of [`dimensions`](@ref)
+appear only when the array carrying them does.
+"""
+function required_dimensions(spec::DatasetSpec)
+    out = Set{Symbol}()
+    for a in arrays(spec)
+        a.optional && continue
+        union!(out, reduce(intersect, (Set(ds) for ds in a.dims)))
     end
     return out
 end

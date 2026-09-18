@@ -84,12 +84,26 @@ const DATA_GROUP = DictSpec(
 )
 
 """
+    DATA_GROUPS
+
+The `data_groups` attribute of a correlated dataset: one [`DATA_GROUP`](@ref)
+per grouping, keyed by the group's name. `base` is the only name the standard
+fixes; a dataset may add whatever others it needs, and their contents are its
+own business.
+"""
+const DATA_GROUPS = DictSpec(
+    :data_groups,
+    [AttrSpec(:base, :dict; nested = DATA_GROUP, doc = "The grouping every dataset carries")];
+    doc = "The correlated-data groupings a dataset holds."
+)
+
+"""
     INFO_DICTS
 
 Every metadata dictionary the standard defines, by name.
 """
 const INFO_DICTS = Dict{Symbol, DictSpec}(
-    d.name => d for d in (OBSERVATION_INFO, PROCESSOR_INFO, CREATOR, DATA_GROUP)
+    d.name => d for d in (OBSERVATION_INFO, PROCESSOR_INFO, CREATOR, DATA_GROUP, DATA_GROUPS)
 )
 
 """

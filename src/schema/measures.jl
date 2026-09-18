@@ -88,6 +88,7 @@ function time_measure(; type::AbstractString = "time", integration_time::Bool = 
             attrs,
             AttrSpec(
                 :integration_time, :dataarray;
+                nested = ArraySpec("integration_time", (), Float64; attrs = quantity("s")),
                 doc = "Nominal sampling interval, in seconds"
             )
         )
@@ -173,9 +174,21 @@ frequency_axis(; observer::AbstractString = "icrs") = vcat(
             doc = "What the spectral window was set up to observe"
         ),
         AttrSpec(:frequency_group_name, :str; optional = true, doc = "Group the spectral window belongs to"),
-        AttrSpec(:reference_frequency, :dataarray; doc = "Frequency the doppler shift is defined against"),
-        AttrSpec(:channel_width, :dataarray; doc = "Nominal channel width, in hertz"),
-        AttrSpec(:doppler, :dataarray; optional = true, doc = "Doppler shift applied to the frequencies"),
+        AttrSpec(
+            :reference_frequency, :dataarray;
+            nested = ArraySpec("reference_frequency", (), Float64; attrs = spectral_coord(; observer)),
+            doc = "Frequency the doppler shift is defined against"
+        ),
+        AttrSpec(
+            :channel_width, :dataarray;
+            nested = ArraySpec("channel_width", (), Float64; attrs = quantity("Hz")),
+            doc = "Nominal channel width, in hertz"
+        ),
+        AttrSpec(
+            :doppler, :dataarray; optional = true,
+            nested = ArraySpec("doppler", (), Float64; attrs = doppler()),
+            doc = "Doppler shift applied to the frequencies"
+        ),
     ],
 )
 

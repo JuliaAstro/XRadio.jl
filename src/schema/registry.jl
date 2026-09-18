@@ -26,9 +26,34 @@ end
 # Every `type` attribute value the standard defines, mapped to its schema. A
 # schema may answer to more than one: `radiometer` data uses the visibility
 # layout.
-const _SCHEMA_BY_TYPE = Dict{String, DatasetSpec}(
+const MSV4_SCHEMA_TYPES = Dict{String, DatasetSpec}(
     t => s for s in values(SCHEMAS) for t in s.type
 )
+
+"""
+    schema_types(extra) -> Dict{String, DatasetSpec}
+
+The `type`-to-schema table [`check`](@ref) and [`write`](@ref) resolve a
+dataset's `type` attribute against: the MSv4 schemas, together with the
+`DatasetSpec`s in `extra`.
+
+MSv4 is extensible at the level of whole sub-datasets. A store may carry a node
+whose `type` the standard does not define, and it conforms as long as something
+says what that type must look like; `extra` is where the caller says so, at the
+point of use. Passing a specification whose `type` the standard already defines
+replaces the standard one.
+
+```julia
+check(ps; schemas = [CALIBRATION_SCHEMA])
+```
+"""
+function schema_types(extra)
+    isempty(extra) && return MSV4_SCHEMA_TYPES
+    return merge(
+        MSV4_SCHEMA_TYPES,
+        Dict{String, DatasetSpec}(t => s for s in extra for t in s.type)
+    )
+end
 
 """
     schema(type::AbstractString) -> DatasetSpec
@@ -41,8 +66,8 @@ julia> XRadio.schema("radiometer").name
 :visibility
 ```
 """
-schema(type::AbstractString) = get(_SCHEMA_BY_TYPE, type) do
-    throw(ArgumentError("`$type` is not an MSv4 dataset type. Known: $(join(sort(collect(keys(_SCHEMA_BY_TYPE))), ", "))"))
+schema(type::AbstractString) = get(MSV4_SCHEMA_TYPES, type) do
+    throw(ArgumentError("`$type` is not an MSv4 dataset type. Known: $(join(sort(collect(keys(MSV4_SCHEMA_TYPES))), ", "))"))
 end
 
 schema(name::Symbol) = get(SCHEMAS, name) do

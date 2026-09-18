@@ -150,11 +150,18 @@ _unwrap_strings(a::AbstractArray{<:Zarr.MaxLengthStrings.MaxLengthString}) = Str
 _unwrap_strings(a::AbstractArray) = a
 
 function _read_measurement_set(group::Zarr.ZGroup; lazy::Bool)
-    ms = _read_into(MeasurementSet, group; lazy)
+    return _read_branches!(_read_into(MeasurementSet, group; lazy), group; lazy)
+end
+
+# Sub-datasets nest: a field and source dataset carries its ephemeris as a node
+# of its own, and a dataset type of a caller's own may carry anything. Reading
+# only the first level would drop the rest on the floor.
+function _read_branches!(tree, group::Zarr.ZGroup; lazy::Bool)
     for name in sort!(collect(keys(group.groups)))
-        branches(ms)[nodekey(name)] = _read_into(Dataset, group.groups[name]; lazy)
+        sub = group.groups[name]
+        branches(tree)[nodekey(name)] = _read_branches!(_read_into(Dataset, sub; lazy), sub; lazy)
     end
-    return ms
+    return tree
 end
 
 # Build a tree from one Zarr group: its arrays become layers, and its index

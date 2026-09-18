@@ -14,15 +14,24 @@ baselines that drop out are padded with `NaN` rather than removed.
 
 # Attributes every correlated dataset carries.
 _correlated_attrs(types) = [
-    AttrSpec(:observation_info, :dict; doc = "Observation-level metadata; see [`OBSERVATION_INFO`](@ref)"),
-    AttrSpec(:processor_info, :dict; doc = "Correlator metadata; see [`PROCESSOR_INFO`](@ref)"),
     AttrSpec(
-        :data_groups, :dict;
+        :observation_info, :dict; nested = OBSERVATION_INFO,
+        doc = "Observation-level metadata; see [`OBSERVATION_INFO`](@ref)"
+    ),
+    AttrSpec(
+        :processor_info, :dict; nested = PROCESSOR_INFO,
+        doc = "Correlator metadata; see [`PROCESSOR_INFO`](@ref)"
+    ),
+    AttrSpec(
+        :data_groups, :dict; nested = DATA_GROUPS,
         doc = "Groupings of correlated data with their flags and weights; see [`DATA_GROUP`](@ref). \
                A group named `base` is mandatory"
     ),
     AttrSpec(:schema_version, :str; doc = "MSv4 schema version the dataset was written against"),
-    AttrSpec(:creator, :dict; doc = "Software that wrote the dataset; see [`CREATOR`](@ref)"),
+    AttrSpec(
+        :creator, :dict; nested = CREATOR,
+        doc = "Software that wrote the dataset; see [`CREATOR`](@ref)"
+    ),
     AttrSpec(:creation_date, :str; doc = "ISO 8601 time at which the dataset was written"),
     AttrSpec(:type, :str; values = types, default = first(types)),
 ]
