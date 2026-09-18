@@ -39,7 +39,7 @@ using DimensionalData: @dim, Dimension, DimArray, DimStack, DimTree, branches, v
 using DimensionalData.Lookups: Lookups, Categorical, Sampled
 using OrderedCollections: OrderedDict
 
-import JSON3
+import JSON
 import Zarr
 
 export ProcessingSet, MeasurementSet, Dataset, Measure

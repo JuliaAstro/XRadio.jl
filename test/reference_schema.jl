@@ -13,7 +13,7 @@
 #                import xradio.measurement_set.schema as s; \
 #                export_schema_json_file(s.VisibilityXds, "VisibilityXds.json")'
 
-using JSON3
+using JSON
 
 const REFERENCE_DIR = joinpath(@__DIR__, "reference")
 
@@ -21,7 +21,7 @@ const REFERENCE_DIR = joinpath(@__DIR__, "reference")
 const REF_DTYPES = XRadio.NUMPY_DTYPES
 
 """
-    reference_datasets() -> Dict{String, JSON3.Object}
+    reference_datasets() -> Dict{String, JSON.Object}
 
 Every exported reference schema, keyed by the `type` attribute it declares.
 """
@@ -29,7 +29,7 @@ function reference_datasets()
     out = Dict{String, Any}()
     for file in readdir(REFERENCE_DIR; join = true)
         endswith(file, ".json") || continue
-        json = JSON3.read(read(file, String))
+        json = JSON.parsefile(file)
         for t in reference_types(json)
             out[t] = json
         end

@@ -107,8 +107,8 @@ function _v3_dimension_names(array::Zarr.ZArray)
         nothing
     end
     raw === nothing && return nothing
-    json = JSON3.read(String(copy(raw)))
-    names = get(json, :dimension_names, nothing)
+    json = JSON.parse(String(copy(raw)))
+    names = get(json, "dimension_names", nothing)
     return names === nothing ? nothing : Symbol.(names)
 end
 

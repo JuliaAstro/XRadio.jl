@@ -72,7 +72,31 @@ end
     for name in keys(XRadio.MSV4_DIMS)
         @test XRadio.msv4name(XRadio.dimtype(name)) === name
     end
-    @test_throws ArgumentError XRadio.dimtype(:not_a_dimension)
+    # A name the standard does not define is labelled rather than refused: a
+    # store may carry data MSv4 has no schema for, and that data has to survive
+    # being read and written like any other.
+    @test XRadio.dimtype(:not_a_dimension) === Dim{:not_a_dimension}
+    @test XRadio.msv4name(Dim{:not_a_dimension}) === :not_a_dimension
+    @test XRadio.msv4name(Dim{:not_a_dimension}(1:3)) === :not_a_dimension
+end
+
+@testset "a dimension type of one's own" begin
+    # What a store spells is what `dimtype` returns, so reading the same data
+    # twice gives the same dimension type however much else is loaded. A caller
+    # wanting their own type says so at the point of use.
+    a = DimArray([1.0, 2.0, 3.0], (Dim{:solution_interval}(1:3),))
+    mine = set(a, Dim{:solution_interval} => SolutionInterval)
+    @test dims(mine, 1) isa SolutionInterval
+    @test parent(mine) == parent(a)
+    @test lookup(mine, SolutionInterval) == lookup(a, Dim{:solution_interval})
+    @test dims(set(mine, SolutionInterval => Dim{:solution_interval})) == dims(a)
+
+    # Such a type carries no MSv4 name, so it cannot be written: a name of the
+    # writer's invention in the store would be worse than a refusal. Setting it
+    # back to `Dim{name}` is the way out.
+    @test_throws "carries no MSv4 name" XRadio.msv4name(SolutionInterval)
+    @test_throws "carries no MSv4 name" XRadio.msv4name(SolutionInterval(1:3))
+    @test_throws "Dim{name}" XRadio.msv4name(SolutionInterval)
 end
 
 @testset "relaxed element types" begin

@@ -9,6 +9,11 @@ using Dates
 using DimensionalData
 using DimensionalData.Lookups: Categorical, Sampled
 
+# A dimension type of a caller's own, for the cases that turn on a dimension
+# having no MSv4 name of its own: a store spells such a dimension `Dim{name}`,
+# and this is what a reader may `set` one to after the fact.
+DimensionalData.@dim SolutionInterval "Calibration solution interval"
+
 "A `Measure` in the form the standard's `dataarray` attributes take."
 measure(v, units, type = "quantity") =
     XRadio.Measure(v, Dict{Symbol, Any}(:units => units, :type => type))

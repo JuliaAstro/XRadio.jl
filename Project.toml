@@ -1,14 +1,14 @@
 name = "XRadio"
 uuid = "8f21e5d1-474f-4c64-bef4-ed78edb0e816"
-authors = ["Paul Tiede <ptiede91@gmail.com> and contributors"]
 version = "0.1.0"
+authors = ["Paul Tiede <ptiede91@gmail.com> and contributors"]
 
 [deps]
 Compat = "34da2185-b29b-5c13-b0c7-acf172513d20"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 DimensionalData = "0703355e-b756-11e9-17c0-8b28908087d0"
 EnumX = "4e289a0a-7415-4d19-859d-a7e5c4648b56"
-JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
+JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
 Zarr = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
@@ -25,8 +25,8 @@ Dates = "1"
 DimensionalData = "0.30"
 EnumX = "1"
 FITSFiles = "0.3.2"
-JSON3 = "1.14"
-OrderedCollections = "1"
+JSON = "1.8.0"
+OrderedCollections = "1, 2"
 Reexport = "1"
 Zarr = "0.10"
 julia = "1.10"

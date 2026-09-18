@@ -206,7 +206,7 @@ const _V3_COMPLEX_NAMES = Dict("complexf32" => "complex64", "complexf64" => "com
 
 function _finalize_v3_metadata(z::Zarr.ZArray, dnames)
     key = Zarr._concatpath(z.path, "zarr.json")
-    json = JSON3.read(String(copy(z.storage[key])), Dict{String, Any})
+    json = JSON.parse(String(copy(z.storage[key])), Dict{String, Any})
     json["dimension_names"] = string.(dnames)
 
     dtype = get(json, "data_type", nothing)
@@ -217,7 +217,7 @@ function _finalize_v3_metadata(z::Zarr.ZArray, dnames)
             (json["fill_value"] = [fill["re"], fill["im"]])
     end
 
-    z.storage[key] = Vector{UInt8}(JSON3.write(json))
+    z.storage[key] = Vector{UInt8}(JSON.json(json))
     return z
 end
 

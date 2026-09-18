@@ -6,6 +6,40 @@
     @test collect(keys(ps)) == [:test_00, :test_01]
 end
 
+@testset "a dimension outside the vocabulary round-trips" begin
+    # Data MSv4 has no schema for brings its own dimensions, and both spellings
+    # have to survive a write and a read: the one with a registered type, and
+    # the one the generic `Dim` labels.
+    ps = synthetic_set(1)
+    gain = DimArray(
+        randn(ComplexF64, 3, 2),
+        (Dim{:solution_interval}([0.0, 1.0, 2.0]), Dim{:solution_basis}(["a", "b"])),
+    )
+    ps[1][:solution_gain] = gain
+
+    path = joinpath(mktempdir(), "extension.ps.zarr")
+    write(path, ps; validate = false)
+    back = read(ProcessingSet, path)
+
+    got = back[1][:solution_gain]
+    @test parent(got) == parent(gain)
+    @test map(msv4name, dims(got)) == (:solution_interval, :solution_basis)
+    @test lookup(got, Dim{:solution_interval}) == [0.0, 1.0, 2.0]
+    @test lookup(got, Dim{:solution_basis}) == ["a", "b"]
+
+    # Writing back what was read reproduces the store, so a dimension's name
+    # does not drift over a round trip.
+    again = joinpath(mktempdir(), "extension_again.ps.zarr")
+    write(again, back; validate = false)
+    @test sort(collect(keys(read(ProcessingSet, again)[1]))) == sort(collect(keys(back[1])))
+
+    # The extension is reported as a conformance issue rather than raised as an
+    # error: whether the schema covers an array is a separate question from
+    # whether the data can be described at all.
+    issues = check(back)
+    @test any(i -> occursin("solution_gain", i.path), issues)
+end
+
 @testset "round trip through zarr v$fmt" for fmt in (2, 3)
     ps = synthetic_set(2)
     path = joinpath(mktempdir(), "test_v$fmt.ps.zarr")
