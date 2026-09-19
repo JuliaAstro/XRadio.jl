@@ -294,7 +294,10 @@ end
         @test collect(ms[:field_name]) == fill("SRC0", 3)
         @test collect(ms[:scan_name]) == fill("1", 3)
 
-        @test parent(vis) == gt.visibility[perm, :, band, :, times]
+        # `gt.visibility` is what the fixture wrote into FLUX, so this is an
+        # absolute check of the conjugation the converter applies, not a round
+        # trip: MSv4 holds the conjugate of the FITS-IDI visibility.
+        @test parent(vis) == conj.(gt.visibility[perm, :, band, :, times])
         @test !any(ms[:flag])
 
         # UU/VV/WW are seconds of light travel on disk and metres in MSv4.
@@ -334,6 +337,28 @@ end
         # The second band is the second spectral window of the same scan.
         @test lookup(ps[:grid_01][:visibility], Frequency) == gt.frequencies[:, 2]
         @test collect(ps[:grid_02][:scan_name]) == fill("2", 2)
+    end
+
+    @testset "a delay comes out in the MSv4 sense" begin
+        # The cell-by-cell check above fixes the conjugation; this fixes what it
+        # means. A delay is defined against MSv4-sense visibilities by
+        # `V ∝ exp(+2πi·τ·(ν − ν_ref))`, which is CASA's K-Jones convention, so
+        # a file carrying its conjugate must convert to a store whose phase
+        # advances with frequency.
+        τ, ch_width, nchan = 10.0e-9, 2.0e6, 16
+        gt = synthetic_fitsidi(
+            joinpath(dir, "delay.idifits");
+            ch_width, nchan,
+            visibility = (s, c, band, b, k) ->
+                ComplexF32(cis(-2π * τ * (c - 1) * ch_width)),
+        )
+        vis = open(ProcessingSet, to_msv4(gt, "delay.ps.zarr"))[:delay_00][:visibility]
+        freqs = lookup(vis, Frequency)
+        phases = angle.(parent(vis)[1, :, 1, 1])
+        @test phases ≈ 2π * τ .* (freqs .- freqs[1])
+        # A sign error would leave the phase equally well fitted with −τ, so
+        # state the direction on its own as well.
+        @test phases[end] > 0
     end
 
     @testset "visibility units come from the FLUX column" begin
@@ -1083,7 +1108,7 @@ end
         gt = synthetic_fitsidi(joinpath(dir, "scal.idifits"); vis_scal = 4.0)
         ms = open(ProcessingSet, to_msv4(gt, "scal.ps.zarr"))[:scal_00]
         _, _, perm = pol_axis(gt.no_stkd, gt.stk_1, gt.cdelt2)
-        @test parent(ms[:visibility]) ≈ gt.visibility[perm, :, 1, :, 1:3] ./ 4
+        @test parent(ms[:visibility]) ≈ conj.(gt.visibility[perm, :, 1, :, 1:3]) ./ 4
 
         # Where the weights are true weights it squares into them, since it
         # divides into an amplitude. Validity fractions are untouched.

@@ -1410,7 +1410,12 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
             im = block.flux[2, sp, c, band, i]
             w = percell ? block.flux[3, sp, c, band, i] :
                 block.weight === nothing ? one(F) : block.weight[sp, band, i]
-            vis[p, c, b, k] = C(re * visnorm, im * visnorm)
+            # Conjugated: FITS-IDI stores V = ⟨E_a1 · conj(E_a2)⟩ (AIPS Memo
+            # 114r §2.1) and MSv4, following casacore, stores the other one
+            # (casacore `FitsIDItoMS.cc`: "FITS-IDI convention is conjugate of
+            # AIPS and CASA convention"). `UVW` and the baseline antenna order
+            # are shared by both and are carried across untouched.
+            vis[p, c, b, k] = C(re * visnorm, -im * visnorm)
             good = w > 0 && isfinite(re) && isfinite(im)
             weight[p, c, b, k] = good ? w * scale : zero(F)
             flag[p, c, b, k] = !good

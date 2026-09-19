@@ -57,6 +57,13 @@ coefficients, which is what a VLBI correlator writes. `TUNIT` is optional in
 FITS, and a file that omits it gets `uncalib` and a warning, since the
 alternative is to claim a calibration the file never asserted.
 
+`VISIBILITY` is also conjugated. FITS-IDI defines a visibility as
+`V = ⟨E_a1 · conj(E_a2)⟩` (AIPS Memo 114r §2.1) and MSv4 inherits casacore's
+opposite sense, so a store that copied `FLUX` across verbatim would carry the
+negative of every phase, delay and rate the standard's consumers expect. `UVW`
+and the antenna order of a baseline mean the same thing in both formats and are
+carried across untouched; the conjugation is the whole of the difference.
+
 Four things these tables carry have no MSv4 field and are dropped:
 `PHASE-CAL`'s `PC_RATE` and `STATE`, `WEATHER`'s `PRECIPITATION`, and any
 `GAIN_CURVE` curve that is not a polynomial in elevation or in zenith angle —
