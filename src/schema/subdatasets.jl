@@ -422,7 +422,12 @@ const PHASE_CALIBRATION_SCHEMA = let
         vars = ArraySpec[
             ArraySpec(
                 "PHASE_CAL", tone_dims, Union{ComplexF32, ComplexF64};
-                doc = "Complex amplitude measured for each injected tone."
+                doc = "Complex amplitude measured for each injected tone, in the \
+                       correlator's own phase convention rather than `VISIBILITY`'s. A \
+                       FITS-IDI file's `PC_REAL`/`PC_IMAG` reach this array unchanged \
+                       although its `FLUX` is conjugated on the way to `VISIBILITY`, so a \
+                       correction derived from these tones must be conjugated before it \
+                       is applied to the visibilities."
             ),
             ArraySpec(
                 "PHASE_CAL_CABLE_CAL", scalar_dims, Float64; attrs = quantity("s"),
