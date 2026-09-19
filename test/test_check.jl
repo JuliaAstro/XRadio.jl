@@ -240,6 +240,109 @@ end
     @test isempty(check(back; schemas = [spec]))
 end
 
+@testset "extending a standard schema" begin
+    # `extend` is how a caller has its own entries checked rather than merely
+    # accepted. The worked example is what Gustavo needs of an MSv4 store:
+    # values radio data carries that the standard has no field for.
+    eop = Dict{Symbol, Any}(
+        :gst_iat0 => 100.0, :earth_rot_rate => 360.985, :ut1utc => -0.1,
+        :polarx => 0.2, :polary => 0.3, :datutc => 37.0,
+        :xyzhand => "RIGHT", :poltype => "APPROX",
+    )
+    orientation = XRadio.DictSpec(
+        :earth_orientation,
+        [
+            XRadio.AttrSpec(f, :float) for f in
+                (:gst_iat0, :earth_rot_rate, :ut1utc, :polarx, :polary, :datutc)
+        ]
+    )
+    spec = XRadio.extend(
+        XRadio.VISIBILITY_SCHEMA;
+        attrs = [
+            XRadio.AttrSpec(
+                :earth_orientation, :dict; optional = true, nested = orientation
+            ),
+        ],
+        coords = [
+            XRadio.ArraySpec(
+                "frequency", (:frequency,), Float64;
+                attrs = [XRadio.AttrSpec(:sideband, :int; optional = true)]
+            ),
+            XRadio.ArraySpec("sub_scan_name", (:time,), String; optional = true),
+        ],
+    )
+
+    @testset "the standard schema is untouched" begin
+        @test !haskey(XRadio.VISIBILITY_SCHEMA, :sub_scan_name)
+        @test !any(a -> a.name === :earth_orientation, XRadio.VISIBILITY_SCHEMA.attrs)
+        @test !any(
+            a -> a.name === :sideband, XRadio.VISIBILITY_SCHEMA[:frequency].attrs
+        )
+    end
+
+    @testset "an entry already defined keeps everything but its attributes" begin
+        freq = spec[:frequency]
+        std = XRadio.VISIBILITY_SCHEMA[:frequency]
+        @test freq.dims == std.dims
+        @test freq.eltypes == std.eltypes
+        @test any(a -> a.name === :sideband, freq.attrs)
+        # The standard's own attributes survive, so an extension cannot
+        # silently stop `spectral_window_name` from being required.
+        @test any(a -> a.name === :spectral_window_name, freq.attrs)
+    end
+
+    @testset "restating a standard entry throws" begin
+        @test_throws "may add attributes to it, but not restate it" XRadio.extend(
+            XRadio.VISIBILITY_SCHEMA;
+            coords = [XRadio.ArraySpec("frequency", (:time,), Float64)]
+        )
+    end
+
+    @testset "the store is accepted either way, and checked only with the schema" begin
+        ps = synthetic_set(1)
+        ntime = length(dims(ps[1][:visibility], Ti))
+        metadata(ps[1])[:earth_orientation] = copy(eop)
+        metadata(lookup(dims(ps[1][:visibility], Frequency)))[:sideband] = 1
+        ps[1][:sub_scan_name] = DimArray(
+            fill("a", ntime), (dims(ps[1][:visibility], Ti),)
+        )
+        @test isempty(check(ps))
+        @test isempty(check(ps; schemas = [spec]))
+
+        # Wrong, and reported only by the schema that knows what it should be.
+        # The standard check stays exactly as permissive as the reference.
+        delete!(metadata(ps[1])[:earth_orientation], :ut1utc)
+        metadata(lookup(dims(ps[1][:visibility], Frequency)))[:sideband] = "USB"
+        @test isempty(check(ps))
+        issues = check(ps; schemas = [spec])
+        @test any(
+            i -> occursin("earth_orientation", i.path) && occursin("`ut1utc`", i.message),
+            issues
+        )
+        @test any(i -> occursin("`sideband` is a String", i.message), issues)
+    end
+
+    @testset "an added coordinate is written under its own name" begin
+        ps = synthetic_set(1)
+        ntime = length(dims(ps[1][:visibility], Ti))
+        ps[1][:sub_scan_name] = DimArray(
+            fill("a", ntime), (dims(ps[1][:visibility], Ti),)
+        )
+
+        path = joinpath(mktempdir(), "extended.ps.zarr")
+        write(path, ps; schemas = [spec])
+        @test isfile(joinpath(path, "test_00", "sub_scan_name", ".zarray")) ||
+            isdir(joinpath(path, "test_00", "sub_scan_name"))
+        back = read(ProcessingSet, path)
+        @test back[1][:sub_scan_name] == ps[1][:sub_scan_name]
+
+        # Without the schema, the same layer is written as a data variable.
+        plain = joinpath(mktempdir(), "plain.ps.zarr")
+        write(plain, ps)
+        @test isdir(joinpath(plain, "test_00", "SUB_SCAN_NAME"))
+    end
+end
+
 @testset "validate" begin
     ps = synthetic_set(1)
     @test validate(ps) === ps

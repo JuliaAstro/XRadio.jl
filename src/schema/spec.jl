@@ -133,6 +133,95 @@ function DatasetSpec(
 end
 
 """
+    extend(spec::DatasetSpec; coords, vars, attrs, name) -> DatasetSpec
+
+A copy of `spec` carrying entries of the caller's own.
+
+MSv4 datasets are extensible: a store may hold attributes, coordinates and data
+variables the standard does not define, and a conforming checker accepts them
+without examining them. `extend` is how a caller says what its own entries must
+look like, so that [`check`](@ref) examines them too and [`write`](@ref) knows
+their on-disk names. The result keeps `spec`'s `type`, so passing it in
+`schemas` puts it in place of the standard specification for that type; see
+[`schema_types`](@ref).
+
+An entry naming something `spec` already defines contributes its attributes to
+that entry instead of replacing it, which is how an attribute is added to a
+standard coordinate without restating the rest of it. It must agree with the
+standard entry on dimensions and element types, and throws if it does not — the
+standard is not the caller's to rewrite.
+
+An added array may span a dimension the standard does not define, and doing so
+makes that dimension part of what the dataset may span. MSv4 permits no such
+thing; a dimension of one's own belongs to a sub-dataset of one's own.
+
+```julia
+const SIDEBAND_AWARE = XRadio.extend(
+    XRadio.VISIBILITY_SCHEMA;
+    coords = [
+        XRadio.ArraySpec(
+            "frequency", (:frequency,), Float64;
+            attrs = [XRadio.AttrSpec(:sideband, :int; optional = true)]
+        ),
+    ],
+)
+
+check(ps; schemas = [SIDEBAND_AWARE])
+```
+"""
+function extend(
+        spec::DatasetSpec;
+        coords = (), vars = (), attrs = (), name::Symbol = spec.name
+    )
+    return DatasetSpec(
+        name, spec.type;
+        coords = _merged(spec.coords, coords),
+        vars = _merged(spec.vars, vars),
+        attrs = _merged(spec.attrs, attrs),
+        doc = spec.doc,
+    )
+end
+
+# Attributes merge by name: one the specification already has is replaced,
+# one it does not is appended, and the original order is kept.
+function _merged(old::AbstractVector{AttrSpec}, new)
+    out = collect(AttrSpec, old)
+    for a in new
+        i = findfirst(x -> x.name === a.name, out)
+        i === nothing ? push!(out, a) : (out[i] = a)
+    end
+    return out
+end
+
+# Arrays merge by name too, but an array the specification already has keeps
+# everything except its attributes, which the caller's are merged into.
+function _merged(old::AbstractVector{ArraySpec}, new)
+    out = collect(ArraySpec, old)
+    for a in new
+        i = findfirst(x -> x.name === a.name, out)
+        if i === nothing
+            push!(out, a)
+            continue
+        end
+        std = out[i]
+        if a.dims != std.dims || a.eltypes != std.eltypes
+            shapes = join(("(" * join(d, ", ") * ")" for d in std.dims), " or ")
+            throw(
+                ArgumentError(
+                    "`$(std.diskname)` spans $shapes with element types $(std.eltypes). \
+                     An extension may add attributes to it, but not restate it."
+                )
+            )
+        end
+        out[i] = ArraySpec(
+            std.name, std.diskname, std.dims, std.eltypes,
+            _merged(std.attrs, a.attrs), std.optional, std.doc
+        )
+    end
+    return out
+end
+
+"""
     arrays(spec::DatasetSpec)
 
 Iterate `spec`'s coordinates followed by its data variables.

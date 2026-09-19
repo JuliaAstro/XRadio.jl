@@ -65,7 +65,7 @@ export BaselineID, Frequency, Polarization, UVWLabel, AntennaName, StationName,
 # implements rather than what a caller types, so neither earns a name in the
 # caller's namespace.
 @compat public check, validate, SchemaIssue, SchemaError
-@compat public DatasetSpec, ArraySpec, AttrSpec, DictSpec, schema_types
+@compat public DatasetSpec, ArraySpec, AttrSpec, DictSpec, schema_types, extend
 @compat public gain_variable, gain_quantity, msv4_gain_curve
 
 include("dimensions.jl")

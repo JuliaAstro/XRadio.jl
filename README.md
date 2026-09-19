@@ -125,6 +125,46 @@ the same kind as the standard names — see *Element types* below.
 `check` returns `XRadio.SchemaIssue`s; `validate` throws an
 `XRadio.SchemaError` carrying them.
 
+### Checking entries of your own
+
+MSv4 is extensible, and a conforming checker accepts what it does not recognize:
+extra attributes unconditionally, and extra coordinates and data variables as
+long as they span dimensions the dataset already has. `check` does the same, so
+data of your own passes without XRadio knowing anything about it — and without
+being examined.
+
+To have it examined, say what it must look like. `XRadio.extend` copies a
+standard specification with entries added; `schemas` puts the result in place of
+the standard one for that `type`, in `check`, `validate`, `isvalid` and `write`
+alike:
+
+```julia
+const MY_VISIBILITY = XRadio.extend(
+    XRadio.VISIBILITY_SCHEMA;
+    attrs = [XRadio.AttrSpec(:earth_orientation, :dict; optional = true)],
+    coords = [
+        # An entry the standard already defines gains these attributes and
+        # keeps everything else.
+        XRadio.ArraySpec(
+            "frequency", (:frequency,), Float64;
+            attrs = [XRadio.AttrSpec(:sideband, :int; optional = true)]
+        ),
+        XRadio.ArraySpec("sub_scan_name", (:time,), String; optional = true),
+    ],
+)
+
+check(ps; schemas = [MY_VISIBILITY])
+write(path, ps; schemas = [MY_VISIBILITY])
+```
+
+Passing it to `write` is what gives an added coordinate its lower-case on-disk
+name and lists it among the `coordinates` of the variables it labels; a layer no
+specification names is written upper case, as MSv4 spells its data variables.
+
+Nothing is registered globally, so a store checks the same way whatever else has
+been loaded. A whole dataset of a kind the standard does not define is the same
+mechanism: pass a `DatasetSpec` whose `type` is your own.
+
 ## Converting FITS-IDI
 
 FITS-IDI (AIPS Memo 114) is the interchange format VLBI correlators write.
