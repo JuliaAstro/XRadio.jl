@@ -971,9 +971,9 @@ end
         # baseline to the fraction of a wavelength the phase needs.
         @test eltype(ms[:uvw]) == Float64
 
-        # The default is single precision and survives the write and the read:
-        # a store keeps the dtype it was written with, and neither side
-        # promotes it.
+        # The fixture's FLUX column is `E`, so the default is single precision,
+        # and it survives the write and the read: a store keeps the dtype it
+        # was written with, and neither side promotes it.
         small = open(ProcessingSet, to_msv4(gt, "f32.ps.zarr"))[:eltype_00]
         @test eltype(small[:visibility]) == ComplexF32
         @test eltype(small[:weight]) == Float32
@@ -989,6 +989,27 @@ end
         @test eltype(lookup(small, Frequency)) == Float64
 
         @test_throws "element_type must be" to_msv4(gt, "int.ps.zarr"; element_type = Int)
+
+        # A `D`-format FLUX column converts at the precision it holds. The
+        # digits below Float32's seven are the point: they are what the default
+        # would drop if it fixed the type instead of reading it.
+        fine(s, c, band, b, k) = ComplexF64(1 + 1.0e-10 * (1000k + 100b + 10band + c), s)
+        wide = synthetic_fitsidi(
+            joinpath(dir, "double.idifits"); flux_type = Float64, visibility = fine
+        )
+        double = open(ProcessingSet, to_msv4(wide, "double.ps.zarr"))[:double_00]
+        @test eltype(double[:visibility]) == ComplexF64
+        @test eltype(double[:weight]) == Float64
+        _, _, wperm = pol_axis(wide.no_stkd, wide.stk_1, wide.cdelt2)
+        @test parent(double[:visibility]) == conj.(wide.visibility[wperm, :, 1, :, 1:3])
+        @test ComplexF32.(parent(double[:visibility])) != parent(double[:visibility])
+
+        # The keyword still overrides, so a caller wanting the smaller store is
+        # seen to have asked for it.
+        narrowed = open(
+            ProcessingSet, to_msv4(wide, "narrow.ps.zarr"; element_type = Float32)
+        )[:double_00]
+        @test eltype(narrowed[:visibility]) == ComplexF32
     end
 
     @testset "what the file cannot say" begin

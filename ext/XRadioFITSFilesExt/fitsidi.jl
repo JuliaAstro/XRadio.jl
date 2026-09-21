@@ -476,6 +476,20 @@ function uv_matrix_layout(uv_hdu)
 end
 
 """
+    flux_element_type(uv_hdu) -> Type{<:AbstractFloat}
+
+The floating-point type the `UV_DATA` `FLUX` column is stored in: `Float64` for
+a `D`-format column, `Float32` for every other form the reader decodes,
+including the integer ones, which carry fewer digits than a `Float32` holds.
+"""
+function flux_element_type(uv_hdu)
+    fields = _descriptor(uv_hdu).fields
+    i = findfirst(f -> _fieldname(f) == "FLUX", fields)
+    i === nothing && throw(ArgumentError("UV_DATA has no FLUX column"))
+    return fields[i].type === Float64 ? Float64 : Float32
+end
+
+"""
     read_uv_block(uv_hdu, rows; T = Float32) -> (; flux, weight, layout)
 
 Read the data matrix and the `WEIGHT` column for a contiguous range of

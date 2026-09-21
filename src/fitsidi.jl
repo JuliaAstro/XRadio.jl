@@ -109,9 +109,11 @@ says the datum must not be used and `WEIGHT` says how good it would have been.
   column. FITS-IDI makes that column optional and MSv4's time axis does not, so
   the value has to come from somewhere; inferring it from the spacing of the
   timestamps would present a guess as a measurement.
-- `element_type = Float32`: element type of the weights, and the real type
-  behind the complex visibilities. `UVW` is always `Float64`: a VLBI baseline
-  is around 1e7 metres and fixes a phase that turns over in a wavelength, which
+- `element_type`: element type of the weights, and the real type behind the
+  complex visibilities. Defaults to the precision the file's `FLUX` column
+  carries, so a `D`-format column converts without being narrowed; pass a type
+  to store a different one. `UVW` is always `Float64`: a VLBI baseline is
+  around 1e7 metres and fixes a phase that turns over in a wavelength, which
   `Float32` cannot resolve.
 - `name`: base of the Measurement Set names, which are `name_00`, `name_01` and
   so on. Defaults to the input file's basename.

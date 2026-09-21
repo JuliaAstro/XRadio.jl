@@ -143,7 +143,9 @@ integrations — plus `dt`, `inttim`, `baselines` (`NOSTA` pairs, defaulting to
 every pair including autocorrelations) and `present`, a predicate on
 `(baseline_index, time_index)` selecting which rows are written.
 
-Values: `visibility`, `weight` and `uvw`, functions of the indices above.
+Values: `visibility`, `weight` and `uvw`, functions of the indices above, and
+`flux_type`, the float type the `FLUX` column is written in — `Float64` for a
+`D`-format column.
 
 Shape of the file itself: `uvw_suffix` names the projection on the `UU`/`VV`/`WW`
 columns, `equinox_column` is `:EQUINOX` or the VLBA's numeric `:EPOCH`,
@@ -217,6 +219,7 @@ function synthetic_fitsidi(
                          for b in a:length(antenna_names)],
         present = (b, k) -> true,
         visibility = synthetic_visibility_value,
+        flux_type = Float32,
         weight = synthetic_weight_value,
         uvw = synthetic_uvw_value,
         telescope = "TEST",
@@ -281,7 +284,7 @@ function synthetic_fitsidi(
     # The dense grids are built first and the file written from them, so the
     # returned arrays are exactly the values on disk rather than a second
     # rounding of the same formula.
-    vis = fill(ComplexF32(NaN, NaN), no_stkd, nchan, nband, nbaseline, ntime)
+    vis = fill(Complex{flux_type}(NaN, NaN), no_stkd, nchan, nband, nbaseline, ntime)
     wts = fill(NaN32, no_stkd, nband, nbaseline, ntime)
     uvws = fill(NaN32, 3, nbaseline, ntime)
     for k in 1:ntime, b in 1:nbaseline
@@ -309,7 +312,7 @@ function synthetic_fitsidi(
     uu_col = Vector{Float32}(undef, nrow)
     vv_col = Vector{Float32}(undef, nrow)
     ww_col = Vector{Float32}(undef, nrow)
-    flux_rows = Vector{Vector{Float32}}(undef, nrow)
+    flux_rows = Vector{Vector{flux_type}}(undef, nrow)
     weight_rows = Vector{Vector{Float32}}(undef, nrow)
     row_time = Vector{Int}(undef, nrow)
 
@@ -323,7 +326,7 @@ function synthetic_fitsidi(
         source_col[r] = time_source[k]
         uu_col[r], vv_col[r], ww_col[r] = uvws[1, b, k], uvws[2, b, k], uvws[3, b, k]
         # FLUX runs COMPLEX fastest, then STOKES, then FREQ, then BAND.
-        flux = Vector{Float32}(undef, 2 * no_stkd * nchan * nband)
+        flux = Vector{flux_type}(undef, 2 * no_stkd * nchan * nband)
         for band in 1:nband, c in 1:nchan, s in 1:no_stkd
             off = ((band - 1) * nchan * no_stkd + (c - 1) * no_stkd + (s - 1)) * 2
             v = vis[s, c, band, b, k]

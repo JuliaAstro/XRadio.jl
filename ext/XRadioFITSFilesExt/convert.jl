@@ -1153,7 +1153,7 @@ function XRadio.fitsidi2msv4(
         weight_mode::Symbol = :auto,
         weight_efficiency::Real = 1.0,
         integration_time::Union{Nothing, Real} = nothing,
-        element_type::Type = Float32,
+        element_type::Union{Nothing, Type} = nothing,
         name::AbstractString = first(splitext(basename(path))),
         zarr_format::Integer = 2,
         compressor = XRadio.Zarr.BloscCompressor(cname = "lz4", clevel = 5),
@@ -1161,7 +1161,7 @@ function XRadio.fitsidi2msv4(
         overwrite::Bool = false,
         validate::Bool = true,
     )
-    element_type <: AbstractFloat || throw(ArgumentError(
+    element_type === nothing || element_type <: AbstractFloat || throw(ArgumentError(
         "element_type must be a floating-point type; got $element_type"
     ))
     if release_date === nothing
@@ -1184,6 +1184,7 @@ function XRadio.fitsidi2msv4(
     fq = require_table(hdus, "FREQUENCY")
     sr = require_table(hdus, "SOURCE")
     uv = require_table(hdus, "UV_DATA")
+    T = element_type === nothing ? flux_element_type(uv) : element_type
 
     dropped = filter(t -> table(hdus, t) !== nothing, _UNMAPPED_TABLES)
     isempty(dropped) || @warn "MSv4 has no home for these FITS-IDI tables; \
@@ -1342,10 +1343,10 @@ function XRadio.fitsidi2msv4(
     index = 0
     width = max(2, ndigits(length(ranges) * layout.no_band - 1))
     for range in ranges
-        block = read_uv_block(uv, range; T = element_type)
+        block = read_uv_block(uv, range; T)
         for band in 1:layout.no_band
             ms = _build_partition(
-                shared, rows, times, block, range, band, element_type
+                shared, rows, times, block, range, band, T
             )
             validate && XRadio.validate(ms)
             XRadio._write_tree(
