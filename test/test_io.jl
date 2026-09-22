@@ -339,8 +339,13 @@ end
         @test_throws "no baseline AA-ZZ" baseline(ms, ("AA", "ZZ"))
         @test_throws "its baselines are over AA, BB, CC" baseline(ms, ("AA", "ZZ"))
 
+        # A `baseline_id` is the `baseline_id` dimension's own question, so it
+        # is answered without the antenna-name coordinates.
         @test_throws "no baseline_id 9" baseline(ms, 9)
         @test_throws "3 baselines, with ids from 1 to 3" baseline(ms, 9)
+        idonly = synthetic_set(1)[1]
+        delete!(idonly, :baseline_antenna1_name)
+        @test baseline(idonly, 2) == BaselineID(At(2))
 
         @test_throws "names antenna ZZ" baselines(ms, "ZZ")
         @test_throws "its baselines are over AA, BB, CC" baselines(ms, "ZZ")
@@ -378,6 +383,61 @@ end
         noname = synthetic_set(1)[1]
         delete!(noname, :baseline_antenna1_name)
         @test_throws "names no baseline antennas" baselines(noname)
+    end
+
+    @testset "the answers follow the coordinates" begin
+        # The accessors answer from a lookup built on the first query, so an
+        # earlier answer must not survive a change to what it was built from.
+        changed = synthetic_set(1)[1]
+        @test baselines(changed) == [("AA", "BB"), ("AA", "CC"), ("BB", "CC")]
+
+        base = dims(changed, BaselineID)
+        changed[:baseline_antenna1_name] = DimArray(["AA", "AA", "ZZ"], (base,))
+        @test baselines(changed) == [("AA", "BB"), ("AA", "CC"), ("ZZ", "CC")]
+        @test baseline(changed, ("ZZ", "CC")) == BaselineID(At(3))
+        @test_throws "no baseline BB-CC" baseline(changed, ("BB", "CC"))
+        @test selected(baselines(changed, "AA")) == [1, 2]
+
+        delete!(changed, :baseline_antenna1_name)
+        @test_throws "names no baseline antennas" baselines(changed)
+
+        popped = synthetic_set(1)[1]
+        @test length(baselines(popped)) == 3
+        pop!(popped, :baseline_antenna2_name)
+        @test_throws "names no baseline antennas" baselines(popped)
+    end
+
+    @testset "a lookup answers as its Measurement Set does" begin
+        bl = XRadio.baseline_lookup(ms)
+        @test length(bl) == 3
+        @test baselines(bl) == baselines(ms)
+        @test baseline(bl, ("CC", "AA")) == baseline(ms, ("CC", "AA"))
+        @test baseline(bl, "AA-CC") == baseline(ms, "AA-CC")
+        @test selected(baselines(bl, "AA")) == selected(baselines(ms, "AA"))
+        @test_throws "no baseline AA-ZZ" baseline(bl, ("AA", "ZZ"))
+
+        # Holding the lookup is what makes the query concrete, which is the
+        # whole reason it can be held.
+        query(lookup, key) = @allocated baseline(lookup, key)
+        query(bl, ("AA", "CC"))
+        @test query(bl, ("AA", "CC")) == 0
+
+        # It describes the Measurement Set it was built from, so a change to
+        # that Measurement Set does not reach a lookup already taken.
+        held = synthetic_set(1)[1]
+        taken = XRadio.baseline_lookup(held)
+        held[:baseline_antenna1_name] = DimArray(["ZZ", "AA", "BB"], (dims(held, BaselineID),))
+        @test baselines(taken) == [("AA", "BB"), ("AA", "CC"), ("BB", "CC")]
+        @test baselines(held) == [("ZZ", "BB"), ("AA", "CC"), ("BB", "CC")]
+    end
+
+    @testset "a repeated pair names its first baseline" begin
+        doubled = synthetic_set(1)[1]
+        base = dims(doubled, BaselineID)
+        doubled[:baseline_antenna1_name] = DimArray(["AA", "AA", "BB"], (base,))
+        doubled[:baseline_antenna2_name] = DimArray(["BB", "BB", "CC"], (base,))
+        @test baseline(doubled, ("AA", "BB")) == BaselineID(At(1))
+        @test selected(baselines(doubled, "AA")) == [1, 2]
     end
 end
 

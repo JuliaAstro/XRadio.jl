@@ -83,6 +83,29 @@ Measurement Sets in a [`ProcessingSet`](@ref).
     metadata::Any = DimensionalData.NoMetadata()
     branches::DimensionalData.TreeDict = DimensionalData.TreeDict()
     tree::Union{Nothing, DimensionalData.AbstractDimTree} = nothing
+    baseline_lookup::Union{Nothing, BaselineLookup} = nothing
+end
+
+# The baseline coordinates and the `baseline_id` dimension are layers of the
+# tree, so any layer that comes or goes can change them; the lookup built from
+# them is dropped and rebuilt on the next query.
+function Base.setindex!(ms::MeasurementSet, A::DimensionalData.AbstractDimArray, key::Symbol)
+    setfield!(ms, :baseline_lookup, nothing)
+    return invoke(
+        setindex!,
+        Tuple{DimensionalData.AbstractDimTree, DimensionalData.AbstractDimArray, Symbol},
+        ms, A, key
+    )
+end
+
+function Base.delete!(ms::MeasurementSet, key::Symbol)
+    setfield!(ms, :baseline_lookup, nothing)
+    return invoke(delete!, Tuple{DimensionalData.AbstractDimTree, Symbol}, ms, key)
+end
+
+function Base.pop!(ms::MeasurementSet, key::Symbol)
+    setfield!(ms, :baseline_lookup, nothing)
+    return invoke(pop!, Tuple{DimensionalData.AbstractDimTree, Symbol}, ms, key)
 end
 
 """

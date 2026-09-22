@@ -94,24 +94,24 @@ end
 
 """
     baselines(ms) -> Vector{Tuple{String, String}}
+    baselines(lookup) -> Vector{Tuple{String, String}}
 
-The antenna pair of every baseline in `ms`, in `baseline_id` order.
+The antenna pair of every baseline, in `baseline_id` order.
 
 MSv4 stores the two names as the `baseline_antenna1_name` and
 `baseline_antenna2_name` coordinates over `baseline_id`; this pairs them up.
 
-See also [`baseline`](@ref).
+See also [`baseline`](@ref), [`XRadio.baseline_lookup`](@ref).
 """
-function baselines(ms::MeasurementSet)
-    a1, a2 = _baseline_antennas(ms)
-    return collect(zip(a1, a2))
-end
+baselines(ms::MeasurementSet) = baselines(baseline_lookup(ms))
+baselines(bl::BaselineLookup) = collect(zip(bl.antenna1, bl.antenna2))
 
 """
     baseline(ms, key) -> BaselineID
+    baseline(lookup, key) -> BaselineID
 
-A selector for the one baseline of `ms` that `key` names, for use anywhere a
-dimension selector goes:
+A selector for the one baseline that `key` names, for use anywhere a dimension
+selector goes:
 
 ```julia
 vis = correlated(ms)
@@ -131,44 +131,46 @@ a dash has to be passed as a pair.
 Returning a selector rather than data leaves it to the caller which layers are
 wanted, and composes with every other selector.
 
+A name key is answered from a [`XRadio.baseline_lookup`](@ref), which a loop
+over baselines can hold itself to make the query concrete. A `baseline_id` is
+answered by the `baseline_id` dimension, which is already the lookup for it.
+
 See also [`baselines`](@ref).
 """
-function baseline(ms::MeasurementSet, key::Tuple{AbstractString, AbstractString})
-    a, b = key
-    ids = _baseline_ids(ms)
-    a1, a2 = _baseline_antennas(ms)
-    for i in eachindex(a1, a2, ids)
-        ((a1[i] == a && a2[i] == b) || (a1[i] == b && a2[i] == a)) &&
-            return dimtype(:baseline_id)(At(ids[i]))
-    end
-    throw(
-        ArgumentError(
-            "no baseline $a-$b in this Measurement Set; its baselines are over " *
-                join(_baseline_antenna_names(a1, a2), ", ")
-        )
-    )
-end
-
-function baseline(ms::MeasurementSet, label::AbstractString)
-    return baseline(ms, _split_baseline_label(label))
-end
+baseline(ms::MeasurementSet, key) = baseline(baseline_lookup(ms), key)
 
 function baseline(ms::MeasurementSet, id::Integer)
-    ids = _baseline_ids(ms)
-    id in ids && return dimtype(:baseline_id)(At(id))
+    d = _baseline_dim(ms)
+    hasselection(d, At(id)) && return dimtype(:baseline_id)(At(id))
     throw(
         ArgumentError(
-            "no baseline_id $id in this Measurement Set; it has " *
-                "$(length(ids)) baselines, with ids from $(minimum(ids)) to $(maximum(ids))"
+            "no baseline_id $id in this Measurement Set; it has $(length(d)) " *
+                "baselines, with ids from $(minimum(val(d))) to $(maximum(val(d)))"
         )
     )
 end
+
+function baseline(bl::BaselineLookup, key::Tuple{AbstractString, AbstractString})
+    a, b = key
+    i = get(bl.bypair, (a, b), 0)
+    i == 0 && throw(
+        ArgumentError(
+            "no baseline $a-$b in this Measurement Set; its baselines are over " *
+                join(antenna_names(bl), ", ")
+        )
+    )
+    return dimtype(:baseline_id)(At(bl.ids[i]))
+end
+
+baseline(bl::BaselineLookup, label::AbstractString) =
+    baseline(bl, _split_baseline_label(label))
 
 """
     baselines(ms, antenna; auto = true) -> BaselineID
+    baselines(lookup, antenna; auto = true) -> BaselineID
 
-A selector for every baseline of `ms` that `antenna` takes part in, in
-`baseline_id` order. `auto = false` drops the autocorrelation.
+A selector for every baseline that `antenna` takes part in, in `baseline_id`
+order. `auto = false` drops the autocorrelation.
 
 ```julia
 correlated(ms)[baselines(ms, "LA"; auto = false)]
@@ -177,28 +179,45 @@ correlated(ms)[baselines(ms, "LA"; auto = false)]
 An antenna that no baseline names is an error; an antenna whose only baseline
 is its autocorrelation selects nothing under `auto = false`.
 """
-function baselines(ms::MeasurementSet, antenna::AbstractString; auto::Bool = true)
-    ids = _baseline_ids(ms)
-    a1, a2 = _baseline_antennas(ms)
-    seen = false
-    wanted = eltype(ids)[]
-    for i in eachindex(a1, a2, ids)
-        (a1[i] == antenna || a2[i] == antenna) || continue
-        seen = true
-        (auto || a1[i] != a2[i]) && push!(wanted, ids[i])
-    end
-    seen || throw(
+baselines(ms::MeasurementSet, antenna::AbstractString; auto::Bool = true) =
+    baselines(baseline_lookup(ms), antenna; auto)
+
+function baselines(bl::BaselineLookup, antenna::AbstractString; auto::Bool = true)
+    found = get(bl.byantenna, antenna, nothing)
+    found === nothing && throw(
         ArgumentError(
             "no baseline of this Measurement Set names antenna $antenna; its " *
-                "baselines are over " * join(_baseline_antenna_names(a1, a2), ", ")
+                "baselines are over " * join(antenna_names(bl), ", ")
         )
     )
+    wanted = auto ? bl.ids[found] :
+        [bl.ids[i] for i in found if bl.antenna1[i] != bl.antenna2[i]]
     return dimtype(:baseline_id)(At(wanted))
 end
 
-# The two antenna-name coordinates, materialized: on a store read lazily they
-# are disk-backed, and matching walks them repeatedly.
-function _baseline_antennas(ms::MeasurementSet)
+"""
+    XRadio.baseline_lookup(ms) -> BaselineLookup
+
+The lookup `ms` answers [`baseline`](@ref) and [`baselines`](@ref) from, built
+on the first query and dropped whenever a layer of `ms` changes.
+
+Reading it out of a Measurement Set costs a dynamic dispatch and an allocation
+per call, because a Measurement Set holds its layers abstractly. Holding it
+directly makes the query concrete, which is what a loop over baselines wants:
+
+```julia
+bl = XRadio.baseline_lookup(ms)
+map(p -> uvw(ms)[baseline(bl, p)], pairs)
+```
+
+It describes `ms` as it stood when it was built. A coordinate mutated in place,
+through the array `ms` hands back rather than by assigning a new layer, leaves
+it describing baselines the Measurement Set no longer has.
+"""
+function baseline_lookup(ms::MeasurementSet)
+    cached = getfield(ms, :baseline_lookup)
+    cached === nothing || return cached
+    d = _baseline_dim(ms)
     (haskey(ms, :baseline_antenna1_name) && haskey(ms, :baseline_antenna2_name)) || throw(
         ArgumentError(
             "this Measurement Set names no baseline antennas; MSv4 states them as " *
@@ -206,10 +225,16 @@ function _baseline_antennas(ms::MeasurementSet)
                 "has " * join(sort(string.(collect(keys(ms)))), ", ")
         )
     )
-    return collect(ms[:baseline_antenna1_name]), collect(ms[:baseline_antenna2_name])
+    built = BaselineLookup(
+        collect(val(d)),
+        collect(ms[:baseline_antenna1_name]),
+        collect(ms[:baseline_antenna2_name]),
+    )
+    setfield!(ms, :baseline_lookup, built)
+    return built
 end
 
-function _baseline_ids(ms::MeasurementSet)
+function _baseline_dim(ms::MeasurementSet)
     d = dims(ms, dimtype(:baseline_id))
     d === nothing && throw(
         ArgumentError(
@@ -217,10 +242,8 @@ function _baseline_ids(ms::MeasurementSet)
                 "baselines; single-dish data is stated over antennas instead"
         )
     )
-    return collect(val(d))
+    return d
 end
-
-_baseline_antenna_names(a1, a2) = sort(unique(vcat(a1, a2)))
 
 function _split_baseline_label(label::AbstractString)
     parts = split(label, '-')
