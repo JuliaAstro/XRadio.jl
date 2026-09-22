@@ -604,6 +604,33 @@ end
         @test fields(popped) == String[]
     end
 
+    @testset "a cut Measurement Set does not inherit the lookup" begin
+        # Cutting rebuilds the tree, and the rebuilt one must not answer with
+        # the labels of the set it came from: after a time cut those name the
+        # wrong integrations, and nothing would say so.
+        whole = labelled(["1", "1", "1", "2", "2", "3"], ["A", "A", "A", "A", "B", "B"])
+        @test scans(whole) == ["1", "2", "3"]
+        @test fields(whole) == ["A", "B"]
+
+        t = collect(val(dims(whole, Ti)))
+        cut = whole[Ti(At(t[4:6]))]
+        @test getfield(cut, :scan_lookup) === nothing
+        @test getfield(cut, :field_lookup) === nothing
+        @test scans(cut) == ["2", "3"]
+        @test selected(scan(cut, "2")) == t[4:5]
+        @test_throws "no scan `1`" scan(cut, "1")
+
+        # The set that was cut is left as it was.
+        @test scans(whole) == ["1", "2", "3"]
+
+        # Keeping whole members keeps their lookups, which nothing has
+        # invalidated.
+        ps = ProcessingSet(
+            OrderedCollections.OrderedDict{Symbol, MeasurementSet}(:a => whole)
+        )
+        @test select(ps; scan = "1")[1] === whole
+    end
+
     @testset "the answer is the caller's to keep" begin
         own = labelled(["1", "2"], ["A", "A"])
         got = scans(own)

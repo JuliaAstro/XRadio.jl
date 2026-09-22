@@ -30,8 +30,8 @@ using Dates
 using EnumX: @enumx
 using Reexport
 
-# A MeasurementSet is a DimTree and a Dataset a DimStack, so selecting, slicing
-# and inspecting one is done with DimensionalData's vocabulary — `At`, `Near`,
+# A MeasurementSet and a Dataset are both DimTrees, so selecting, slicing and
+# inspecting one is done with DimensionalData's vocabulary — `At`, `Near`,
 # `dims`, `lookup`, `metadata`.
 @reexport using DimensionalData
 
