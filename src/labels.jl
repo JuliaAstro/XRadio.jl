@@ -20,7 +20,9 @@ struct LabelLookup{S}
     positions::Dict{S, Vector{Int}}
 end
 
-function LabelLookup(kind::Symbol, values::AbstractVector)
+# An array, not a vector: a selection naming one time leaves the coordinate a
+# scalar, and that names one label just as a full axis names many.
+function LabelLookup(kind::Symbol, values::AbstractArray)
     S = eltype(values)
     labels = S[]
     positions = Dict{S, Vector{Int}}()

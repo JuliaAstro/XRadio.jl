@@ -772,15 +772,74 @@ end
     # against choosing whole ones out of a processing set.
     @test length(dims(ms[baselines(ms, "AA")], BaselineID)) == 2
     @test length(dims(ms[Ti(t[1] .. t[2])], Ti)) == 2
-    # A scalar selector drops the dimension from a layer, which is what makes
-    # it unusable on the tree.
+    # A scalar selector drops the dimension, on the tree as on a layer.
     @test !hasdim(correlated(ms)[baseline(ms, ("AA", "CC"))], BaselineID)
+    @test !hasdim(ms[baseline(ms, ("AA", "CC"))], BaselineID)
 
-    # A single value has to be given as a one-element collection: a scalar
-    # selector reduces `baseline_antenna1_name`, stated over `baseline_id`
-    # alone, to a bare string, which a tree cannot hold as a layer.
+    # A one-element collection keeps it instead.
     id = first(val(dims(ms, BaselineID)))
     @test length(dims(ms[BaselineID(At([id]))], BaselineID)) == 1
+
+    @testset "a coordinate left over the dropped dimension holds one value" begin
+        # MSv4 keeps such a coordinate as a scalar, and that scalar is the
+        # answer to what was selected — the dimension goes, the value does not.
+        cut = ms[baseline(ms, ("AA", "CC"))]
+        @test ndims(cut[:baseline_antenna1_name]) == 0
+        @test cut[:baseline_antenna1_name][] == "AA"
+        @test cut[:baseline_antenna2_name][] == "CC"
+        # A layer spanning more than the dropped dimension keeps the rest.
+        @test size(cut[:visibility]) == (2, 5, size(correlated(ms), Ti))
+
+        # Attributes survive the reduction, which the scan intents need.
+        tcut = ms[Ti(At(t[1]))]
+        @test ndims(tcut[:scan_name]) == 0
+        @test scans(tcut) == ["1"]
+        @test scan_intents(tcut) ==
+            [Intent(ScanIntents.OBSERVE_TARGET, SubscanIntents.ON_SOURCE)]
+    end
+
+    @testset "a dimension is named by type or by the store's own name" begin
+        # `DimensionalData` resolves a keyword through `name2dim`, which would
+        # label `baseline_id` as `Dim{:baseline_id}` and match nothing; MSv4
+        # names dimensions as the store does, and both spellings must cut.
+        @test parent(ms[baseline_id = At([id])][:visibility]) ==
+            parent(ms[BaselineID(At([id]))][:visibility])
+        @test parent(ms[time = At(t[1])][:visibility]) ==
+            parent(ms[Ti(At(t[1]))][:visibility])
+        @test !hasdim(ms[baseline_id = At(id)], BaselineID)
+        @test length(dims(ms[frequency = At(frequencies(ms)[1:2])], Frequency)) == 2
+        @test !hasdim(ms[polarization = At("XX")], Polarization)
+
+        # A dimension outside the standard has no type of its own, so the
+        # keyword is its only spelling.
+        own = deepcopy(ms)
+        own[:solution] = DimArray([1.0, 2.0], (Dim{:solution_interval}([0.0, 1.0]),))
+        @test own[solution_interval = At(1.0)][:solution][] == 2.0
+    end
+
+    @testset "a dimension nothing carries is an error" begin
+        @test_throws "no `nosuchdim` dimension" ms[nosuchdim = At(3)]
+        @test_throws "no `nosuchdim` dimension" ms[Dim{:nosuchdim}(At(3))]
+        # The message names what is there, as the store spells it.
+        @test_throws "`baseline_id`" ms[nosuchdim = At(3)]
+
+        # A dimension only a sub-dataset carries is not absent.
+        @test hasdim(branches(ms)[:antenna], AntennaName)
+        @test !hasdim(ms, AntennaName)
+        cut = ms[antenna_name = At(["AA"])]
+        @test length(dims(branches(cut)[:antenna], AntennaName)) == 1
+        # and cutting on it leaves the correlated data alone.
+        @test size(correlated(cut)) == size(correlated(ms))
+    end
+
+    @testset "selection does not warn about nodes that lack the dimension" begin
+        # Every dimension used to be applied to every node, so the `antenna`
+        # branch warned for having no `baseline_id` — and the warning that
+        # means something was lost among those that do not.
+        @test_nowarn ms[BaselineID(At([id]))]
+        @test_nowarn ms[Ti(t[1] .. t[2])]
+        @test_nowarn ms[baseline_id = At([id])]
+    end
 end
 
 @testset "merging processing sets" begin

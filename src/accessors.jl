@@ -429,7 +429,9 @@ function _time_coord(ms::MeasurementSet, key::Symbol)
     )
     A = ms[key]
     d = dims(A)
-    (length(d) == 1 && only(d) isa dimtype(:time)) || throw(
+    # A selection naming one time leaves the coordinate a scalar, which names
+    # the one label the remaining integration carries.
+    (isempty(d) || (length(d) == 1 && only(d) isa dimtype(:time))) || throw(
         ArgumentError(
             "`$key` is stated over $(join(string.(DimensionalData.name(d)), ", ")), " *
                 "not over `time` alone, so it does not name one value per integration"
@@ -685,13 +687,20 @@ one, index it with its dimensions:
 ms[baselines(ms, "LA")]                      # baselines touching an antenna
 ms[scan(ms, "3")]                            # one scan's integrations
 ms[Ti(t0 .. t1)]                             # a time window
+ms[baseline_id = At(7)]                      # the store's own dimension name
 correlated(ms)[baseline(ms, ("BR", "LA"))]   # one baseline, on a layer
 ```
 
-A selector naming a single value cuts a layer but not a whole Measurement Set:
-it reduces a coordinate stated over that dimension alone to a bare element,
-which the tree cannot hold. Select one value as a one-element collection —
-`BaselineID(At([id]))` — or index the layer.
+A dimension is named either by its type or, as the store names it, by keyword;
+the two select identically. A dimension no part of the Measurement Set carries
+is an error rather than a selection that quietly keeps everything.
+
+A selector naming a single value drops that dimension, as it does on an array.
+A coordinate stated over the dropped dimension alone is left holding one value,
+which is the answer to what was selected: after `ms[baseline(ms, ("BR", "LA"))]`
+the Measurement Set has no `baseline_id` dimension and `baseline_antenna1_name`
+holds `"BR"`. Keep the dimension by selecting a one-element collection instead,
+`BaselineID(At([id]))`.
 """
 function select(ps::ProcessingSet; kwargs...)
     asked = values(kwargs)
