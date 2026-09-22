@@ -155,6 +155,53 @@ struct BareGain <: AbstractGainCurve end
         @test gain.(small, 0.5f0)[At("BB")] === NaN32
     end
 
+    @testset "each antenna and receptor gets its own curve" begin
+        # The dataset is read by the position the loop already holds, not by
+        # searching for the name at that position. A dataset naming one antenna
+        # twice is the case that tells the two apart: by name both rows resolve
+        # to the same antenna, and the second silently overwrites the first.
+        xds = XRadio.subdataset(
+            :gain_curve;
+            antenna_name = ["AA", "AA"], receptor_label = ["pol_0"],
+            poly_term = Int64[0, 1],
+            gain_curve = reshape(Float64[1, 2, 5, 6], 1, 2, 2),
+            gain_curve_sensitivity = [0.1 0.9],
+            gain_curve_interval = fill(60.0, 2),
+            gain_curve_type = ["POWER(EL)", "POWER(EL)"],
+        )
+        curves = gaincurves(xds)
+        @test vec([c.coefficients[1] for c in collect(curves[:curve])]) == [1.0, 5.0]
+        @test vec(collect(curves[:sensitivity])) == [0.1, 0.9]
+    end
+
+    @testset "a curve is read at the position it is written" begin
+        # Distinct values everywhere, so a transposed or off-by-one read shows.
+        xds = XRadio.subdataset(
+            :gain_curve;
+            antenna_name = ["AA", "BB"], receptor_label = ["pol_0", "pol_1"],
+            poly_term = Int64[0],
+            gain_curve = reshape(Float64[1, 2, 3, 4], 2, 1, 2),
+            gain_curve_sensitivity = [0.1 0.3; 0.2 0.4],
+            gain_curve_interval = fill(60.0, 2),
+            gain_curve_type = ["POWER(EL)", "POWER(ZA)"],
+        )
+        curves = gaincurves(xds)
+        A, R = XRadio.dimtype(:antenna_name), XRadio.dimtype(:receptor_label)
+        sens = xds[:gain_curve_sensitivity]
+        coef = xds[:gain_curve]
+        # Every cell holds what the dataset states for that antenna and
+        # receptor, whatever order the arrays declare their dimensions in.
+        for (i, a) in enumerate(val(dims(xds, A))), (j, r) in enumerate(val(dims(xds, R)))
+            @test curves[:sensitivity][A(i), R(j)] == sens[A(At(a)), R(At(r))]
+            @test curves[:curve][A(i), R(j)].coefficients[1] ==
+                collect(coef[A(At(a)), R(At(r))])[1]
+        end
+        # `gain_curve_type` is stated per antenna, so both receptors of one
+        # antenna share it.
+        @test curves[:curve][A(1), R(1)].variable == curves[:curve][A(1), R(2)].variable
+        @test curves[:curve][A(1), R(1)].variable != curves[:curve][A(2), R(1)].variable
+    end
+
     @testset "a store that names no angle is not a curve" begin
         # MSv4 makes `gain_curve_type` optional, but coefficients that name no
         # angle could be against elevation or against zenith angle, and the two

@@ -86,10 +86,14 @@ end
     antennas(ms) -> Vector{String}
 
 The names of the antennas in `ms`, from its antenna sub-dataset.
+
+A Measurement Set carrying no antenna sub-dataset, or one that names no
+antennas, gives an empty vector. MSv4 requires no sub-dataset of any dataset,
+so the first is conforming data rather than a fault.
 """
 function antennas(ms::MeasurementSet)
     haskey(branches(ms), :antenna) || return String[]
-    return _lookup_values(branches(ms)[:antenna], :antenna_name)
+    return _lookup_values(branches(ms)[:antenna], :antenna_name, String)
 end
 
 """
@@ -501,24 +505,26 @@ end
 """
     frequencies(ms) -> Vector
 
-The channel centre frequencies of `ms`, in hertz.
+The channel centre frequencies of `ms`, in hertz, or an empty vector if it
+states no frequency axis.
 """
-frequencies(ms::MeasurementSet) = _lookup_values(ms, :frequency)
+frequencies(ms::MeasurementSet) = _lookup_values(ms, :frequency, Float64)
 
 """
     polarizations(ms) -> Vector{String}
 
-The polarization products of `ms`, such as `["XX", "YY"]`.
+The polarization products of `ms`, such as `["XX", "YY"]`, or an empty vector
+if it states no polarization axis.
 """
-polarizations(ms::MeasurementSet) = _lookup_values(ms, :polarization)
+polarizations(ms::MeasurementSet) = _lookup_values(ms, :polarization, String)
 
 """
     times(ms) -> Vector
 
 The mid-point of each integration in `ms`, in the scale and format its `time`
-coordinate declares.
+coordinate declares, or an empty vector if it states no time axis.
 """
-times(ms::MeasurementSet) = _lookup_values(ms, :time)
+times(ms::MeasurementSet) = _lookup_values(ms, :time, Float64)
 
 """
     gaincurves(ms) -> DimStack
@@ -588,6 +594,7 @@ function gaincurves(xds::Dataset)
     sensitivities = xds[:gain_curve_sensitivity]
 
     stations, receptors = val(antenna), val(receptor)
+    Base.require_one_based_indexing(stations, receptors)
     # Every curve a conforming store can hold is a polynomial in one angle, and
     # a combination it states none for is one whose gain is unknown, which is
     # what `NaN` says of a measurement throughout this package. So the layer is
@@ -600,15 +607,18 @@ function gaincurves(xds::Dataset)
         oftype(zero(eltype(sensitivities)), NaN),
         length(stations), length(receptors),
     )
-    for (i, a) in enumerate(stations), (j, r) in enumerate(receptors)
-        s = sensitivities[A(At(a)), R(At(r))]
-        k = collect(coefficients[A(At(a)), R(At(r))])
-        # The dataset spans every antenna and receptor it names, so one it
-        # states no curve for is the padding the writer left: no coefficients
-        # and no sensitivity.
-        stated = !(all(iszero, k) && isnan(s))
-        curve[i, j] = gain_curve_from_msv4(types[A(At(a))], stated ? k : unknown)
-        stated && (sensitivity[i, j] = s)
+    for i in eachindex(stations)
+        kind = types[A(i)]
+        for j in eachindex(receptors)
+            s = sensitivities[A(i), R(j)]
+            k = collect(coefficients[A(i), R(j)])
+            # The dataset spans every antenna and receptor it names, so one it
+            # states no curve for is the padding the writer left: no
+            # coefficients and no sensitivity.
+            stated = !(all(iszero, k) && isnan(s))
+            curve[i, j] = gain_curve_from_msv4(kind, stated ? k : unknown)
+            stated && (sensitivity[i, j] = s)
+        end
     end
 
     over = (antenna, receptor)
@@ -741,10 +751,11 @@ _wanted(want) = throw(
 )
 
 # The values of an index coordinate, or an empty vector when the tree has no
-# such dimension.
-function _lookup_values(tree, name::Symbol)
+# such dimension. A present dimension supplies its own element type and an
+# absent one cannot, so `T` is what MSv4 declares the coordinate to be.
+function _lookup_values(tree, name::Symbol, T::Type)
     d = dims(tree, dimtype(name))
-    d === nothing && return []
+    d === nothing && return T[]
     return collect(val(d))
 end
 

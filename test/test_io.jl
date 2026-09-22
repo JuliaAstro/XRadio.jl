@@ -318,6 +318,30 @@ end
     @test uvw(ms) === ms[:uvw]
     @test_throws KeyError datagroup(ms, :nonexistent)
 
+    @testset "an absent axis gives an empty vector of the right type" begin
+        # The dimension supplies the element type when it is there; when it is
+        # not, the type is what MSv4 declares the coordinate to be, so a caller
+        # is not handed a `Vector{Any}` to widen everything it touches.
+        bare = MeasurementSet(; metadata = Dict{Symbol, Any}(:type => "visibility"))
+        @test frequencies(bare) == Float64[]
+        @test times(bare) == Float64[]
+        @test polarizations(bare) == String[]
+        @test antennas(bare) == String[]
+        @test frequencies(bare) isa Vector{Float64}
+        @test times(bare) isa Vector{Float64}
+        @test polarizations(bare) isa Vector{String}
+        @test antennas(bare) isa Vector{String}
+
+        # Selecting a single value drops the axis, which is the way a caller
+        # meets this without building a bare Measurement Set.
+        @test polarizations(ms[polarization = At("XX")]) isa Vector{String}
+
+        # A present axis still answers with the store's own element type, which
+        # a non-strict store may state more narrowly than the schema does.
+        @test frequencies(ms) isa Vector{Float64}
+        @test polarizations(ms) == ["XX", "YY"]
+    end
+
     @testset "over a whole processing set" begin
         ps = synthetic_set(3)
         # Every member names the same scan and field, and each is reported once.
