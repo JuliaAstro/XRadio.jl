@@ -52,7 +52,8 @@ export datagroups, datagroup, correlated, flags, weights, uvw
 export antennas, scans, fields, scan_intents, spectral_window_intents,
     Intent, ScanIntents, SubscanIntents,
     frequencies, polarizations, times, spectralwindow,
-    gaincurves, baseline, baselines, baseline_antennas, select, transform
+    gaincurves, baseline, baselines, baseline_antennas, scan, field,
+    select, transform
 export BaselineID, Frequency, Polarization, UVWLabel, AntennaName, StationName,
     FieldName, ReceptorLabel, ElementID, CartesianPosLabel, CartesianPosLabelLocal,
     EllipsoidDirLabel, EllipsoidDisLabel, SkyDirLabel, SkyDisLabel, LocalSkyDirLabel,
@@ -62,13 +63,14 @@ export BaselineID, Frequency, Polarization, UVWLabel, AntennaName, StationName,
 # Public, but not exported: reachable as `XRadio.name`, and part of what the
 # package promises. Checking a store against the standard is not what most work
 # with one involves, the gain-curve interface is what an outside curve type
-# implements rather than what a caller types, and the baseline lookup is what a
-# solver holds to keep a hot loop off the Measurement Set, so none earns a name
-# in the caller's namespace.
+# implements rather than what a caller types, and the lookups are what a solver
+# holds to keep a hot loop off the Measurement Set, so none earns a name in the
+# caller's namespace.
 @compat public check, validate, SchemaIssue, SchemaError
 @compat public DatasetSpec, ArraySpec, AttrSpec, DictSpec, schema_types, extend
 @compat public gain_variable, gain_quantity, msv4_gain_curve
 @compat public baseline_lookup, BaselineLookup
+@compat public scan_lookup, field_lookup, LabelLookup
 
 include("dimensions.jl")
 include("schema/spec.jl")
@@ -79,6 +81,7 @@ include("schema/subdatasets.jl")
 include("schema/registry.jl")
 include("intents.jl")
 include("baselines.jl")
+include("labels.jl")
 include("types.jl")
 include("build.jl")
 include("mount.jl")

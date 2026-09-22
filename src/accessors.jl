@@ -294,8 +294,13 @@ end
 
 The distinct scan names in `ms`, or across every Measurement Set of `ps`, in
 the order they first occur.
+
+A Measurement Set stating no `scan_name` gives an empty result, so that a
+selection over a processing set whose members differ is not an error.
+
+See also [`scan`](@ref), [`XRadio.scan_lookup`](@ref).
 """
-scans(ms::MeasurementSet) = haskey(ms, :scan_name) ? unique(parent(ms[:scan_name])) : String[]
+scans(ms::MeasurementSet) = haskey(ms, :scan_name) ? copy(labels(scan_lookup(ms))) : String[]
 scans(ps::ProcessingSet) = _distinct(scans, ps)
 
 """
@@ -304,9 +309,148 @@ scans(ps::ProcessingSet) = _distinct(scans, ps)
 
 The distinct field names in `ms`, or across every Measurement Set of `ps`, in
 the order they first occur.
+
+A Measurement Set stating no `field_name` gives an empty result, so that a
+selection over a processing set whose members differ is not an error.
+
+See also [`field`](@ref), [`XRadio.field_lookup`](@ref).
 """
-fields(ms::MeasurementSet) = haskey(ms, :field_name) ? unique(parent(ms[:field_name])) : String[]
+fields(ms::MeasurementSet) = haskey(ms, :field_name) ? copy(labels(field_lookup(ms))) : String[]
 fields(ps::ProcessingSet) = _distinct(fields, ps)
+
+"""
+    scan(ms, name) -> Ti
+    scan(lookup, times, name) -> Ti
+
+A selector for the integrations of the one scan `name` names, for use anywhere
+a dimension selector goes:
+
+```julia
+correlated(ms)[scan(ms, "3")]
+ms[scan(ms, "3")]
+uvw(ms)[scan(ms, "3"), baseline(ms, ("BR", "LA"))]
+```
+
+Returning a selector rather than data leaves it to the caller which layers are
+wanted, and composes with every other selector. The selector names times rather
+than positions, so it keeps meaning against a Measurement Set that has since
+been cut along another dimension.
+
+A scan the Measurement Set does not name is an error listing the ones it does.
+
+The second form answers from a [`XRadio.scan_lookup`](@ref) and the times a
+loop over scans can hold itself, which is what makes the query concrete.
+
+See also [`scans`](@ref), [`field`](@ref).
+"""
+scan(ms::MeasurementSet, name::AbstractString) =
+    _label_selector(scan_lookup(ms), _time_values(ms), name)
+
+"""
+    field(ms, name) -> Ti
+    field(lookup, times, name) -> Ti
+
+A selector for the integrations `ms` spent on the one field `name` names, for
+use anywhere a dimension selector goes:
+
+```julia
+correlated(ms)[field(ms, "M87")]
+```
+
+The field of a Measurement Set changes only where the observation mosaics or
+tracks an ephemeris; a set holding one field gives every integration back.
+
+A field the Measurement Set does not name is an error listing the ones it does.
+
+See also [`fields`](@ref), [`scan`](@ref).
+"""
+field(ms::MeasurementSet, name::AbstractString) =
+    _label_selector(field_lookup(ms), _time_values(ms), name)
+
+scan(ll::LabelLookup, times::AbstractVector, name::AbstractString) =
+    _label_selector(ll, times, name)
+field(ll::LabelLookup, times::AbstractVector, name::AbstractString) =
+    _label_selector(ll, times, name)
+
+_label_selector(ll::LabelLookup, times::AbstractVector, name::AbstractString) =
+    dimtype(:time)(At(times[positions(ll, name)]))
+
+"""
+    XRadio.scan_lookup(ms) -> LabelLookup
+    XRadio.field_lookup(ms) -> LabelLookup
+
+The lookup `ms` answers [`scans`](@ref) and [`scan`](@ref), or [`fields`](@ref)
+and [`field`](@ref), from — built on the first query and dropped whenever a
+layer of `ms` changes.
+
+MSv4 names a scan and a field per integration, so answering either question
+from the coordinate itself is a pass over the time axis. Holding the lookup and
+the times keeps a loop over scans off that pass entirely:
+
+```julia
+sl = XRadio.scan_lookup(ms)
+t = collect(DimensionalData.val(dims(ms, Ti)))
+map(s -> correlated(ms)[scan(sl, t, s)], scans(ms))
+```
+
+It describes `ms` as it stood when it was built. A coordinate mutated in place,
+through the array `ms` hands back rather than by assigning a new layer, leaves
+it describing scans the Measurement Set no longer has.
+
+A Measurement Set stating no such coordinate is an error; [`scans`](@ref) and
+[`fields`](@ref) are the forms that give an empty result instead.
+"""
+function scan_lookup(ms::MeasurementSet)
+    cached = getfield(ms, :scan_lookup)
+    cached === nothing || return cached
+    built = LabelLookup(:scan, parent(_time_coord(ms, :scan_name)))
+    setfield!(ms, :scan_lookup, built)
+    return built
+end
+
+"See [`XRadio.scan_lookup`](@ref), whose field twin this is."
+function field_lookup(ms::MeasurementSet)
+    cached = getfield(ms, :field_lookup)
+    cached === nothing || return cached
+    built = LabelLookup(:field, parent(_time_coord(ms, :field_name)))
+    setfield!(ms, :field_lookup, built)
+    return built
+end
+
+# A coordinate MSv4 states once per integration. Its positions index the time
+# axis, so a coordinate stated over anything else would give a lookup whose
+# answers silently name the wrong integrations.
+function _time_coord(ms::MeasurementSet, key::Symbol)
+    haskey(ms, key) || throw(
+        ArgumentError(
+            "this Measurement Set states no `$key`; MSv4 names one per integration, " *
+                "and this one has " * join(sort(string.(collect(keys(ms)))), ", ")
+        )
+    )
+    A = ms[key]
+    d = dims(A)
+    (length(d) == 1 && only(d) isa dimtype(:time)) || throw(
+        ArgumentError(
+            "`$key` is stated over $(join(string.(DimensionalData.name(d)), ", ")), " *
+                "not over `time` alone, so it does not name one value per integration"
+        )
+    )
+    return A
+end
+
+# The raw values, not the `Lookup` that indexing one gives back: a selector
+# carries times, not a second lookup's worth of metadata.
+_time_values(ms::MeasurementSet) = parent(val(_time_dim(ms)))
+
+function _time_dim(ms::MeasurementSet)
+    d = dims(ms, dimtype(:time))
+    d === nothing && throw(
+        ArgumentError(
+            "this Measurement Set has no `time` dimension, so it has no integrations"
+        )
+    )
+    return d
+end
 
 # A processing set partitions one observation, so the same scan or field is
 # named by several of its Measurement Sets; `union` keeps each once, in the
@@ -539,6 +683,7 @@ one, index it with its dimensions:
 
 ```julia
 ms[baselines(ms, "LA")]                      # baselines touching an antenna
+ms[scan(ms, "3")]                            # one scan's integrations
 ms[Ti(t0 .. t1)]                             # a time window
 correlated(ms)[baseline(ms, ("BR", "LA"))]   # one baseline, on a layer
 ```

@@ -84,13 +84,22 @@ Measurement Sets in a [`ProcessingSet`](@ref).
     branches::DimensionalData.TreeDict = DimensionalData.TreeDict()
     tree::Union{Nothing, DimensionalData.AbstractDimTree} = nothing
     baseline_lookup::Union{Nothing, BaselineLookup} = nothing
+    scan_lookup::Union{Nothing, LabelLookup} = nothing
+    field_lookup::Union{Nothing, LabelLookup} = nothing
 end
 
-# The baseline coordinates and the `baseline_id` dimension are layers of the
-# tree, so any layer that comes or goes can change them; the lookup built from
-# them is dropped and rebuilt on the next query.
-function Base.setindex!(ms::MeasurementSet, A::DimensionalData.AbstractDimArray, key::Symbol)
+# Every lookup is built from coordinates that are themselves layers of the
+# tree, so any layer that comes or goes can change them; the lookups are
+# dropped and rebuilt on the next query.
+function _drop_lookups!(ms::MeasurementSet)
     setfield!(ms, :baseline_lookup, nothing)
+    setfield!(ms, :scan_lookup, nothing)
+    setfield!(ms, :field_lookup, nothing)
+    return ms
+end
+
+function Base.setindex!(ms::MeasurementSet, A::DimensionalData.AbstractDimArray, key::Symbol)
+    _drop_lookups!(ms)
     return invoke(
         setindex!,
         Tuple{DimensionalData.AbstractDimTree, DimensionalData.AbstractDimArray, Symbol},
@@ -99,12 +108,12 @@ function Base.setindex!(ms::MeasurementSet, A::DimensionalData.AbstractDimArray,
 end
 
 function Base.delete!(ms::MeasurementSet, key::Symbol)
-    setfield!(ms, :baseline_lookup, nothing)
+    _drop_lookups!(ms)
     return invoke(delete!, Tuple{DimensionalData.AbstractDimTree, Symbol}, ms, key)
 end
 
 function Base.pop!(ms::MeasurementSet, key::Symbol)
-    setfield!(ms, :baseline_lookup, nothing)
+    _drop_lookups!(ms)
     return invoke(pop!, Tuple{DimensionalData.AbstractDimTree, Symbol}, ms, key)
 end
 

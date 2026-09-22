@@ -527,6 +527,107 @@ let path = joinpath(@__DIR__, "..", "testdata", "Antennae_North.cal.lsrk.split.v
     end
 end
 
+@testset "scan and field selection" begin
+    # A Measurement Set whose scans and fields both change part-way along the
+    # time axis, so the two are not the same partition of it.
+    function labelled(scannames, fieldnames)
+        ms = synthetic_visibility(; ntime = length(scannames))
+        t = dims(ms, Ti)
+        ms[:scan_name] = DimArray(
+            collect(scannames), (t,); metadata = metadata(ms[:scan_name])
+        )
+        ms[:field_name] = DimArray(collect(fieldnames), (t,))
+        return ms
+    end
+
+    ms = labelled(["1", "1", "1", "2", "2", "3"], ["A", "A", "A", "A", "B", "B"])
+    times = collect(val(dims(ms, Ti)))
+    selected(sel) = DimensionalData.val(DimensionalData.val(sel))
+
+    @test scans(ms) == ["1", "2", "3"]
+    @test fields(ms) == ["A", "B"]
+
+    @testset "a selector names the integrations the label covers" begin
+        @test selected(scan(ms, "2")) == times[4:5]
+        @test selected(field(ms, "B")) == times[5:6]
+        @test size(correlated(ms)[scan(ms, "1")], Ti) == 3
+        @test size(ms[field(ms, "A")][:visibility], Ti) == 4
+        @test size(uvw(ms)[scan(ms, "3"), baseline(ms, ("AA", "BB"))]) == (3, 1)
+    end
+
+    @testset "a label that is not there names the ones that are" begin
+        @test_throws "no scan `4`" scan(ms, "4")
+        @test_throws "it names 1, 2, 3" scan(ms, "4")
+        @test_throws "no field `C`" field(ms, "C")
+    end
+
+    @testset "the lookup is built once and answers as its Measurement Set does" begin
+        held = labelled(["1", "1", "2", "2"], ["A", "A", "A", "A"])
+        sl = XRadio.scan_lookup(held)
+        @test sl === XRadio.scan_lookup(held)
+        @test XRadio.labels(sl) == scans(held)
+        @test length(sl) == 2
+
+        t = collect(val(dims(held, Ti)))
+        @test selected(scan(sl, t, "2")) == selected(scan(held, "2"))
+        @test selected(field(XRadio.field_lookup(held), t, "A")) ==
+            selected(field(held, "A"))
+
+        # It describes the Measurement Set it was built from, so a change to
+        # that Measurement Set does not reach a lookup already taken.
+        held[:scan_name] = DimArray(
+            ["9", "9", "9", "9"], (dims(held, Ti),); metadata = metadata(held[:scan_name])
+        )
+        @test XRadio.labels(sl) == ["1", "2"]
+        @test scans(held) == ["9"]
+    end
+
+    @testset "the answers follow the coordinates" begin
+        changed = labelled(["1", "1", "2", "2"], ["A", "A", "B", "B"])
+        @test scans(changed) == ["1", "2"]
+
+        t = dims(changed, Ti)
+        changed[:scan_name] = DimArray(
+            ["7", "7", "7", "8"], (t,); metadata = metadata(changed[:scan_name])
+        )
+        @test scans(changed) == ["7", "8"]
+        @test selected(scan(changed, "7")) == collect(val(t))[1:3]
+        @test_throws "no scan `1`" scan(changed, "1")
+
+        delete!(changed, :scan_name)
+        @test scans(changed) == String[]
+        @test_throws "states no `scan_name`" scan(changed, "7")
+
+        popped = labelled(["1", "2"], ["A", "A"])
+        @test fields(popped) == ["A"]
+        pop!(popped, :field_name)
+        @test fields(popped) == String[]
+    end
+
+    @testset "the answer is the caller's to keep" begin
+        own = labelled(["1", "2"], ["A", "A"])
+        got = scans(own)
+        empty!(got)
+        @test scans(own) == ["1", "2"]
+    end
+
+    @testset "a Measurement Set naming no scans" begin
+        bare = MeasurementSet(; metadata = Dict{Symbol, Any}(:type => "visibility"))
+        @test scans(bare) == String[]
+        @test fields(bare) == String[]
+        @test_throws "states no `scan_name`" XRadio.scan_lookup(bare)
+        @test_throws "states no `field_name`" XRadio.field_lookup(bare)
+    end
+
+    @testset "a coordinate stated over the wrong dimension" begin
+        # The positions a lookup holds index the time axis, so a coordinate
+        # stated over anything else would name the wrong integrations.
+        wrong = synthetic_visibility()
+        wrong[:scan_name] = DimArray(["a", "b", "c"], (dims(wrong, BaselineID),))
+        @test_throws "not over `time` alone" scans(wrong)
+    end
+end
+
 @testset "selecting Measurement Sets by attribute" begin
     function varied(; field, spw, scan, ants, intents = ["OBSERVE_TARGET#ON_SOURCE"])
         ms = synthetic_visibility()
