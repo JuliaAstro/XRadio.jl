@@ -197,6 +197,63 @@ function Base.filter(f, ps::ProcessingSet)
 end
 
 """
+    merge(ps::ProcessingSet, others::ProcessingSet...) -> ProcessingSet
+
+The Measurement Sets of every argument in one processing set, in the order the
+arguments list them, under the union of their attributes.
+
+Two kinds of disagreement are errors rather than a value quietly winning:
+
+  - A **name** two of them share. Unlike `merge` on a dictionary, the later
+    value does not win: two Measurement Sets under one name are two different
+    observations, and keeping one would drop the other.
+  - An **attribute** two of them state differently. A processing set's
+    attributes are its store's root attributes, which `write` puts back at the
+    root verbatim, so a merged set carrying one argument's would claim that
+    store's attributes for every Measurement Set in the result. An attribute
+    only one of them states is carried through.
+
+```julia
+merge(select(ps; field = "M87"), select(ps; field = "3C273"))
+```
+
+Sets taken from one store agree by construction, which is the case this serves.
+To combine sets that genuinely disagree, state the attributes the result should
+have: `ProcessingSet(sets, attrs)`.
+"""
+function Base.merge(ps::ProcessingSet, others::ProcessingSet...)
+    sets = OrderedDict{Symbol, MeasurementSet}(pairs(ps))
+    attrs = copy(metadata(ps))
+    for other in others
+        for (name, ms) in pairs(other)
+            haskey(sets, name) && throw(
+                ArgumentError(
+                    "more than one of these processing sets names a Measurement " *
+                        "Set `$name`; rename one before merging, since the two " *
+                        "are different observations"
+                )
+            )
+            sets[name] = ms
+        end
+        for (key, value) in metadata(other)
+            if !haskey(attrs, key)
+                attrs[key] = value
+            elseif !isequal(attrs[key], value)
+                throw(
+                    ArgumentError(
+                        "these processing sets disagree about `$key`: " *
+                            "$(repr(attrs[key])) against $(repr(value)). A merged " *
+                            "set carries one value per attribute, so pass the " *
+                            "attributes the result should have to `ProcessingSet`."
+                    )
+                )
+            end
+        end
+    end
+    return ProcessingSet(sets, attrs)
+end
+
+"""
     transform(f, ps::ProcessingSet) -> ProcessingSet
 
 `f` applied to each Measurement Set of `ps`, keeping their names and the set's

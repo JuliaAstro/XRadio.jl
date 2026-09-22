@@ -52,7 +52,7 @@ export datagroups, datagroup, correlated, flags, weights, uvw
 export antennas, scans, fields, scan_intents, spectral_window_intents,
     Intent, ScanIntents, SubscanIntents,
     frequencies, polarizations, times, spectralwindow,
-    gaincurves, baseline, baselines, select, transform
+    gaincurves, baseline, baselines, baseline_antennas, select, transform
 export BaselineID, Frequency, Polarization, UVWLabel, AntennaName, StationName,
     FieldName, ReceptorLabel, ElementID, CartesianPosLabel, CartesianPosLabelLocal,
     EllipsoidDirLabel, EllipsoidDisLabel, SkyDirLabel, SkyDisLabel, LocalSkyDirLabel,

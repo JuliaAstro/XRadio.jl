@@ -289,6 +289,16 @@ end
     end
 end
 
+# A copy of `ms` naming one scan throughout.
+function scanned(ms::MeasurementSet, scan::AbstractString)
+    out = deepcopy(ms)
+    t = dims(out, Ti)
+    out[:scan_name] = DimArray(
+        fill(scan, length(t)), (t,); metadata = metadata(out[:scan_name])
+    )
+    return out
+end
+
 @testset "accessors" begin
     ms = synthetic_set(1)[1]
     @test antennas(ms) == ["AA", "BB", "CC"]
@@ -307,6 +317,58 @@ end
     @test weights(ms) === ms[:weight]
     @test uvw(ms) === ms[:uvw]
     @test_throws KeyError datagroup(ms, :nonexistent)
+
+    @testset "over a whole processing set" begin
+        ps = synthetic_set(3)
+        # Every member names the same scan and field, and each is reported once.
+        @test scans(ps) == ["1"]
+        @test fields(ps) == ["field_0"]
+
+        varied = ProcessingSet(
+            OrderedCollections.OrderedDict{Symbol, MeasurementSet}(
+                :a => scanned(ms, "3"), :b => scanned(ms, "1"), :c => scanned(ms, "3"),
+            )
+        )
+        # First occurrence, not sorted: the set's own order is the answer's.
+        @test scans(varied) == ["3", "1"]
+        @test scans(ProcessingSet(
+            OrderedCollections.OrderedDict{Symbol, MeasurementSet}()
+        )) == String[]
+    end
+end
+
+
+@testset "the antennas of one baseline" begin
+    ms = synthetic_set(1)[1]
+
+    ids = val(dims(ms, BaselineID))
+
+    @test baseline_antennas(ms, first(ids)) == ("AA", "BB")
+    @test baseline_antennas(ms, last(ids)) == ("BB", "CC")
+
+    @testset "it inverts `baseline`" begin
+        for (id, pair) in zip(ids, baselines(ms))
+            @test baseline_antennas(ms, id) == pair
+            @test baseline(ms, pair) == baseline(ms, id)
+        end
+    end
+
+    @testset "an absent id names the range that is present" begin
+        @test_throws ArgumentError baseline_antennas(ms, 7)
+        @test_throws "no baseline_id 7" baseline_antennas(ms, 7)
+        @test_throws "ids from 1 to 3" baseline_antennas(ms, 7)
+    end
+
+    @testset "a Measurement Set without the coordinates" begin
+        bare = deepcopy(ms)
+        delete!(bare, :baseline_antenna2_name)
+        @test_throws "names no baseline antennas" baseline_antennas(bare, first(ids))
+        # The `baseline_id` dimension going missing is the more basic fact and
+        # is reported ahead of the coordinates.
+        @test_throws "no `baseline_id` dimension" baseline_antennas(
+            MeasurementSet(), 0
+        )
+    end
 end
 
 @testset "baseline selection" begin
@@ -466,11 +528,14 @@ let path = joinpath(@__DIR__, "..", "testdata", "Antennae_North.cal.lsrk.split.v
 end
 
 @testset "selecting Measurement Sets by attribute" begin
-    function varied(; field, spw, scan, ants)
+    function varied(; field, spw, scan, ants, intents = ["OBSERVE_TARGET#ON_SOURCE"])
         ms = synthetic_visibility()
         t = dims(ms, Ti)
         ms[:field_name] = DimArray(fill(field, length(t)), (t,))
-        ms[:scan_name] = DimArray(fill(scan, length(t)), (t,))
+        ms[:scan_name] = DimArray(
+            fill(scan, length(t)), (t,);
+            metadata = Dict{Symbol, Any}(:scan_intents => intents)
+        )
         metadata(lookup(dims(ms, Frequency)))[:spectral_window_name] = spw
         branches(ms)[:antenna] = synthetic_antenna(ants)
         return ms
@@ -479,8 +544,14 @@ end
     ps = ProcessingSet(
         OrderedCollections.OrderedDict{Symbol, MeasurementSet}(
             :a => varied(field = "M87", spw = "spw_0", scan = "1", ants = ["AA", "BB"]),
-            :b => varied(field = "M87", spw = "spw_1", scan = "2", ants = ["AA", "CC"]),
-            :c => varied(field = "3C273", spw = "spw_0", scan = "3", ants = ["BB", "CC"]),
+            :b => varied(
+                field = "M87", spw = "spw_1", scan = "2", ants = ["AA", "CC"],
+                intents = ["CALIBRATE_BANDPASS#ON_SOURCE"],
+            ),
+            :c => varied(
+                field = "3C273", spw = "spw_0", scan = "3", ants = ["BB", "CC"],
+                intents = ["CALIBRATE_BANDPASS"],
+            ),
         )
     )
 
@@ -515,12 +586,42 @@ end
         @test keys(select(ps)) == keys(ps)
     end
 
+    @testset "by intent" begin
+        # A wanted intent naming no subintent asks only what the scan was for,
+        # so it matches whichever subintent the store states.
+        @test collect(keys(select(ps; intent = "CALIBRATE_BANDPASS"))) == [:b, :c]
+        # One that names a subintent asks for both halves.
+        @test collect(keys(select(ps; intent = "CALIBRATE_BANDPASS#ON_SOURCE"))) == [:b]
+        @test collect(keys(select(ps; intent = "OBSERVE_TARGET"))) == [:a]
+
+        # The enumeration member and the parsed intent say the same thing as
+        # the string does.
+        @test keys(select(ps; intent = ScanIntents.CALIBRATE_BANDPASS)) ==
+            keys(select(ps; intent = "CALIBRATE_BANDPASS"))
+        @test keys(select(ps; intent = Intent(ScanIntents.OBSERVE_TARGET))) ==
+            keys(select(ps; intent = "OBSERVE_TARGET"))
+
+        @test collect(keys(select(
+            ps; intent = ["OBSERVE_TARGET", "CALIBRATE_BANDPASS#ON_SOURCE"]
+        ))) == [:a, :b]
+        @test isempty(select(ps; intent = "CALIBRATE_POINTING"))
+        # `intent` narrows alongside the other keywords rather than replacing
+        # them.
+        @test collect(keys(select(ps; intent = "CALIBRATE_BANDPASS", field = "M87"))) ==
+            [:b]
+
+        # An intent outside the ASDM enumerations is an error, not a name that
+        # quietly matches nothing.
+        @test_throws ArgumentError select(ps; intent = "NOT_AN_INTENT")
+        @test_throws "is not an ASDM scan intent" select(ps; intent = "NOT_AN_INTENT")
+    end
+
     @testset "an unknown keyword is an error" begin
         # The whole risk of a keyword-driven selector is a typo silently
         # selecting everything.
         @test_throws ArgumentError select(ps; spectral_window = "spw_0")
         @test_throws "no keyword `spectral_window`" select(ps; spectral_window = "spw_0")
-        @test_throws "accepts antenna, field, scan, spectralwindow" select(
+        @test_throws "accepts antenna, field, intent, scan, spectralwindow" select(
             ps; spectral_window = "spw_0"
         )
         @test_throws "no keyword `source`, `freq`" select(ps; source = "M87", freq = 1)
@@ -533,6 +634,78 @@ end
         @test_throws "takes a name or a collection of names" select(ps; field = 3)
         @test_throws "got 3" select(ps; field = 3)
     end
+end
+
+@testset "cutting inside one Measurement Set" begin
+    ms = synthetic_set(1)[1]
+    t = val(dims(ms, Ti))
+
+    # What `select`'s docstring points at for cutting a Measurement Set, as
+    # against choosing whole ones out of a processing set.
+    @test length(dims(ms[baselines(ms, "AA")], BaselineID)) == 2
+    @test length(dims(ms[Ti(t[1] .. t[2])], Ti)) == 2
+    # A scalar selector drops the dimension from a layer, which is what makes
+    # it unusable on the tree.
+    @test !hasdim(correlated(ms)[baseline(ms, ("AA", "CC"))], BaselineID)
+
+    # A single value has to be given as a one-element collection: a scalar
+    # selector reduces `baseline_antenna1_name`, stated over `baseline_id`
+    # alone, to a bare string, which a tree cannot hold as a layer.
+    id = first(val(dims(ms, BaselineID)))
+    @test length(dims(ms[BaselineID(At([id]))], BaselineID)) == 1
+end
+
+@testset "merging processing sets" begin
+    ps = synthetic_set(4)
+    first_two = filter(ms -> true, ProcessingSet(
+        OrderedCollections.OrderedDict(k => ps[k] for k in (:test_00, :test_01))
+    ))
+    last_two = filter(ms -> true, ProcessingSet(
+        OrderedCollections.OrderedDict(k => ps[k] for k in (:test_02, :test_03))
+    ))
+
+    got = merge(first_two, last_two)
+    @test got isa ProcessingSet
+    @test collect(keys(got)) == [:test_00, :test_01, :test_02, :test_03]
+    @test metadata(got)[:type] == "processing_set"
+    # The Measurement Sets are shared, not copied.
+    @test got[:test_00] === ps[:test_00]
+
+    @test keys(merge(first_two)) == keys(first_two)
+    @test collect(keys(merge(last_two, first_two))) ==
+        [:test_02, :test_03, :test_00, :test_01]
+
+    @testset "a shared name is an error" begin
+        # Two Measurement Sets under one name are two different observations,
+        # so neither may win silently.
+        @test_throws ArgumentError merge(ps, first_two)
+        @test_throws "names a Measurement Set `test_00`" merge(ps, first_two)
+        @test_throws ArgumentError merge(first_two, last_two, first_two)
+    end
+
+    @testset "attributes are the union, and must agree" begin
+        # A processing set's attributes are its store's root attributes, which
+        # `write` puts back verbatim, so one argument's cannot stand for all.
+        metadata(first_two)[:observer] = "someone"
+        metadata(last_two)[:telescope] = "TEST"
+        got = merge(first_two, last_two)
+        @test got isa ProcessingSet
+        @test metadata(got)[:observer] == "someone"
+        @test metadata(got)[:telescope] == "TEST"
+        @test metadata(got)[:type] == "processing_set"
+        # The arguments are left as they were.
+        @test !haskey(metadata(first_two), :telescope)
+
+        metadata(last_two)[:observer] = "someone else"
+        @test_throws ArgumentError merge(first_two, last_two)
+        @test_throws "disagree about `observer`" merge(first_two, last_two)
+        @test_throws "\"someone\" against \"someone else\"" merge(first_two, last_two)
+    end
+
+    # Merging the parts of a selection puts the set back together.
+    @test keys(merge(
+        select(ps; scan = "1"), filter(ms -> false, ps)
+    )) == keys(ps)
 end
 
 @testset "transforming every Measurement Set" begin

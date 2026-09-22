@@ -196,6 +196,33 @@ function baselines(bl::BaselineLookup, antenna::AbstractString; auto::Bool = tru
 end
 
 """
+    baseline_antennas(ms, id) -> Tuple{String, String}
+
+The antenna pair of the baseline `id` names, in the order the coordinates give
+them — the inverse of [`baseline`](@ref), which goes from a pair to an id.
+
+```julia
+baseline_antennas(ms, 7)          # ("BR", "LA")
+baseline(ms, ("BR", "LA"))        # BaselineID(At(7))
+```
+
+A `baseline_id` the Measurement Set does not have is an error, naming the range
+it does have.
+
+There is no method on a [`XRadio.baseline_lookup`](@ref), for the same reason
+`baseline` has none taking an id: the `baseline_id` dimension is already the
+lookup for an id, and searching the materialized ids would be slower. A loop
+over every baseline wants [`baselines`](@ref), which pairs them all at once.
+
+See also [`baselines`](@ref).
+"""
+function baseline_antennas(ms::MeasurementSet, id::Integer)
+    sel = baseline(ms, id)
+    antenna1, antenna2 = _baseline_antenna_coords(ms)
+    return (antenna1[sel], antenna2[sel])
+end
+
+"""
     XRadio.baseline_lookup(ms) -> BaselineLookup
 
 The lookup `ms` answers [`baseline`](@ref) and [`baselines`](@ref) from, built
@@ -218,6 +245,16 @@ function baseline_lookup(ms::MeasurementSet)
     cached = getfield(ms, :baseline_lookup)
     cached === nothing || return cached
     d = _baseline_dim(ms)
+    antenna1, antenna2 = _baseline_antenna_coords(ms)
+    built = BaselineLookup(collect(val(d)), collect(antenna1), collect(antenna2))
+    setfield!(ms, :baseline_lookup, built)
+    return built
+end
+
+# The two coordinates MSv4 states the baseline antennas as. Asked for after the
+# `baseline_id` dimension, whose absence is the more basic fact and has its own
+# message.
+function _baseline_antenna_coords(ms::MeasurementSet)
     (haskey(ms, :baseline_antenna1_name) && haskey(ms, :baseline_antenna2_name)) || throw(
         ArgumentError(
             "this Measurement Set names no baseline antennas; MSv4 states them as " *
@@ -225,13 +262,7 @@ function baseline_lookup(ms::MeasurementSet)
                 "has " * join(sort(string.(collect(keys(ms)))), ", ")
         )
     )
-    built = BaselineLookup(
-        collect(val(d)),
-        collect(ms[:baseline_antenna1_name]),
-        collect(ms[:baseline_antenna2_name]),
-    )
-    setfield!(ms, :baseline_lookup, built)
-    return built
+    return (ms[:baseline_antenna1_name], ms[:baseline_antenna2_name])
 end
 
 function _baseline_dim(ms::MeasurementSet)
@@ -259,17 +290,29 @@ end
 
 """
     scans(ms) -> Vector{String}
+    scans(ps) -> Vector{String}
 
-The distinct scan names in `ms`, in the order they first occur.
+The distinct scan names in `ms`, or across every Measurement Set of `ps`, in
+the order they first occur.
 """
 scans(ms::MeasurementSet) = haskey(ms, :scan_name) ? unique(parent(ms[:scan_name])) : String[]
+scans(ps::ProcessingSet) = _distinct(scans, ps)
 
 """
     fields(ms) -> Vector{String}
+    fields(ps) -> Vector{String}
 
-The distinct field names in `ms`, in the order they first occur.
+The distinct field names in `ms`, or across every Measurement Set of `ps`, in
+the order they first occur.
 """
 fields(ms::MeasurementSet) = haskey(ms, :field_name) ? unique(parent(ms[:field_name])) : String[]
+fields(ps::ProcessingSet) = _distinct(fields, ps)
+
+# A processing set partitions one observation, so the same scan or field is
+# named by several of its Measurement Sets; `union` keeps each once, in the
+# order the set lists them.
+_distinct(accessor, ps::ProcessingSet) =
+    isempty(ps) ? String[] : mapreduce(accessor, union, ps)
 
 """
     scan_intents(ms) -> Vector{Intent}
@@ -456,6 +499,7 @@ end
 const _SELECT_BY = (
     antenna = antennas,
     field = fields,
+    intent = scan_intents,
     scan = scans,
     spectralwindow = spectralwindow,
 )
@@ -466,23 +510,43 @@ const _SELECT_BY = (
 The Measurement Sets of `ps` that state every attribute asked for, keeping
 their names and the set's own attributes.
 
-The keywords are `antenna`, `field`, `scan` and `spectralwindow`, spelled as
-the accessors are but singular, since each names one value to match rather than
-the set being searched. A keyword takes one name or a collection of them, and a
-collection matches a Measurement Set stating any of its values. Several
-keywords together must all match.
+The keywords are `antenna`, `field`, `intent`, `scan` and `spectralwindow`,
+spelled as the accessors are but singular, since each names one value to match
+rather than the set being searched. A keyword takes one name or a collection of
+them, and a collection matches a Measurement Set stating any of its values.
+Several keywords together must all match.
 
 ```julia
 select(ps; field = "M87")                       # one source
 select(ps; field = "M87", spectralwindow = "spw_2")
 select(ps; scan = ["3", "4", "5"])              # any of three scans
+select(ps; intent = "CALIBRATE_BANDPASS")       # whatever the subintent
 ```
+
+`intent` takes an [`Intent`](@ref), a `ScanIntents` member or the string form,
+and matches against [`scan_intents`](@ref). An intent naming no subintent
+matches a scan whatever subintent it states; `"CALIBRATE_BANDPASS#ON_SOURCE"`
+matches only that one.
 
 The result is a `ProcessingSet`, so selections chain. `filter(f, ps)` remains
 for predicates these keywords do not reach.
 
 An unrecognized keyword is an error rather than a selection that quietly keeps
 everything.
+
+This keeps or drops whole Measurement Sets and never cuts one. To cut inside
+one, index it with its dimensions:
+
+```julia
+ms[baselines(ms, "LA")]                      # baselines touching an antenna
+ms[Ti(t0 .. t1)]                             # a time window
+correlated(ms)[baseline(ms, ("BR", "LA"))]   # one baseline, on a layer
+```
+
+A selector naming a single value cuts a layer but not a whole Measurement Set:
+it reduces a coordinate stated over that dimension alone to a bare element,
+which the tree cannot hold. Select one value as a one-element collection —
+`BaselineID(At([id]))` — or index the layer.
 """
 function select(ps::ProcessingSet; kwargs...)
     asked = values(kwargs)
@@ -503,9 +567,18 @@ end
 _states(have, want) = any(w -> _includes(have, w), _wanted(want))
 
 _includes(have::AbstractString, want) = have == want
+_includes(have::AbstractVector{Intent}, want) = any(h -> _covers(Intent(want), h), have)
 _includes(have, want) = want in have
 
+# A wanted intent that names no subintent asks only what the scan was for, so
+# it matches whichever subintent the store states. One that names a subintent
+# asks for both.
+_covers(want::Intent, have::Intent) =
+    want.intent == have.intent &&
+    (want.subintent === nothing || want.subintent == have.subintent)
+
 _wanted(want::AbstractString) = (want,)
+_wanted(want::Union{Intent, ScanIntents.T}) = (want,)
 _wanted(want::Union{AbstractVector, Tuple}) = want
 _wanted(want) = throw(
     ArgumentError(
