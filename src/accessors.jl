@@ -470,6 +470,89 @@ fields(ms::MeasurementSet) = haskey(ms, :field_name) ? copy(labels(field_lookup(
 fields(ps::ProcessingSet) = _distinct(fields, ps)
 
 """
+    field_and_source(ms, group = :base) -> Dataset
+
+The `field_and_source` dataset the data group `group` points at: the fields
+`ms` observed and the sources in them.
+
+Each data group names its own, so which dataset is meant depends on the group,
+as it does for [`correlated`](@ref).
+"""
+function field_and_source(ms::MeasurementSet, group::Symbol = :base)
+    dg = datagroup(ms, group)
+    haskey(dg, :field_and_source) || throw(
+        ArgumentError("data group `$group` names no `field_and_source` dataset")
+    )
+    name = dg[:field_and_source]
+    key = nodekey(name)
+    haskey(branches(ms), key) || throw(
+        ArgumentError(
+            "data group `$group` points at `$name`, which this Measurement Set does " *
+                "not hold; it holds " * join(sort(nodename.(collect(keys(branches(ms))))), ", ")
+        )
+    )
+    return branches(ms)[key]
+end
+
+"""
+    partition_info(ms, group = :base) -> NamedTuple
+
+What `ms` holds, in one place: the fields a processing set's summary lists.
+
+- `spectral_window_name` and `spectral_window_intents`, from the `frequency`
+  coordinate.
+- `field_name`, `source_name` and `line_name`, from the
+  [`field_and_source`](@ref) dataset of `group`. `line_name` is empty when
+  that dataset names no lines.
+- `polarization_setup`, the polarization products in axis order.
+- `scan_name`, from the `scan_name` coordinate.
+- `scan_intents`, as the store writes them, such as
+  `"OBSERVE_TARGET#ON_SOURCE"`. An `intents` entry in `observation_info` takes
+  precedence over the `scan_name` coordinate's.
+- `data_group_name`, which is `group`.
+
+Name lists are sorted and hold each name once. Intents a store does not state
+are `["UNSPECIFIED"]`.
+
+See also [`scans`](@ref) and [`fields`](@ref), which keep the order names first
+occur in.
+"""
+function partition_info(ms::MeasurementSet, group::Symbol = :base)
+    fs = field_and_source(ms, group)
+    lines = haskey(fs, :line_name) ? _sorted_names(fs, :line_name) : String[]
+    return (;
+        spectral_window_name = spectralwindow(ms),
+        spectral_window_intents = _frequency_intents(ms),
+        field_name = _sorted_names(fs, :field_name),
+        polarization_setup = polarizations(ms),
+        scan_name = _sorted_names(ms, :scan_name),
+        source_name = _sorted_names(fs, :source_name),
+        scan_intents = _stated_scan_intents(ms),
+        line_name = lines,
+        data_group_name = group,
+    )
+end
+
+# A name coordinate is an index over its own dimension in one dataset and a
+# variable over `time` in another, as `field_name` is in the ephemeris form.
+function _sorted_names(tree, name::Symbol)
+    stated = haskey(tree, name) ? vec(collect(tree[name])) : _lookup_values(tree, name, String)
+    return sort!(unique!(String.(stated)))
+end
+
+function _frequency_intents(ms::MeasurementSet)
+    d = dims(ms, dimtype(:frequency))
+    d === nothing && return ["UNSPECIFIED"]
+    return String.(get(metadata(lookup(d)), :spectral_window_intents, ["UNSPECIFIED"]))
+end
+
+function _stated_scan_intents(ms::MeasurementSet)
+    info = get(metadata(ms), :observation_info, Dict{Symbol, Any}())
+    haskey(info, :intents) && return String.(info[:intents])
+    return String.(get(metadata(ms[:scan_name]), :scan_intents, ["UNSPECIFIED"]))
+end
+
+"""
     scan(ms, name) -> Ti
     scan(lookup, times, name) -> Ti
 

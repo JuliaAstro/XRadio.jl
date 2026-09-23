@@ -362,6 +362,81 @@ end
 end
 
 
+@testset "the field-and-source dataset and the partition summary" begin
+    ms = synthetic_set(1)[1]
+    @test field_and_source(ms) === branches(ms)[:field_and_source_base]
+    @test partition_info(ms) == (;
+        spectral_window_name = "spw_0",
+        spectral_window_intents = ["CONTINUUM"],
+        field_name = ["field_0"],
+        polarization_setup = ["XX", "YY"],
+        scan_name = ["1"],
+        source_name = ["source_0"],
+        scan_intents = ["OBSERVE_TARGET#ON_SOURCE"],
+        line_name = String[],
+        data_group_name = :base,
+    )
+
+    @testset "name lists are sorted and hold each name once" begin
+        out = deepcopy(ms)
+        t = dims(out, Ti)
+        out[:scan_name] = DimArray(
+            ["3", "1", "3", "2"][mod1.(1:length(t), 4)], (t,);
+            metadata = metadata(ms[:scan_name])
+        )
+        @test partition_info(out).scan_name == ["1", "2", "3"]
+        # The summary sorts; `scans` keeps the order names first occur in.
+        @test scans(out) == ["3", "1", "2"]
+    end
+
+    @testset "the data group decides which dataset is meant" begin
+        out = deepcopy(ms)
+        other = XRadio.Dataset(; metadata = Dict{Symbol, Any}(:type => "field_and_source"))
+        other[:source_name] = DimArray(["zeta", "alpha"], (FieldName(Categorical(["f2", "f1"])),))
+        branches(out)[:field_and_source_corrected] = other
+        metadata(out)[:data_groups][:corrected] = merge(
+            datagroup(out), Dict{Symbol, Any}(:field_and_source => "field_and_source_corrected_xds")
+        )
+        @test field_and_source(out, :corrected) === other
+        info = partition_info(out, :corrected)
+        @test info.source_name == ["alpha", "zeta"]
+        @test info.field_name == ["f1", "f2"]
+        @test info.data_group_name == :corrected
+        @test partition_info(out).source_name == ["source_0"]
+    end
+
+    @testset "a group pointing at a dataset the set does not hold" begin
+        out = deepcopy(ms)
+        metadata(out)[:data_groups][:base][:field_and_source] = "field_and_source_gone_xds"
+        @test_throws "points at `field_and_source_gone_xds`, which this Measurement Set does not hold" field_and_source(out)
+        delete!(metadata(out)[:data_groups][:base], :field_and_source)
+        @test_throws "names no `field_and_source` dataset" field_and_source(out)
+        @test_throws KeyError field_and_source(ms, :nonexistent)
+    end
+
+    @testset "intents" begin
+        out = deepcopy(ms)
+        metadata(out)[:observation_info][:intents] = ["CALIBRATE_BANDPASS#ON_SOURCE"]
+        @test partition_info(out).scan_intents == ["CALIBRATE_BANDPASS#ON_SOURCE"]
+
+        out = deepcopy(ms)
+        out[:scan_name] = DimArray(parent(ms[:scan_name]), dims(ms[:scan_name]))
+        @test partition_info(out).scan_intents == ["UNSPECIFIED"]
+        f = dims(out, XRadio.Frequency)
+        delete!(metadata(lookup(f)), :spectral_window_intents)
+        @test partition_info(out).spectral_window_intents == ["UNSPECIFIED"]
+    end
+
+    @testset "lines" begin
+        out = deepcopy(ms)
+        fs = field_and_source(out)
+        fs[:line_name] = DimArray(
+            ["SiO", "CO"], (LineLabel(Categorical(["l1", "l2"])),)
+        )
+        @test partition_info(out).line_name == ["CO", "SiO"]
+    end
+end
+
 @testset "the antennas of one baseline" begin
     ms = synthetic_set(1)[1]
 
