@@ -12,6 +12,7 @@ makedocs(;
         "Selecting data" => "selection.md",
         "Modifying data" => "modifying.md",
         "Writing stores" => "writing.md",
+        "Building data" => "building.md",
         "Coming from xradio" => "xradio.md",
         "Reference" => "reference.md",
     ],

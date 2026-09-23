@@ -33,65 +33,33 @@ function synthetic_visibility(;
         T::Type = Float64, C::Type = ComplexF32,
     )
     antnames = ["AA", "BB", "CC"]
-    ant1 = ["AA", "AA", "BB"]
-    ant2 = ["BB", "CC", "CC"]
-
-    time = Ti(
-        Sampled(
-            collect(range(1.7e9; step = 10.0, length = ntime));
-            metadata = Dict{Symbol, Any}(
-                :type => "time", :units => "s", :scale => "utc", :format => "unix",
-                :integration_time => measure(10.0, "s"),
-            )
-        )
-    )
-    freq = Frequency(
-        Sampled(
-            collect(range(2.3e11; step = 1.0e6, length = nfreq));
-            metadata = Dict{Symbol, Any}(
-                :type => "spectral_coord", :units => "Hz", :observer => "icrs",
-                :spectral_window_name => "spw_0", :spectral_window_intents => ["CONTINUUM"],
-                :reference_frequency => XRadio.Measure(
-                    2.3e11,
-                    Dict{Symbol, Any}(
-                        :units => "Hz", :type => "spectral_coord", :observer => "icrs"
-                    )
-                ),
-                :channel_width => measure(1.0e6, "Hz"),
-            )
-        )
-    )
-    pol = Polarization(Categorical(["XX", "YY"]))
-    base = BaselineID(Sampled(collect(1:nbaseline)))
-    uvwlab = UVWLabel(Categorical(["u", "v", "w"]))
-    npol = length(val(pol))
-
-    # MSv4 states dimensions slowest-varying first; a Julia array runs the
-    # other way, so the science arrays are built reversed.
-    vis = DimArray(
-        rand(C, npol, nfreq, nbaseline, ntime), (pol, freq, base, time);
-        metadata = Dict{Symbol, Any}(:units => "Jy")
-    )
-    flag = DimArray(falses(npol, nfreq, nbaseline, ntime), (pol, freq, base, time))
-    weight = DimArray(ones(T, npol, nfreq, nbaseline, ntime), (pol, freq, base, time))
-    uvwdata = DimArray(
-        rand(T, 3, nbaseline, ntime), (uvwlab, base, time);
-        metadata = Dict{Symbol, Any}(:type => "uvw", :units => "m", :frame => "icrs")
-    )
-
-    ms = MeasurementSet(;
-        metadata = Dict{Symbol, Any}(
-            :type => "visibility",
-            :schema_version => string(XRadio.MSV4_SCHEMA_VERSION),
-            :creation_date => "2026-01-01T00:00:00.000",
-            :creator => Dict{Symbol, Any}(:software_name => "XRadio.jl", :version => "0.1.0"),
-            :observation_info => Dict{Symbol, Any}(
+    npol = 2
+    return XRadio.measurement_set(;
+        time = collect(range(1.7e9; step = 10.0, length = ntime)),
+        frequency = collect(range(2.3e11; step = 1.0e6, length = nfreq)),
+        polarization = ["XX", "YY"],
+        baseline_id = collect(1:nbaseline),
+        baseline_antenna1_name = ["AA", "AA", "BB"][1:nbaseline],
+        baseline_antenna2_name = ["BB", "CC", "CC"][1:nbaseline],
+        uvw_label = ["u", "v", "w"],
+        # Julia order: the reverse of the (time, baseline_id, frequency,
+        # polarization) the standard states.
+        visibility = rand(C, npol, nfreq, nbaseline, ntime),
+        flag = falses(npol, nfreq, nbaseline, ntime),
+        weight = ones(T, npol, nfreq, nbaseline, ntime),
+        uvw = rand(T, 3, nbaseline, ntime),
+        field_name = fill("field_0", ntime),
+        scan_name = fill("1", ntime),
+        metadata = (;
+            creation_date = "2026-01-01T00:00:00.000",
+            creator = Dict{Symbol, Any}(:software_name => "XRadio.jl", :version => "0.1.0"),
+            observation_info = Dict{Symbol, Any}(
                 :observer => ["Nobody"],
                 :release_date => "2027-01-01T00:00:00.000",
                 :project_UID => "uid://X0/X1/X2",
             ),
-            :processor_info => Dict{Symbol, Any}(:type => "CORRELATOR", :sub_type => "TEST"),
-            :data_groups => Dict{Symbol, Any}(
+            processor_info = Dict{Symbol, Any}(:type => "CORRELATOR", :sub_type => "TEST"),
+            data_groups = Dict{Symbol, Any}(
                 :base => Dict{Symbol, Any}(
                     :correlated_data => "VISIBILITY", :flag => "FLAG",
                     :weight => "WEIGHT", :uvw => "UVW",
@@ -100,23 +68,30 @@ function synthetic_visibility(;
                     :date => "2026-01-01T00:00:00.000",
                 ),
             ),
-        )
+        ),
+        array_metadata = (;
+            time = (;
+                scale = "utc", format = "unix", integration_time = measure(10.0, "s"),
+            ),
+            frequency = (;
+                observer = "icrs",
+                spectral_window_name = "spw_0", spectral_window_intents = ["CONTINUUM"],
+                reference_frequency = XRadio.Measure(
+                    2.3e11,
+                    Dict{Symbol, Any}(
+                        :units => "Hz", :type => "spectral_coord", :observer => "icrs"
+                    )
+                ),
+                channel_width = measure(1.0e6, "Hz"),
+            ),
+            uvw = (; frame = "icrs"),
+            scan_name = (; scan_intents = ["OBSERVE_TARGET#ON_SOURCE"]),
+        ),
+        subdatasets = (;
+            antenna = synthetic_antenna(antnames),
+            field_and_source_base = synthetic_field_and_source(),
+        ),
     )
-    ms[:visibility] = vis
-    ms[:flag] = flag
-    ms[:weight] = weight
-    ms[:uvw] = uvwdata
-    ms[:field_name] = DimArray(fill("field_0", ntime), (time,))
-    ms[:scan_name] = DimArray(
-        fill("1", ntime), (time,);
-        metadata = Dict{Symbol, Any}(:scan_intents => ["OBSERVE_TARGET#ON_SOURCE"])
-    )
-    ms[:baseline_antenna1_name] = DimArray(ant1[1:nbaseline], (base,))
-    ms[:baseline_antenna2_name] = DimArray(ant2[1:nbaseline], (base,))
-
-    ms.antenna = synthetic_antenna(antnames)
-    ms.field_and_source_base = synthetic_field_and_source()
-    return ms
 end
 
 function synthetic_antenna(antnames)

@@ -80,6 +80,7 @@ export BaselineID, Frequency, Polarization, UVWLabel, AntennaName, StationName,
 @compat public gain_variable, gain_quantity, msv4_gain_curve
 @compat public set_mounts!, mount_from_msv4, msv4_mount, axis_offset
 @compat public baseline_lookup, BaselineLookup
+@compat public subdataset, measurement_set
 @compat public scan_lookup, field_lookup, LabelLookup
 
 include("dimensions.jl")
@@ -103,5 +104,6 @@ include("zarr/chunks.jl")
 include("zarr/write.jl")
 include("accessors.jl")
 include("fitsidi.jl")
+include("testing.jl")
 
 end # module
