@@ -229,11 +229,12 @@ Each antenna's geocentric position in metres, keyed by `NOSTA`.
 
 `STABXYZ` is measured from the array center the `ARRAYX`/`ARRAYY`/`ARRAYZ`
 keywords give, which VLBI files leave at the geocenter and connected-element
-files do not.
+files do not. `FRAME` must be `GEOCENTRIC`, as DiFX writes it, or `ITRF`, the
+AIPS name for the same Earth-fixed geocentric positions.
 """
 function antenna_positions(ag_hdu)
     frame = card_string(ag_hdu, "FRAME", "GEOCENTRIC")
-    frame == "GEOCENTRIC" || throw(ArgumentError(
+    frame in ("GEOCENTRIC", "ITRF") || throw(ArgumentError(
         "FITS-IDI ARRAY_GEOMETRY FRAME is $(repr(frame)); MSv4 positions are " *
             "geocentric and this converter cannot transform from another frame"
     ))

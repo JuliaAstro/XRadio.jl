@@ -406,6 +406,13 @@ end
         @test parent(ant[:antenna_position]) ≈ gt.positions .+ [10.0, -20.0, 30.0]
         @test metadata(ant[:antenna_position])[:coordinate_system] == "geocentric"
 
+        # AIPS names the same geocentric positions ITRF.
+        itrf = synthetic_fitsidi(
+            joinpath(dir, "itrf.idifits"); array_center = (10.0, -20.0, 30.0), frame = "ITRF"
+        )
+        ant_itrf = branches(open(ProcessingSet, to_msv4(itrf, "itrf.ps.zarr"))[:itrf_00])[:antenna]
+        @test ant_itrf[:antenna_position] == ant[:antenna_position]
+
         @test collect(ant[:mount]) == ["ALT-AZ", "ALT-AZ+NASMYTH-R", "EQUATORIAL"]
         @test collect(mounts(ant)) == [
             MountAltAz((0.0, 0.0, 0.0)), MountNasmythR((1.5, 0.0, -1.0)),
@@ -1062,6 +1069,9 @@ end
 
         gt = synthetic_fitsidi(joinpath(dir, "odd.idifits"); equinox = "J1975")
         @test_throws "names no MSv4 frame" to_msv4(gt, "odd.ps.zarr")
+
+        gt = synthetic_fitsidi(joinpath(dir, "wgs84.idifits"); frame = "WGS84")
+        @test_throws "FRAME is \"WGS84\"" to_msv4(gt, "wgs84.ps.zarr")
 
         gt = synthetic_fitsidi(joinpath(dir, "twice.idifits"))
         to_msv4(gt, "twice.ps.zarr")
