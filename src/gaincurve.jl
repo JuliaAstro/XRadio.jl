@@ -223,7 +223,7 @@ end
 A gain curve measured at a list of angles, linearly interpolated between them.
 
 `angles` is in radians and must increase. Asking for the gain outside the range
-that was measured is a [`DomainError`](@ref) rather than an extrapolation: a
+that was measured is a `DomainError` rather than an extrapolation: a
 gain curve says nothing about elevations the telescope was never pointed at.
 
 MSv4 has no field for a curve of this shape, so

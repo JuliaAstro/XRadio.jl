@@ -817,9 +817,8 @@ end
     @testset "the summary row" begin
         row = XRadio._summary_row(:a, ps[:a])
         @test keys(row) == (
-            :name, :spectral_window_name, :spectral_window_intents, :field_name,
-            :polarization_setup, :scan_name, :source_name, :scan_intents, :line_name,
-            :start_frequency, :end_frequency,
+            :name, :scan_intents, :polarization, :scan_name, :spw_name, :spw_intents,
+            :field_name, :source_name, :line_name, :start_frequency, :end_frequency,
         )
         @test row.name == "a"
         @test row.scan_intents == [Intent("OBSERVE_TARGET#ON_SOURCE")]
@@ -829,14 +828,14 @@ end
 
     @testset "one column" begin
         @test names(query(ps; field_name = "M87")) == [:a, :b]
-        @test names(query(ps; spectral_window_name = "spw_0")) == [:a, :c]
+        @test names(query(ps; spw_name = "spw_0")) == [:a, :c]
         @test names(query(ps; scan_name = "3")) == [:c]
         @test names(query(ps; source_name = "Virgo A")) == [:a, :b]
         @test names(query(ps; name = "b")) == [:b]
     end
 
     @testset "several criteria must all match" begin
-        @test names(query(ps; field_name = "M87", spectral_window_name = "spw_0")) == [:a]
+        @test names(query(ps; field_name = "M87", spw_name = "spw_0")) == [:a]
         @test isempty(query(ps; field_name = "3C273", scan_name = "1"))
     end
 
@@ -854,7 +853,7 @@ end
 
     @testset "a function is a predicate on each value" begin
         @test names(query(ps; field_name = startswith("3C"))) == [:c]
-        @test names(query(ps; spectral_window_name = endswith("_1"))) == [:b]
+        @test names(query(ps; spw_name = endswith("_1"))) == [:b]
         @test_throws TypeError query(ps; field_name = length)
     end
 
@@ -873,8 +872,8 @@ end
         @test got isa ProcessingSet
         @test metadata(got)[:type] == "processing_set"
         # Queries chain, and chaining agrees with asking for both at once.
-        @test keys(query(got; spectral_window_name = "spw_1")) ==
-            keys(query(ps; field_name = "M87", spectral_window_name = "spw_1"))
+        @test keys(query(got; spw_name = "spw_1")) ==
+            keys(query(ps; field_name = "M87", spw_name = "spw_1"))
         @test isempty(query(ps; field_name = "NOSUCH"))
         @test query(ps; field_name = "NOSUCH") isa ProcessingSet
         # Nothing asked for excludes nothing.
@@ -904,7 +903,7 @@ end
     @testset "an unknown keyword is an error" begin
         @test_throws ArgumentError query(ps; field = "M87")
         @test_throws "no keyword `field`" query(ps; field = "M87")
-        @test_throws "accepts name, spectral_window_name" query(ps; field = "M87")
+        @test_throws "accepts name, scan_intents, polarization" query(ps; field = "M87")
         @test_throws "no keyword `sources`, `freq`" query(ps; sources = "M87", freq = 1)
         # The reference's data group keyword narrows rather than matches; here
         # it is not a column.

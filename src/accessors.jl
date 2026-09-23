@@ -904,21 +904,25 @@ function spectralwindow(ms::MeasurementSet)
     return String(get(metadata(lookup(d)), :spectral_window_name, ""))
 end
 
-# `partition_info` for the base data group, less the group's name, which
-# `query` does not match on; with the Measurement Set's name and its first and
-# last channel, as the reference's summary takes them, and the scan intents
-# parsed so that they match as `scan_intents` does.
+# The reference's summary row, in its column order and under its names, less
+# the columns it computes that this does not (`shape`, `field_coords` and the
+# `observation_info` UIDs). Built from `partition_info` for the base data
+# group, with the scan intents parsed so that they match as `scan_intents` does.
 function _summary_row(name::Symbol, ms::MeasurementSet)
     info = partition_info(ms)
     freqs = frequencies(ms)
-    return merge(
-        (; name = String(name)),
-        Base.structdiff(info, NamedTuple{(:data_group_name,)}),
-        (;
-            scan_intents = Intent.(info.scan_intents),
-            start_frequency = isempty(freqs) ? freqs : first(freqs),
-            end_frequency = isempty(freqs) ? freqs : last(freqs),
-        ),
+    return (;
+        name = String(name),
+        scan_intents = Intent.(info.scan_intents),
+        polarization = info.polarization_setup,
+        scan_name = info.scan_name,
+        spw_name = info.spectral_window_name,
+        spw_intents = info.spectral_window_intents,
+        field_name = info.field_name,
+        source_name = info.source_name,
+        line_name = info.line_name,
+        start_frequency = isempty(freqs) ? freqs : first(freqs),
+        end_frequency = isempty(freqs) ? freqs : last(freqs),
     )
 end
 
@@ -928,11 +932,13 @@ end
 The Measurement Sets of `ps` whose summary matches every keyword, keeping their
 names and the set's own attributes.
 
-A keyword names a column of the summary: `name`, `spectral_window_name`,
-`spectral_window_intents`, `field_name`, `polarization_setup`, `scan_name`,
-`source_name`, `scan_intents`, `line_name`, `start_frequency` and
+A keyword names a column of the summary, under the reference's names: `name`,
+`scan_intents`, `polarization`, `scan_name`, `spw_name`, `spw_intents`,
+`field_name`, `source_name`, `line_name`, `start_frequency` and
 `end_frequency`. These are the fields of [`partition_info`](@ref) for the base
-data group, plus the Measurement Set's name in `ps` and its first and last
+data group, with `polarization_setup` as `polarization` and
+`spectral_window_name` and `spectral_window_intents` as `spw_name` and
+`spw_intents`, plus the Measurement Set's name in `ps` and its first and last
 channel frequency.
 
 ```julia
@@ -945,7 +951,7 @@ query(ps; field_name = contains("M87"))                 # a predicate
 
 A Measurement Set matches a keyword when any value its column states is one
 asked for. The column is a collection, as `field_name` is, or one value, as
-`spectral_window_name` is. What is asked for is
+`spw_name` is. What is asked for is
 
   - a value, matching an equal one;
   - a vector, tuple or set, matching any of its values;

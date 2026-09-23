@@ -1,0 +1,9 @@
+[deps]
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+XRadio = "8f21e5d1-474f-4c64-bef4-ed78edb0e816"
+
+[sources]
+XRadio = {path = ".."}
+
+[compat]
+Documenter = "1"

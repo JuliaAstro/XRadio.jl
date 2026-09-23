@@ -13,6 +13,8 @@ The reference implementation is the Python package
 [xradio](https://github.com/casangi/xradio); this package targets the same
 on-disk format with a Julia interface. Stores written here are read by `xradio`,
 and stores written by `xradio` are read here.
+[`docs/src/xradio.md`](docs/src/xradio.md) maps `xradio` calls to their
+counterparts here.
 
 `XRadio` is early and unregistered. The API will change.
 
@@ -47,67 +49,22 @@ enumerated.
 
 ## Selecting
 
-`query` narrows a processing set to the Measurement Sets whose summary matches
-every keyword. A keyword names a column of the summary, which is
-`partition_info(ms)` plus the Measurement Set's `name` and its
-`start_frequency` and `end_frequency`:
+`query` keeps the Measurement Sets of a processing set whose summary matches
+every keyword, and `filter` keeps those that pass any predicate. Indexing cuts
+inside one Measurement Set, with the store's dimension names as keywords, and
+`baseline`, `baselines`, `scan` and `field` turn names into selectors for it:
 
 ```julia
-query(ps; field_name = "M87")                        # one field
-query(ps; source_name = "M87")                       # one source, whatever the field
-query(ps; field_name = "M87", spectral_window_name = "spw_2")
-query(ps; scan_name = ["3", "4", "5"])               # any of three scans
-query(ps; start_frequency = 220e9 .. 230e9)          # an interval
-query(ps; field_name = startswith("3C"))             # a predicate
-```
-
-A value matches an equal one and a collection any of its values. Several
-keywords must all match, and an unknown keyword, or a value that could never
-match, is an error rather than a query that quietly keeps everything or
-nothing. The result is a `ProcessingSet`, so queries chain; `filter(f, ps)`
-takes any predicate, for what the summary does not state:
-
-```julia
+m87 = query(ps; field_name = "M87", start_frequency = 220e9 .. 230e9)
 filter(ms -> "DV02_A015" in antennas(ms), ps)
+
+ms[time = t0 .. t1, baseline_id = At(7)]
+correlated(ms)[scan(ms, "3"), baseline(ms, ("DV02_A015", "DV06_T704"))]
 ```
 
-`transform(f, ps)` turns each Measurement Set into another one, keeping the
-names, so the result is a processing set again. Reading a value out of each
-instead gives them in order, as for any collection:
-
-```julia
-transform(ms -> delete!(deepcopy(ms), :weight), ps)   # ProcessingSet
-map(gaincurves, values(ps))                          # Vector, in ps's order
-```
-
-Within one Measurement Set, a `MeasurementSet` is a `DimensionalData.DimTree`,
-so everything that library offers applies. Keyword indexing takes the store's
-own dimension names:
-
-```julia
-vis = ms[:visibility]
-
-ms[time = t0 .. t1, baseline_id = At(7)]   # a time window on one baseline
-
-vis[Polarization(At("XX"))]          # one polarization product
-vis[Frequency(1:64)]                 # the first 64 channels
-ms[Ti(At(t))]                        # a time step, across every layer
-
-ms.antenna[:antenna_position]        # a sub-dataset
-```
-
-Baselines are named by their two antennas, rather than by the integer
-`baseline_id` the store indexes them with:
-
-```julia
-baselines(ms)                                   # [("DV02_A015", "DV06_T704"), …]
-vis[baseline(ms, ("DV02_A015", "DV06_T704"))]   # one baseline, either order
-vis[baseline(ms, "DV02_A015-DV06_T704")]        # the same pair as one label
-vis[baselines(ms, "DV02_A015"; auto = false)]   # one antenna's cross-correlations
-```
-
-Both return a selector rather than data, so they compose with everything above
-and leave the choice of layer to the caller.
+[`docs/src/selection.md`](docs/src/selection.md) gives the rules for each of
+these, and for `transform` and `merge`, with a comparison against the
+reference's `query` and `sel`.
 
 ## Writing
 

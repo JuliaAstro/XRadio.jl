@@ -61,8 +61,8 @@ The question this answers is whether the reference implementation would accept
 the data, so it is no stricter than that implementation and no looser. MSv4 is
 an extensible format: a dataset may carry attributes, coordinates and data
 variables the standard does not define, and a store may carry whole
-sub-datasets it does not define, provided their `type` names a schema
-[`register_schema!`](@ref) knows. The one bound on an extension is the
+sub-datasets it does not define, provided their `type` names a schema passed
+in `schemas`. The one bound on an extension is the
 dataset's dimension set, which is checked.
 
 `schemas` adds dataset specifications of the caller's own, for the sub-dataset
