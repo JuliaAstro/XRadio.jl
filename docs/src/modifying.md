@@ -77,6 +77,25 @@ reports it, and `write` refuses it.
 Assigning or deleting a layer drops the Measurement Set's cached baseline, scan
 and field lookups; see [Cached lookups](@ref).
 
+## Data groups
+
+A new version of the correlated data, flags or weights is a new layer, and a
+data group is what says which of them belong together. [`add_datagroup!`](@ref)
+adds one, taking every entry it is not given from another group, `base` unless
+`shared_with` says otherwise:
+
+```julia
+ms2 = copy(ms)
+ms2[:visibility_corrected] = rebuild(ms[:visibility], corrected)
+add_datagroup!(ms2, :corrected; correlated_data = "VISIBILITY_CORRECTED")
+```
+
+Unlike xradio's `add_data_group`, it throws on a group name already in use and
+on a name that is not a layer or sub-dataset of the Measurement Set, and a group
+given no `date` or `description` gets the current time and an empty
+description rather than those of the group it shares with. It replaces the
+`data_groups` attribute rather than editing it, so `ms` keeps its groups.
+
 ```@docs; canonical=false
 Base.copy(::Union{MeasurementSet, Dataset})
 ```

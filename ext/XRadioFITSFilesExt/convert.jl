@@ -61,8 +61,6 @@ spectral_window_name(window::Integer) = "spw_$(window - 1)"
 # quantity that identifies a spectral window wherever one must be labelled.
 reference_frequencies(ref_freq, band_freq) = ref_freq .+ band_freq
 
-_iso8601(t::DateTime) = Dates.format(t, "yyyy-mm-ddTHH:MM:SS.sss")
-
 """
     idi_frame(equinox) -> String
 
@@ -1313,7 +1311,7 @@ function XRadio.fitsidi2msv4(
         # outside the ASDM enumerations cannot reach the store.
         scan_intents = [string(XRadio.Intent(i)) for i in scan_intents],
         spectral_window_intents = collect(String, spectral_window_intents),
-        creation_date = _iso8601(now(UTC)),
+        creation_date = XRadio._iso8601(now(UTC)),
         visibility_units,
         observation_info = Dict{Symbol, Any}(
             :observer => [observer],

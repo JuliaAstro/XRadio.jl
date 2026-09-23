@@ -1175,6 +1175,60 @@ end
         @test ndims(c[:visibility]) == 2
         @test !isempty(check(ProcessingSet(OrderedDict(:a => c))))
     end
+
+    @testset "adding a data group" begin
+        c = copy(ms)
+        c[:visibility_corrected] = rebuild(vis, 2 .* parent(vis))
+        @test add_datagroup!(c, :corrected; correlated_data = "VISIBILITY_CORRECTED") === c
+        g = datagroup(c, :corrected)
+        @test g[:correlated_data] == "VISIBILITY_CORRECTED"
+        base = datagroup(c)
+        @test all(g[k] == base[k] for k in (:flag, :weight, :uvw, :field_and_source))
+        @test g[:description] == ""
+        @test DateTime(g[:date]) isa DateTime
+        @test correlated(c, :corrected) == 2 .* vis
+        @test flags(c, :corrected) === flags(c)
+        @test !haskey(datagroups(ms), :corrected)
+        @test isempty(check(ProcessingSet(OrderedDict(:a => c))))
+
+        path = joinpath(mktempdir(), "datagroup.ps.zarr")
+        write(path, ProcessingSet(OrderedDict(:a => c)))
+        @test datagroup(read(ProcessingSet, path)[1], :corrected) == g
+    end
+
+    @testset "a data group shares with the group named" begin
+        c = copy(ms)
+        c[:weight_other] = ms[:weight]
+        add_datagroup!(c, :reweighted; weight = "WEIGHT_OTHER", description = "reweighted")
+        add_datagroup!(c, :chained; shared_with = :reweighted, date = "2026-02-01T00:00:00.000")
+        g = datagroup(c, :chained)
+        @test g[:weight] == "WEIGHT_OTHER"
+        @test g[:description] == ""
+        @test g[:date] == "2026-02-01T00:00:00.000"
+    end
+
+    @testset "`uvw` is left out when the shared group has none" begin
+        c = copy(ms)
+        metadata(c)[:data_groups] = Dict{Symbol, Any}(:base => delete!(copy(datagroup(ms)), :uvw))
+        add_datagroup!(c, :other)
+        @test !haskey(datagroup(c, :other), :uvw)
+        @test haskey(datagroup(ms), :uvw)
+    end
+
+    @testset "a data group that cannot be added is an error" begin
+        c = copy(ms)
+        @test_throws "already has a data group `base`" add_datagroup!(c, :base)
+        @test_throws "`VISIBILITY_CORECTED`" add_datagroup!(c, :x; correlated_data = "VISIBILITY_CORECTED")
+        @test_throws "not a layer of this Measurement Set" add_datagroup!(c, :x; flag = "FLAG_GONE")
+        @test_throws "`field_and_source_gone_xds` as its `field_and_source`, which this Measurement Set does not hold" add_datagroup!(
+            c, :x; field_and_source = "field_and_source_gone_xds"
+        )
+        @test_throws "a data group has no entry :visibility" add_datagroup!(c, :x; visibility = "VISIBILITY")
+        @test_throws KeyError add_datagroup!(c, :x; shared_with = :nonexistent)
+        metadata(c)[:data_groups] = Dict{Symbol, Any}(:base => delete!(copy(datagroup(ms)), :flag))
+        @test_throws "no `flag` given for data group `x`, and data group `base` names none to share" add_datagroup!(c, :x)
+        @test collect(keys(datagroups(c))) == [:base]
+    end
 end
 
 @testset "sub-datasets are linked to their Measurement Set" begin

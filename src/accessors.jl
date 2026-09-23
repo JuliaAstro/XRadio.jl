@@ -37,6 +37,86 @@ function datagroup(ms::MeasurementSet, name::Symbol = :base)
 end
 
 """
+    add_datagroup!(ms, name; shared_with = :base, correlated_data, flag, weight,
+                   uvw, field_and_source, description = "", date = now) -> ms
+
+Add a data group called `name` to `ms`, pointing at layers and a
+`field_and_source` sub-dataset `ms` already holds. Each of `correlated_data`,
+`flag`, `weight`, `uvw` and `field_and_source` not given is taken from the group
+`shared_with`; `uvw` is left out when that group has none. Names are the stored
+ones, such as `"VISIBILITY_CORRECTED"` and `"field_and_source_base_xds"`.
+`date` defaults to the current UTC time.
+
+Throws `ArgumentError` if `ms` already has a group called `name`, or if a name
+the group records is not a layer or sub-dataset of `ms`.
+
+`ms`'s `data_groups` attribute is replaced rather than edited, so a
+Measurement Set that `ms` was copied from keeps its groups:
+
+```julia
+ms2 = copy(ms)
+ms2[:visibility_corrected] = rebuild(ms[:visibility], corrected)
+add_datagroup!(ms2, :corrected; correlated_data = "VISIBILITY_CORRECTED")
+correlated(ms2, :corrected)   # the new array, with base's flags and weights
+```
+"""
+function add_datagroup!(
+        ms::MeasurementSet, name::Symbol; shared_with::Symbol = :base,
+        description::AbstractString = "", date::AbstractString = _iso8601(now(UTC)),
+        entries...
+    )
+    groups = datagroups(ms)
+    haskey(groups, name) && throw(
+        ArgumentError("this Measurement Set already has a data group `$name`")
+    )
+    unknown = setdiff(keys(entries), _DATAGROUP_ENTRIES)
+    isempty(unknown) || throw(
+        ArgumentError(
+            "a data group has no entry " * join(repr.(collect(unknown)), ", ") *
+                "; it records " * join(repr.(_DATAGROUP_ENTRIES), ", ")
+        )
+    )
+    shared = datagroup(ms, shared_with)
+    group = Dict{Symbol, Any}(:description => String(description), :date => String(date))
+    for key in _DATAGROUP_ENTRIES
+        if haskey(entries, key)
+            group[key] = String(entries[key])
+        elseif haskey(shared, key)
+            group[key] = shared[key]
+        elseif key !== :uvw
+            throw(
+                ArgumentError(
+                    "no `$key` given for data group `$name`, and data group " *
+                        "`$shared_with` names none to share"
+                )
+            )
+        end
+    end
+    for key in (:correlated_data, :flag, :weight, :uvw)
+        haskey(group, key) || continue
+        haskey(ms, julianame(group[key])) || throw(
+            ArgumentError(
+                "data group `$name` names `$(group[key])` as its `$key`, which is " *
+                    "not a layer of this Measurement Set"
+            )
+        )
+    end
+    haskey(branches(ms), nodekey(group[:field_and_source])) || throw(
+        ArgumentError(
+            "data group `$name` names `$(group[:field_and_source])` as its " *
+                "`field_and_source`, which this Measurement Set does not hold; it holds " *
+                join(sort(nodename.(collect(keys(branches(ms))))), ", ")
+        )
+    )
+    metadata(ms)[:data_groups] = merge(groups, Dict{Symbol, Any}(name => group))
+    return ms
+end
+
+const _DATAGROUP_ENTRIES = (:correlated_data, :flag, :weight, :uvw, :field_and_source)
+
+_iso8601(t::DateTime) = Dates.format(t, "yyyy-mm-ddTHH:MM:SS.sss")
+
+"""
     correlated(ms, group = :base) -> AbstractDimArray
 
 The correlated data of one data group — the visibilities or the spectrum.
