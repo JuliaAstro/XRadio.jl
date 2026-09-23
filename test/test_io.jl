@@ -1086,3 +1086,93 @@ end
     @test map(spectralwindow, ps) == fill("spw_0", 3)
     @test map(gaincurves, values(ps)) isa Vector
 end
+
+@testset "building a modified Measurement Set" begin
+    ms = synthetic_visibility()
+    vis = ms[:visibility]
+
+    @testset "a copy shares arrays but no structure" begin
+        XRadio.baseline_lookup(ms)
+        c = copy(ms)
+        @test c isa MeasurementSet
+        @test getfield(c, :baseline_lookup) === nothing
+        @test DimensionalData.data(c)[:visibility] === DimensionalData.data(ms)[:visibility]
+
+        delete!(c, :weight)
+        @test haskey(ms, :weight)
+
+        metadata(c)[:added] = 1
+        @test !haskey(metadata(ms), :added)
+        metadata(c[:visibility])[:added] = 1
+        @test !haskey(metadata(ms[:visibility]), :added)
+        metadata(lookup(dims(c, Frequency)))[:added] = 1
+        @test !haskey(metadata(lookup(dims(ms, Frequency))), :added)
+
+        # One level deep, as xarray's `copy(deep = False)`: a value nested in
+        # an attribute is shared.
+        @test datagroup(c) === datagroup(ms)
+
+        @test c.antenna !== ms.antenna
+        @test dims(c.antenna) == dims(ms.antenna)
+        c.antenna[:added] = c.antenna[:antenna_position]
+        @test !haskey(ms.antenna, :added)
+    end
+
+    @testset "a sub-dataset copied alone keeps the dimensions it inherits" begin
+        c = copy(ms.antenna)
+        @test getfield(c, :tree) === nothing
+        @test Set(DimensionalData.name(dims(c))) == Set(DimensionalData.name(dims(ms.antenna)))
+        @test c[:antenna_position] == ms.antenna[:antenna_position]
+    end
+
+    @testset "rebuild and assignment replace a layer" begin
+        c = copy(ms)
+        c[:visibility] = rebuild(vis, 2 .* parent(vis))
+        @test parent(c[:visibility]) == 2 .* parent(vis)
+        @test parent(ms[:visibility]) == parent(vis)
+        @test metadata(c[:visibility]) == metadata(vis)
+
+        got = transform(synthetic_set(2)) do m
+            out = copy(m)
+            out[:weight] = rebuild(m[:weight], zero(parent(m[:weight])))
+            return out
+        end
+        @test all(m -> iszero(parent(m[:weight])), got)
+    end
+
+    @testset "data that does not fit its dimensions is an error" begin
+        c = copy(ms)
+        short = rebuild(vis, zeros(eltype(vis), 1, 1, 1, 1))
+        @test_throws DimensionMismatch c[:visibility] = short
+        @test_throws "has size (1, 1, 1, 1), but its dimensions have lengths" c[:visibility] = short
+        @test parent(c[:visibility]) == parent(vis)
+    end
+
+    @testset "a length the tree does not have is an error" begin
+        c = copy(ms)
+        cut = vis[Ti(1:2)]
+        @test_throws DimensionMismatch c[:visibility] = cut
+        @test_throws "has 2 values along `time`, but this Measurement Set has 4" c[:visibility] = cut
+    end
+
+    @testset "coordinate values the tree does not have are an error" begin
+        c = copy(ms)
+        t = dims(ms, Ti)
+        shifted = DimensionalData.set(vis, Ti => parent(lookup(t)) .+ 1000.0)
+        @test_throws ArgumentError c[:visibility] = shifted
+        @test_throws "states `time` at values that differ from this Measurement Set's" c[:visibility] = shifted
+        @test parent(lookup(dims(c, Ti))) == parent(lookup(t))
+
+        a = copy(ms.antenna)
+        pos = a[:antenna_position]
+        renamed = DimensionalData.set(pos, AntennaName => ["X1", "X2", "X3"])
+        @test_throws "states `antenna_name` at values that differ from this dataset's" a[:antenna_position] = renamed
+    end
+
+    @testset "a replacement of another rank is left to `check`" begin
+        c = copy(ms)
+        c[:visibility] = vis[Polarization(1), Frequency(1)]
+        @test ndims(c[:visibility]) == 2
+        @test !isempty(check(ProcessingSet(OrderedDict(:a => c))))
+    end
+end

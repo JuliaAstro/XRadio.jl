@@ -23,5 +23,6 @@ correlated(ms)                               # the visibilities
 
 - [Selecting data](@ref) covers choosing Measurement Sets from a processing set
   and cutting inside one.
+- [Modifying data](@ref) builds a changed Measurement Set from a copy.
 - [Coming from xradio](@ref) maps the Python package's calls to this one's.
 - [Reference](@ref) lists the public API.

@@ -99,12 +99,9 @@ function _drop_lookups!(ms::MeasurementSet)
 end
 
 function Base.setindex!(ms::MeasurementSet, A::DimensionalData.AbstractDimArray, key::Symbol)
+    _check_layer(ms, A, key)
     _drop_lookups!(ms)
-    return invoke(
-        setindex!,
-        Tuple{DimensionalData.AbstractDimTree, DimensionalData.AbstractDimArray, Symbol},
-        ms, A, key
-    )
+    return _set_layer!(ms, A, key)
 end
 
 function Base.delete!(ms::MeasurementSet, key::Symbol)
@@ -133,6 +130,104 @@ Measurement Set does, but is not itself correlated data.
     metadata::Any = DimensionalData.NoMetadata()
     branches::DimensionalData.TreeDict = DimensionalData.TreeDict()
     tree::Union{Nothing, DimensionalData.AbstractDimTree} = nothing
+end
+
+function Base.setindex!(xds::Dataset, A::DimensionalData.AbstractDimArray, key::Symbol)
+    _check_layer(xds, A, key)
+    return _set_layer!(xds, A, key)
+end
+
+_set_layer!(tree, A, key) = invoke(
+    setindex!,
+    Tuple{DimensionalData.AbstractDimTree, DimensionalData.AbstractDimArray, Symbol},
+    tree, A, key
+)
+
+# A tree stores a layer's data and takes its coordinates from its own
+# dimensions, so a layer whose data does not fit its dimensions, or whose
+# coordinate values differ from the tree's, would otherwise be stored under
+# coordinates that do not describe it.
+function _check_layer(tree, A::DimensionalData.AbstractDimArray, key::Symbol)
+    lengths = map(length, dims(A))
+    size(parent(A)) == lengths || throw(
+        DimensionMismatch(
+            "the data for `$key` has size $(size(parent(A))), but its dimensions " *
+                "have lengths $lengths"
+        )
+    )
+    for d in dims(A)
+        have = dims(tree, d)
+        have === nothing && continue
+        length(have) == length(d) || throw(
+            DimensionMismatch(
+                "`$key` has $(length(d)) values along `$(_dimlabel(d))`, but this " *
+                    "$(_treelabel(tree)) has $(length(have))"
+            )
+        )
+        isequal(parent(lookup(have)), parent(lookup(d))) || throw(
+            ArgumentError(
+                "`$key` states `$(_dimlabel(d))` at values that differ from this " *
+                    "$(_treelabel(tree))'s. `rebuild(tree[:$key], data)` keeps the " *
+                    "tree's coordinates."
+            )
+        )
+    end
+    return nothing
+end
+
+"""
+    copy(tree::Union{MeasurementSet, Dataset})
+
+A copy of `tree` that shares its arrays but none of its structure.
+
+Every node, layer and coordinate of the copy has its own attribute dictionary,
+and its sub-datasets are copies too, so adding, replacing or deleting a layer
+or an attribute of the copy leaves `tree` as it was. Values nested inside an
+attribute, such as one entry of `data_groups`, are still shared, as the arrays
+are. This is what xarray's `copy(deep = False)` does.
+
+With `rebuild` and assignment it is how a modified Measurement Set is built:
+
+```julia
+ms2 = copy(ms)
+ms2[:weight] = rebuild(ms[:weight], new_weights)
+```
+"""
+Base.copy(tree::Union{MeasurementSet, Dataset}) = _copy_node(tree, dims(tree), nothing)
+
+# A sub-dataset linked to its parent states only the dimensions the parent does
+# not, and reads the rest through it. A copy keeps each sub-dataset's link as it
+# was, pointed at the copied parent; the top of a copy has no parent, so it
+# keeps every dimension it reads.
+function _copy_node(tree, own_dims::Tuple, parent)
+    node = DimensionalData.rebuild(
+        tree;
+        data = copy(DimensionalData.data(tree)),
+        dims = map(_own_attributes, own_dims),
+        layerdims = copy(DimensionalData.layerdims(tree)),
+        layermetadata = DimensionalData.DataDict(
+            k => _own_attributes(m) for (k, m) in DimensionalData.layermetadata(tree)
+        ),
+        metadata = _own_attributes(metadata(tree)),
+        branches = DimensionalData.TreeDict(),
+        tree = parent,
+    )
+    for (name, branch) in pairs(branches(tree))
+        linked = getfield(branch, :tree) === tree
+        branches(node)[name] = _copy_node(
+            branch, getfield(branch, :dims), linked ? node : getfield(branch, :tree)
+        )
+    end
+    return node
+end
+
+_own_attributes(attrs::AbstractDict) = copy(attrs)
+_own_attributes(attrs) = attrs
+_own_attributes(d::Dimension) =
+    DimensionalData.rebuild(d, _own_attributes(lookup(d)))
+function _own_attributes(l::Lookups.Lookup)
+    attrs = metadata(l)
+    return attrs isa AbstractDict ? Lookups.rebuild(l; metadata = copy(attrs)) : l
 end
 
 # `DimensionalData` reads a tree's layer metadata but has no `metadata` method
@@ -270,7 +365,7 @@ own attributes, so the result is a processing set again and composes with
 [`filter`](@ref) and anything else taking one.
 
 ```julia
-transform(ms -> delete!(deepcopy(ms), :weight), ps)
+transform(ms -> delete!(copy(ms), :weight), ps)
 ```
 
 `f` must return a `MeasurementSet`, since that is all a processing set holds.

@@ -12,6 +12,7 @@ Base.open(::Type{ProcessingSet}, ::Any)
 Base.read(::Type{ProcessingSet}, ::Any)
 Base.write(::AbstractString, ::ProcessingSet)
 Base.isvalid(::Union{Dataset, MeasurementSet, ProcessingSet})
+Base.copy(::Union{MeasurementSet, Dataset})
 ```
 
 ## Intents

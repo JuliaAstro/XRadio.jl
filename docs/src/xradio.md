@@ -84,6 +84,14 @@ data-group names are `Symbol`s (`:base`) rather than strings.
 | `ms_xdt.xr_ms.add_data_group(...)` | no counterpart |
 | no counterpart | [`baselines`](@ref), [`scans`](@ref), [`fields`](@ref), [`sources`](@ref), [`mounts`](@ref), [`gaincurves`](@ref) |
 
+## Modifying a Measurement Set
+
+| xradio | XRadio.jl |
+| --- | --- |
+| `ms_xdt.copy(deep=False)` | `copy(ms)`; see [Modifying data](@ref) |
+| `ms_xdt.VISIBILITY.copy(data=V)` | `rebuild(ms[:visibility], V)`; a size mismatch throws when the result is assigned |
+| `ms_xdt["WEIGHT"] = da` | `ms[:weight] = A`; coordinate values that differ throw instead of aligning to NaN |
+
 ## Selecting inside a Measurement Set
 
 xradio's `xr_ms.sel` is xarray's `sel` on the correlated dataset. In

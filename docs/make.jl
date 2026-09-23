@@ -10,6 +10,7 @@ makedocs(;
     pages = [
         "Home" => "index.md",
         "Selecting data" => "selection.md",
+        "Modifying data" => "modifying.md",
         "Coming from xradio" => "xradio.md",
         "Reference" => "reference.md",
     ],
