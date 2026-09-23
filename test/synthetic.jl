@@ -114,8 +114,8 @@ function synthetic_visibility(;
     ms[:baseline_antenna1_name] = DimArray(ant1[1:nbaseline], (base,))
     ms[:baseline_antenna2_name] = DimArray(ant2[1:nbaseline], (base,))
 
-    branches(ms)[:antenna] = synthetic_antenna(antnames)
-    branches(ms)[:field_and_source_base] = synthetic_field_and_source()
+    ms.antenna = synthetic_antenna(antnames)
+    ms.field_and_source_base = synthetic_field_and_source()
     return ms
 end
 

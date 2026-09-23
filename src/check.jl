@@ -112,9 +112,25 @@ function _check_tree(tree, c::Checker, path::AbstractString, parent::Set{Symbol}
     if !isempty(keys(tree)) || !isempty(dims(tree))
         append!(issues, _check_dataset(tree, c, path, parent))
     end
-    own = Set(msv4name(d) for d in dims(tree))
+    visible = Set(msv4name(d) for d in dims(tree))
     for (name, sub) in branches(tree)
-        append!(issues, _check_tree(sub, c, _join(path, name), own))
+        subpath = _join(path, name)
+        append!(issues, _check_alignment(sub, dims(tree), subpath))
+        append!(issues, _check_tree(sub, c, subpath, visible))
+    end
+    return issues
+end
+
+# A sub-dataset stating a dimension its parent states must agree with it, or
+# xarray refuses the store as "not aligned with its parents". One linked with
+# assignment always does; one placed in `branches` directly need not.
+function _check_alignment(sub, above::Tuple, path::AbstractString)
+    issues = SchemaIssue[]
+    for d in getfield(sub, :dims)
+        have = dims(above, d)
+        have === nothing && continue
+        err = _misalignment(have, d, path)
+        err === nothing || push!(issues, SchemaIssue(path, err.msg))
     end
     return issues
 end

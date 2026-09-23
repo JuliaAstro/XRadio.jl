@@ -1176,3 +1176,153 @@ end
         @test !isempty(check(ProcessingSet(OrderedDict(:a => c))))
     end
 end
+
+@testset "sub-datasets are linked to their Measurement Set" begin
+    ms = synthetic_visibility()
+    t = dims(ms, Ti)
+    ownnames(tree) = Set(map(msv4name, getfield(tree, :dims)))
+
+    # System temperatures sampled on the correlated data's own time axis.
+    function tsys_over(times)
+        return XRadio.subdataset(
+            :system_calibration;
+            antenna_name = ["AA", "BB", "CC"], station_name = ["AA", "BB", "CC"],
+            receptor_label = ["pol_0", "pol_1"],
+            polarization_type = ["X" "X" "X"; "Y" "Y" "Y"],
+            time = times,
+            tsys = fill(50.0, 2, length(times), 3),
+        )
+    end
+
+    @testset "a sub-dataset holds only its own dimensions" begin
+        @test getfield(ms.antenna, :tree) === ms
+        @test ownnames(ms.antenna) == Set([:antenna_name, :receptor_label, :cartesian_pos_label])
+        @test hasdim(ms.antenna, Ti)
+    end
+
+    @testset "a sub-dataset over the Measurement Set's time reads it from there" begin
+        c = copy(ms)
+        c.system_calibration = tsys_over(collect(parent(lookup(t))))
+        sc = c.system_calibration
+        @test getfield(sc, :tree) === c
+        @test !(:time in ownnames(sc))
+        @test metadata(lookup(dims(sc[:tsys], Ti))) === metadata(lookup(dims(c, Ti)))
+        @test isempty(check(ProcessingSet(OrderedDict(:a => c))))
+
+        mktempdir() do dir
+            path = joinpath(dir, "linked.ps.zarr")
+            write(path, ProcessingSet(OrderedDict(:a => c)))
+            @test !haskey(Zarr.zopen(path).groups["a"].groups["system_calibration_xds"].arrays, "time")
+            back = read(ProcessingSet, path)[:a]
+            @test getfield(back.system_calibration, :tree) === back
+            @test !(:time in ownnames(back.system_calibration))
+            @test parent(back.system_calibration[:tsys]) == parent(sc[:tsys])
+            @test parent(lookup(dims(back.system_calibration[:tsys], Ti))) == parent(lookup(t))
+        end
+
+        cut = c[Ti(At(parent(lookup(t))[1:2]))]
+        @test getfield(cut.system_calibration, :tree) === cut
+        @test size(cut.system_calibration[:tsys], Ti) == 2
+        @test !(:time in ownnames(cut.system_calibration))
+    end
+
+    @testset "an ephemeris field and source dataset reads the correlated data's time" begin
+        times = collect(parent(lookup(t)))
+        c = copy(ms)
+        c.field_and_source_base = XRadio.subdataset(
+            :field_and_source_ephemeris;
+            time = times,
+            source_name = fill("source_0", length(times)),
+            field_name = fill("field_0", length(times)),
+            sky_dir_label = ["ra", "dec"],
+            field_phase_center_direction = rand(2, length(times)),
+            array_metadata = (; field_phase_center_direction = (; frame = "icrs")),
+        )
+        fs = field_and_source(c)
+        @test getfield(fs, :tree) === c
+        @test ownnames(fs) == Set([:sky_dir_label])
+        @test isempty(check(ProcessingSet(OrderedDict(:a => c))))
+
+        mktempdir() do dir
+            path = joinpath(dir, "ephemeris.ps.zarr")
+            write(path, ProcessingSet(OrderedDict(:a => c)))
+            back = field_and_source(read(ProcessingSet, path)[:a])
+            @test ownnames(back) == Set([:sky_dir_label])
+            @test parent(back[:field_phase_center_direction]) == parent(fs[:field_phase_center_direction])
+        end
+
+        cut = field_and_source(c[Ti(At(times[2:3]))])
+        @test parent(cut[:field_phase_center_direction]) == parent(fs[:field_phase_center_direction])[:, 2:3]
+    end
+
+    @testset "a sub-dataset that disagrees with its Measurement Set is an error" begin
+        c = copy(ms)
+        shifted = collect(parent(lookup(t))) .+ 1000.0
+        @test_throws DimensionMismatch c.system_calibration = tsys_over(shifted)
+        @test_throws "`system_calibration` is not aligned with its parent: its `time` (4 values) differs from its parent's (4 values)" c[:system_calibration] = tsys_over(shifted)
+        @test_throws "its `time` (2 values) differs from its parent's (4 values)" c.system_calibration = tsys_over(shifted[1:2])
+        @test !haskey(branches(c), :system_calibration)
+
+        # Within `≈` of the Measurement Set's times, but not equal to them.
+        nearly = collect(parent(lookup(t))) .+ 20.0
+        @test nearly ≈ collect(parent(lookup(t)))
+        @test_throws DimensionMismatch c.system_calibration = tsys_over(nearly)
+    end
+
+    @testset "assigning a sub-dataset copies it" begin
+        c = copy(ms)
+        c.antenna2 = ms.antenna
+        @test getfield(ms.antenna, :tree) === ms
+        @test getfield(c.antenna2, :tree) === c
+        @test c.antenna2 !== ms.antenna
+        c.antenna2[:added] = c.antenna2[:station_name]
+        @test !haskey(ms.antenna, :added)
+    end
+
+    @testset "layers leave the dimensions a sub-dataset inherits where they are" begin
+        c = copy(ms)
+        c.system_calibration = tsys_over(collect(parent(lookup(t))))
+        sc = c.system_calibration
+        sc[:tant] = sc[:tsys]
+        @test !(:time in ownnames(sc))
+        @test length(dims(sc)) == length(unique(map(DimensionalData.name, dims(sc))))
+
+        # A dimension the Measurement Set gains is taken from the sub-dataset
+        # that already stated it.
+        c.antenna[:extra] = DimArray([1.0, 2.0], (Dim{:extra_label}(["a", "b"]),))
+        c[:extra_vis] = DimArray([3.0, 4.0], (Dim{:extra_label}(["a", "b"]),))
+        @test !(:extra_label in ownnames(c.antenna))
+        @test_throws "is not aligned with its parent: its `receptor_label`" c[:other_vis] = DimArray([1.0, 2.0], (ReceptorLabel(["Q", "R"]),))
+
+        # A dimension a sub-dataset reads stays while it is read.
+        d = copy(ms)
+        d.system_calibration = tsys_over(collect(parent(lookup(t))))
+        for key in collect(keys(d))
+            key in (:visibility,) || delete!(d, key)
+        end
+        delete!(d, :visibility)
+        @test hasdim(d, Ti)
+        @test size(d.system_calibration[:tsys], Ti) == length(t)
+    end
+
+    @testset "a store xradio would refuse" begin
+        c = copy(ms)
+        branches(c)[:system_calibration] = tsys_over(collect(parent(lookup(t))) .+ 1000.0)
+        ps = ProcessingSet(OrderedDict(:a => c))
+        issues = check(ps)
+        @test any(i -> i.path == "a/system_calibration" && occursin("not aligned", i.message), issues)
+        mktempdir() do dir
+            path = joinpath(dir, "misaligned.ps.zarr")
+            @test_throws SchemaError write(path, ps)
+            write(path, ps; validate = false)
+            @test_throws "a/system_calibration_xds` is not aligned with its parent" open(ProcessingSet, path)
+        end
+    end
+
+    @testset "the branch listing shows a sub-dataset's own dimensions" begin
+        shown = sprint(show, MIME"text/plain"(), ms)
+        line = only(filter(l -> occursin(":antenna", l), split(shown, '\n')))
+        @test occursin("antenna_name", line) || occursin("AntennaName", line)
+        @test !occursin("Ti", line) && !occursin("time", line)
+    end
+end

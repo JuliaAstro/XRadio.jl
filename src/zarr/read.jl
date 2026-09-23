@@ -156,17 +156,24 @@ end
 # Sub-datasets nest: a field and source dataset carries its ephemeris as a node
 # of its own, and a dataset type of a caller's own may carry anything. Reading
 # only the first level would drop the rest on the floor.
+#
+# Each is linked to its parent, as `xr.open_datatree` links it, and so has to
+# agree with the parent on every dimension both state.
 function _read_branches!(tree, group::Zarr.ZGroup; lazy::Bool)
     for name in sort!(collect(keys(group.groups)))
         sub = group.groups[name]
-        branches(tree)[nodekey(name)] = _read_branches!(_read_into(Dataset, sub; lazy), sub; lazy)
+        node = _read_into(Dataset, sub; lazy, inherited = dims(tree))
+        _link!(tree, nodekey(name), node, sub.path)
+        _read_branches!(node, sub; lazy)
     end
     return tree
 end
 
 # Build a tree from one Zarr group: its arrays become layers, and its index
-# coordinates become the dimension lookups those layers are labelled by.
-function _read_into(::Type{T}, group::Zarr.ZGroup; lazy::Bool) where {T}
+# coordinates become the dimension lookups those layers are labelled by. A
+# dimension the group gives no coordinate but one of its parents does is
+# labelled by the parent's, which is where xarray reads it from too.
+function _read_into(::Type{T}, group::Zarr.ZGroup; lazy::Bool, inherited::Tuple = ()) where {T}
     arrays = group.arrays
     names = sort!(collect(keys(arrays)))
     dnames = Dict(name => axisnames(arrays[name]) for name in names)
@@ -183,7 +190,7 @@ function _read_into(::Type{T}, group::Zarr.ZGroup; lazy::Bool) where {T}
     tree = T(; metadata = _attributes(group.attrs))
     for name in names
         isindex(name) && continue
-        tree[julianame(name)] = _dimarray(arrays[name], dnames[name], lookups; lazy)
+        tree[julianame(name)] = _dimarray(arrays[name], dnames[name], lookups, inherited; lazy)
     end
     return tree
 end
@@ -225,15 +232,17 @@ function _lookup(array::Zarr.ZArray)
         Lookups.Sampled(values; metadata = meta)
 end
 
-function _dimarray(array::Zarr.ZArray, dnames, lookups; lazy::Bool)
+function _dimarray(array::Zarr.ZArray, dnames, lookups, inherited = (); lazy::Bool)
     data = _unwrap_strings(lazy ? array : Array(array))
     dims = map(enumerate(dnames)) do (i, d)
         D = dimtype(d)
+        haskey(lookups, d) && return D(lookups[d])
+        above = DimensionalData.dims(inherited, D)
+        above !== nothing && length(above) == size(data, i) && return above
         # A dimension with no index coordinate of its own — MSv4 leaves
         # `uvw_label` and the position labels implicit in some stores — is
         # numbered instead.
-        lookup = get(lookups, d, nothing)
-        lookup === nothing ? D(Base.OneTo(size(data, i))) : D(lookup)
+        return D(Base.OneTo(size(data, i)))
     end
     return DimArray(data, Tuple(dims); metadata = _attributes(array.attrs))
 end

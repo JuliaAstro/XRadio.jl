@@ -30,6 +30,30 @@ Set stays lazy: the copy reads from the same store.
 `copy` of a sub-dataset on its own, `copy(ms.antenna)`, keeps the dimensions
 it reads from its Measurement Set.
 
+## Sub-datasets
+
+A sub-dataset is linked to its Measurement Set, as a child node is in xarray's
+`DataTree`: it holds only its own dimensions, such as `antenna_name`, and reads
+`time`, `frequency` and every other dimension of the Measurement Set from it.
+A system calibration sampled on the correlated data's own time axis therefore
+carries no time axis of its own, and `write` stores `time` once.
+
+Assigning a sub-dataset, `ms2.system_calibration = xds` or
+`ms2[:system_calibration] = xds`, links a copy of it, so a sub-dataset taken
+from another Measurement Set stays linked to that one. A dimension both
+state must agree in length and coordinate values, as xarray requires of a node
+and its parents, or the assignment throws `DimensionMismatch`. A dimension the
+sub-dataset only numbers takes its parent's coordinates.
+
+A copy taken from another Measurement Set keeps the dimensions it read there,
+so it can be assigned only to a Measurement Set with the same coordinates.
+This is also what xarray does.
+
+Opening a store links its sub-datasets the same way, and a store whose
+sub-dataset disagrees with its Measurement Set throws, as `xr.open_datatree`
+does. A sub-dataset placed in `branches(ms)` directly is not linked;
+[`XRadio.check`](@ref) reports one that disagrees with its parent.
+
 ## Replacing a layer
 
 `rebuild(A, data)` is DimensionalData's: it wraps `data` in `A`'s dimensions

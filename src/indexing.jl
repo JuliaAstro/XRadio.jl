@@ -37,16 +37,25 @@ _kw2dims(::Tuple{}, ::Tuple{}) = ()
 # Each dimension cuts only the nodes that carry it. A sub-dataset legitimately
 # has none of the correlated data's dimensions, so applying every dimension
 # everywhere makes `DimensionalData` warn about nodes that are behaving
-# correctly, and the warning that matters is lost among them.
+# correctly, and the warning that matters is lost among them. A sub-dataset
+# linked to its parent is linked to the parent's selection.
 function _select_tree(f, tree, D::Tuple)
     newlayers = [
         name => _select_layer(f, A, D)
             for (name, A) in pairs(DimensionalData.layers(tree))
     ]
-    newbranches = DimensionalData.TreeDict(
-        name => _select_tree(f, branch, D) for (name, branch) in pairs(branches(tree))
+    node = DimensionalData.rebuild_from_arrays(
+        tree, newlayers; branches = DimensionalData.TreeDict()
     )
-    return DimensionalData.rebuild_from_arrays(tree, newlayers; branches = newbranches)
+    for (name, branch) in pairs(branches(tree))
+        selected = _select_tree(f, branch, D)
+        if _is_linked(branch, tree)
+            _link!(node, name, selected, string(name))
+        else
+            branches(node)[name] = selected
+        end
+    end
+    return node
 end
 
 function _select_layer(f, A, D::Tuple)

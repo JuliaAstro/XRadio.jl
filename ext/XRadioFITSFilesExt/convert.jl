@@ -1508,8 +1508,8 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
     end
 
     numbers = sort!(unique(Iterators.flatten(antennas)))
-    branches(ms)[:antenna] = _antenna_dataset(s, numbers, band)
-    branches(ms)[:field_and_source_base] = _field_and_source_dataset(s, sources, frame)
+    ms.antenna = _antenna_dataset(s, numbers, band)
+    ms.field_and_source_base = _field_and_source_dataset(s, sources, frame)
 
     # The calibration and environment sub-datasets, each left out where the
     # file has no such table or where nothing it holds covers this partition.
@@ -1520,7 +1520,7 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
             :weather => _weather_dataset(s, numbers, span),
             :gain_curve => _gain_curve_dataset(s, numbers, band),
         )
-        sub === nothing || (branches(ms)[key] = sub)
+        sub === nothing || (ms[key] = sub)
     end
     return ms
 end

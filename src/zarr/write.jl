@@ -103,8 +103,9 @@ function _write_tree(
 
     # Index coordinates are dimensions of the tree rather than layers, so they
     # have to be written back out as arrays of their own, carrying the
-    # attributes that travel on their lookups.
-    for d in dims(tree)
+    # attributes that travel on their lookups. A sub-dataset's inherited
+    # dimensions are its parent's, and are written there.
+    for d in getfield(tree, :dims)
         coord = DimArray(collect(val(d)), (d,); metadata = metadata(lookup(d)))
         _write_array(group, string(msv4name(d)), coord; zarr_format, compressor, chunks)
     end

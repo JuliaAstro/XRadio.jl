@@ -106,12 +106,15 @@ end
 
 function Base.delete!(ms::MeasurementSet, key::Symbol)
     _drop_lookups!(ms)
-    return invoke(delete!, Tuple{DimensionalData.AbstractDimTree, Symbol}, ms, key)
+    _remove_layer!(ms, key)
+    return ms
 end
 
 function Base.pop!(ms::MeasurementSet, key::Symbol)
     _drop_lookups!(ms)
-    return invoke(pop!, Tuple{DimensionalData.AbstractDimTree, Symbol}, ms, key)
+    A = ms[key]
+    _remove_layer!(ms, key)
+    return A
 end
 
 """
@@ -137,11 +140,125 @@ function Base.setindex!(xds::Dataset, A::DimensionalData.AbstractDimArray, key::
     return _set_layer!(xds, A, key)
 end
 
-_set_layer!(tree, A, key) = invoke(
-    setindex!,
-    Tuple{DimensionalData.AbstractDimTree, DimensionalData.AbstractDimArray, Symbol},
-    tree, A, key
-)
+function Base.delete!(xds::Dataset, key::Symbol)
+    _remove_layer!(xds, key)
+    return xds
+end
+
+function Base.pop!(xds::Dataset, key::Symbol)
+    A = xds[key]
+    _remove_layer!(xds, key)
+    return A
+end
+
+# A sub-dataset is a child of the tree it is assigned to, and reads every
+# dimension that tree states through it, as in xarray. The assigned tree is
+# copied first, so a sub-dataset taken from another tree stays that tree's.
+for T in (:MeasurementSet, :Dataset)
+    @eval function Base.setindex!(tree::$T, branch::DimensionalData.AbstractDimTree, key::Symbol)
+        _link!(tree, key, copy(branch), string(key))
+        return branch
+    end
+    @eval Base.setproperty!(tree::$T, key::Symbol, branch::DimensionalData.AbstractDimTree) =
+        _link!(tree, key, copy(branch), string(key))
+end
+
+# `DimensionalData`'s own layer assignment writes the dimensions a sub-dataset
+# inherits into the sub-dataset itself, so it is not used on these trees.
+function _set_layer!(tree, A, key::Symbol)
+    added = otherdims(dims(A), dims(tree))
+    for (name, branch) in _linked_branches(tree)
+        _check_aligned(branch, added, string(name))
+    end
+    setfield!(tree, :dims, (getfield(tree, :dims)..., added...))
+    foreach(_drop_inherited!, values(_linked_branches(tree)))
+    DimensionalData.data(tree)[key] = parent(A)
+    DimensionalData.layerdims(tree)[key] = DimensionalData.basedims(A)
+    DimensionalData.layermetadata(tree)[key] = metadata(A)
+    return A
+end
+
+# A dimension stays while a layer spans it, here or in a sub-dataset reading it
+# from here.
+function _remove_layer!(tree, key::Symbol)
+    delete!(DimensionalData.data(tree), key)
+    delete!(DimensionalData.layerdims(tree), key)
+    delete!(DimensionalData.layermetadata(tree), key)
+    spanned = _spanned_dims(tree)
+    setfield!(tree, :dims, Tuple(d for d in getfield(tree, :dims) if hasdim(spanned, d)))
+    return tree
+end
+
+function _spanned_dims(tree)
+    spanned = Any[d for ds in values(DimensionalData.layerdims(tree)) for d in ds]
+    for branch in values(_linked_branches(tree))
+        append!(spanned, _spanned_dims(branch))
+    end
+    return Tuple(spanned)
+end
+
+_is_linked(branch, tree) = getfield(branch, :tree) === tree
+_linked_branches(tree) = filter(((_, b),) -> _is_linked(b, tree), branches(tree))
+
+"""
+    _link!(tree, key, branch, label)
+
+Make `branch` the sub-dataset `key` of `tree`, reading from `tree` every
+dimension `tree` states. A dimension both state must agree, as xarray requires
+of a node and its parents: the same length, and the same values unless `branch`
+merely numbers it. `branch` is modified; `label` names it in errors.
+"""
+function _link!(tree, key::Symbol, branch, label::AbstractString)
+    _check_aligned(branch, dims(tree), label)
+    setfield!(branch, :tree, tree)
+    _drop_inherited!(branch)
+    branches(tree)[key] = branch
+    return branch
+end
+
+# Checks `node` and the sub-datasets linked below it against the dimensions
+# `visible` above them, before anything is changed.
+function _check_aligned(node, visible::Tuple, label::AbstractString)
+    own = ()
+    for d in getfield(node, :dims)
+        have = dims(visible, d)
+        have === nothing ? (own = (own..., d)) : _require_aligned(have, d, label)
+    end
+    for (name, branch) in _linked_branches(node)
+        _check_aligned(branch, (visible..., own...), string(label, "/", name))
+    end
+    return nothing
+end
+
+function _require_aligned(have::Dimension, d::Dimension, label::AbstractString)
+    err = _misalignment(have, d, label)
+    err === nothing || throw(err)
+    return nothing
+end
+
+function _misalignment(have::Dimension, d::Dimension, label::AbstractString)
+    name = _dimlabel(d)
+    lookup(have) isa Lookups.NoLookup && !(lookup(d) isa Lookups.NoLookup) && return ArgumentError(
+        "`$label` labels `$name`, which its parent numbers without labels. A " *
+            "sub-dataset reads a dimension its parent states from the parent, " *
+            "so the labels would be lost."
+    )
+    # Exact, as xarray aligns; `comparedims(; val = true)` compares numbers with
+    # `≈`, which lets Unix times tens of seconds apart pass.
+    length(have) == length(d) &&
+        (lookup(d) isa Lookups.NoLookup || isequal(parent(lookup(have)), parent(lookup(d)))) &&
+        return nothing
+    return DimensionMismatch(
+        "`$label` is not aligned with its parent: its `$name` ($(length(d)) values) " *
+            "differs from its parent's ($(length(have)) values)"
+    )
+end
+
+function _drop_inherited!(node)
+    setfield!(node, :dims, otherdims(getfield(node, :dims), dims(getfield(node, :tree))))
+    foreach(_drop_inherited!, values(_linked_branches(node)))
+    return node
+end
 
 # A tree stores a layer's data and takes its coordinates from its own
 # dimensions, so a layer whose data does not fit its dimensions, or whose
@@ -228,6 +345,47 @@ _own_attributes(d::Dimension) =
 function _own_attributes(l::Lookups.Lookup)
     attrs = metadata(l)
     return attrs isa AbstractDict ? Lookups.rebuild(l; metadata = copy(attrs)) : l
+end
+
+# A linked sub-dataset reads every dimension of its parent, so the listing of a
+# tree's branches shows each one's own dimensions and the inherited ones its
+# layers span, not the whole of its parent's.
+function DimensionalData.print_branch(
+        io, branch::Dataset, key::Symbol; tab = "  ", indent = "    "
+    )
+    shown = _shown_dims(branch)
+    print(io, tab)
+    printstyled(io, ":" * rpad(key, DimensionalData._keylen(keys(branch))); color = DimensionalData.dimcolor(7))
+    if !isempty(shown)
+        colors = map(DimensionalData.dimcolor, eachindex(shown))
+        printstyled(io, " dims: "; color = :light_black)
+        for (i, (d, color)) in enumerate(zip(shown, colors))
+            DimensionalData.Dimensions.print_dimname(IOContext(io, :dimcolor => color), d)
+            i != length(shown) && print(io, ", ")
+        end
+        printstyled(io, " size: "; color = :light_black)
+        DimensionalData.print_sizes(io, size(shown); colors)
+        if !isempty(keys(branch))
+            printstyled(io, " layers: "; color = :light_black)
+            printstyled(io, join(map(k -> string(":", k), keys(branch)), ", "); color = DimensionalData.dimcolor(7))
+        end
+    end
+    println(io)
+    ks = collect(keys(branches(branch)))
+    for (i, k) in enumerate(ks)
+        last = i == length(ks)
+        printstyled(io, indent, last ? "└─ " : "├─ "; color = :light_black)
+        DimensionalData.print_branch(
+            io, branches(branch)[k], k; tab = "", indent = indent * (last ? "    " : "│    ")
+        )
+    end
+    return nothing
+end
+
+function _shown_dims(branch)
+    own = getfield(branch, :dims)
+    spanned = values(DimensionalData.layerdims(branch))
+    return Tuple(d for d in dims(branch) if hasdim(own, d) || any(ds -> hasdim(ds, d), spanned))
 end
 
 # `DimensionalData` reads a tree's layer metadata but has no `metadata` method
