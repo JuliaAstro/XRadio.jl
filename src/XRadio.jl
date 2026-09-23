@@ -45,7 +45,7 @@ import Zarr
 
 export ProcessingSet, MeasurementSet, Dataset, Measure
 export AbstractMount, Mount, MountAltAz, MountEquatorial, MountNasmythR, MountNasmythL,
-    MountXY, MountOrbiting, MountOther
+    MountBWGR, MountBWGL, MountRotator, MountXY, MountOrbiting, MountHALCA, MountOther
 export AbstractGainCurve, GainPolynomial, TabulatedGain, SphericalHarmonicGain,
     AtDeclination, gain
 export fitsidi2msv4, fitsidi_gain_curves

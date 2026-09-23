@@ -181,14 +181,18 @@ end
     mounts(antenna_xds) -> DimVector
 
 Each antenna's mount, over `antenna_name`. The element type is the `Union` of
-the mount types present, so an array of alt-azimuth, Nasmyth and equatorial
-mounts has the single concrete type `Mount{Float64, Float64, NTuple{3, Float64}}`.
+the mount types present, so an array of alt-azimuth, Nasmyth, beam-waveguide
+and equatorial mounts has the single concrete type
+`Mount{Float64, Float64, Float64, NTuple{3, Float64}}`.
 
 MSv4 stores a mount as a name. Where the store also carries the
-`MOUNT_PARALLACTIC`, `MOUNT_ELEVATION` and `ANTENNA_AXIS_OFFSET` variables that
-[`XRadio.set_mounts!`](@ref) writes, every [`Mount`](@ref) comes back exactly,
-including coefficient pairs MSv4 has no name for; otherwise the name alone
-decides, through [`XRadio.mount_from_msv4`](@ref), and the axis offset is zero.
+`MOUNT_PARALLACTIC`, `MOUNT_ELEVATION`, `MOUNT_AZIMUTH` and
+`ANTENNA_AXIS_OFFSET` variables that [`XRadio.set_mounts!`](@ref) writes, every
+[`Mount`](@ref) comes back exactly, including coefficient triples MSv4 has no
+name for; otherwise the name alone decides, through
+[`XRadio.mount_from_msv4`](@ref), and the axis offset is zero. A store with
+the first two coefficients and not `MOUNT_AZIMUTH` has an azimuth coefficient
+of zero.
 
 A Measurement Set without an antenna sub-dataset gives an empty vector.
 """
@@ -215,9 +219,11 @@ function mounts(xds::Dataset)
     result = map(eachindex(val(antenna))) do i
         p, e = coefficients ?
             (xds[:mount_parallactic][A(i)], xds[:mount_elevation][A(i)]) : (NaN, NaN)
-        offset = offsets === nothing ? _NO_OFFSET :
+        a = haskey(xds, :mount_azimuth) ? xds[:mount_azimuth][A(i)] :
+            isnan(p) ? NaN : 0.0
+        offset = offsets === nothing ? ntuple(Returns(0.0), 3) :
             Tuple(Float64(offsets[A(i), X(At(c))]) for c in ("x", "y", "z"))
-        mount_from_msv4(names[A(i)], p, e, offset)
+        mount_from_msv4(names[A(i)], p, e, a, offset)
     end
     # The narrowest element type: a few mount types form a `Union` the
     # compiler splits, where `AbstractMount` would dispatch on every element.
@@ -229,12 +235,12 @@ end
     XRadio.set_mounts!(antenna_xds, mounts) -> antenna_xds
 
 Store `mounts`, one per antenna in `antenna_name` order, in an antenna dataset:
-the `mount` name MSv4 defines, and the `MOUNT_PARALLACTIC`, `MOUNT_ELEVATION`
-and `ANTENNA_AXIS_OFFSET` extension variables that let [`mounts`](@ref) give
-every mount back as it was.
+the `mount` name MSv4 defines, and the `MOUNT_PARALLACTIC`, `MOUNT_ELEVATION`,
+`MOUNT_AZIMUTH` and `ANTENNA_AXIS_OFFSET` extension variables that let
+[`mounts`](@ref) give every mount back as it was.
 
-A mount that is not a coefficient pair stores `NaN` coefficients. A coefficient
-pair MSv4 has no name for is named `OTHER`. The axis offset is stated along the
+A mount that is not a coefficient triple stores `NaN` coefficients. A
+coefficient triple MSv4 has no name for is named `OTHER`. The axis offset is stated along the
 station's own `x`, `y` and `z`.
 """
 function set_mounts!(xds::Dataset, mounts::AbstractVector{<:AbstractMount})
@@ -251,8 +257,9 @@ function set_mounts!(xds::Dataset, mounts::AbstractVector{<:AbstractMount})
     ))
     coefficients = map(_mount_coefficients, mounts)
     xds[:mount] = DimArray(map(_stored_mount_name, collect(mounts)), (antenna,))
-    xds[:mount_parallactic] = DimArray(first.(coefficients), (antenna,))
-    xds[:mount_elevation] = DimArray(last.(coefficients), (antenna,))
+    xds[:mount_parallactic] = DimArray(getindex.(coefficients, 1), (antenna,))
+    xds[:mount_elevation] = DimArray(getindex.(coefficients, 2), (antenna,))
+    xds[:mount_azimuth] = DimArray(getindex.(coefficients, 3), (antenna,))
     offsets = [Float64(axis_offset(m)[c]) for c in 1:3, m in mounts]
     xds[:antenna_axis_offset] = DimArray(offsets, (xyz, antenna); metadata = Dict{Symbol, Any}(:type => "quantity", :units => "m"))
     return xds

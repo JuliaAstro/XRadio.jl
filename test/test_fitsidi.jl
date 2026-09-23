@@ -871,11 +871,16 @@ end
         gt = synthetic_fitsidi(joinpath(dir, "mount.idifits"); mntsta = Int32[3, 2, 6])
         ps = open(ProcessingSet, to_msv4(gt, "mount.ps.zarr"))
         ant = branches(ps[:mount_00])[:antenna]
-        @test collect(ant[:mount]) == ["X-Y", "ORBITING", "OTHER"]
-        @test collect(mounts(ant)) == [MountXY(), MountOrbiting(), MountOther()]
+        @test collect(ant[:mount]) == ["X-Y", "ORBITING", "ALT-AZ+BWG-R"]
+        @test collect(mounts(ant)) == [MountXY(), MountOrbiting(), MountBWGR()]
 
+        # AIPS codes the beam-waveguide mounts 6 and 7 (Dodson & Rioja,
+        # arXiv:2210.13381); pyuvdata's 6-8 differ and are not read.
         gt = synthetic_fitsidi(joinpath(dir, "mnt7.idifits"); mntsta = Int32[0, 0, 7])
-        @test_throws "MNTSTA 7 names no mount" to_msv4(gt, "mnt7.ps.zarr")
+        @test collect(mounts(branches(open(ProcessingSet, to_msv4(gt, "mnt7.ps.zarr"))[:mnt7_00])[:antenna])) ==
+            [MountAltAz(), MountAltAz(), MountBWGL()]
+        gt = synthetic_fitsidi(joinpath(dir, "mnt8.idifits"); mntsta = Int32[0, 0, 8])
+        @test_throws "MNTSTA 8 names no mount" to_msv4(gt, "mnt8.ps.zarr")
     end
 
     @testset "absent rows become padding" begin

@@ -90,7 +90,8 @@ const IDI_MOUNTS = Dict(
     3 => MountXY,
     4 => MountNasmythR,
     5 => MountNasmythL,
-    6 => MountOther,
+    6 => MountBWGR,
+    7 => MountBWGL,
 )
 
 """

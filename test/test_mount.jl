@@ -12,7 +12,7 @@ struct MeasuredMount{C} <: XRadio.AbstractMount
     offset::C
 end
 XRadio.msv4_mount(::MeasuredMount) = "TEST-MEASURED"
-XRadio.mount_from_msv4(::Val{Symbol("TEST-MEASURED")}, parallactic, elevation, offset) =
+XRadio.mount_from_msv4(::Val{Symbol("TEST-MEASURED")}, parallactic, elevation, azimuth, offset) =
     MeasuredMount(offset)
 
 @testset "antenna mounts" begin
@@ -26,6 +26,19 @@ XRadio.mount_from_msv4(::Val{Symbol("TEST-MEASURED")}, parallactic, elevation, o
         @test (MountNasmythR().elevation, MountNasmythL().elevation) == (1, -1)
         @test Mount(1 // 2, 0) == Mount(0.5, 0.0)
         @test hash(Mount(1 // 2, 0)) == hash(Mount(0.5, 0.0))
+        @test Mount(1, 0).azimuth == 0
+        @test Mount(1, 0; offset = (0.0, 0.0, 1.0)).offset == (0.0, 0.0, 1.0)
+    end
+
+    # Dodson & Rioja (arXiv:2210.13381): the guide's second rotating mirror adds
+    # an azimuth term of the opposite sign to the elevation's.
+    @testset "the beam-waveguide mounts add an azimuth term" begin
+        @test XRadio.msv4_mount(MountBWGR()) == "ALT-AZ+BWG-R"
+        @test XRadio.msv4_mount(MountBWGL()) == "ALT-AZ+BWG-L"
+        @test MountBWGR() == Mount(1, 1, -1)
+        @test MountBWGL() == Mount(1, -1, 1)
+        @test MountBWGR() != MountNasmythR()
+        @test typeof(MountBWGR()) == typeof(MountAltAz())
     end
 
     # The feed rotation of these is not a combination of parallactic angle and
@@ -34,12 +47,16 @@ XRadio.mount_from_msv4(::Val{Symbol("TEST-MEASURED")}, parallactic, elevation, o
         @test XRadio.msv4_mount(MountXY()) == "X-Y"
         @test XRadio.msv4_mount(MountOrbiting()) == "ORBITING"
         @test XRadio.msv4_mount(MountOther()) == "OTHER"
-        @test !any(m -> m isa Mount, (MountXY(), MountOrbiting(), MountOther()))
-        @test all(m -> m isa XRadio.AbstractMount, (MountXY(), MountOrbiting(), MountOther()))
+        @test XRadio.msv4_mount(MountRotator()) == "ALT-AZ+ROTATOR"
+        @test XRadio.msv4_mount(MountHALCA()) == "SPACE-HALCA"
+        typed = (MountXY(), MountOrbiting(), MountOther(), MountRotator(), MountHALCA())
+        @test !any(m -> m isa Mount, typed)
+        @test all(m -> m isa XRadio.AbstractMount, typed)
     end
 
-    @testset "a coefficient pair MSv4 does not name has no name to write" begin
-        @test_throws "not one of the four coefficient pairs MSv4 names" XRadio.msv4_mount(Mount(1 // 2, 0))
+    @testset "a coefficient triple MSv4 does not name has no name to write" begin
+        @test_throws "not one of the six coefficient triples MSv4 names" XRadio.msv4_mount(Mount(1 // 2, 0))
+        @test_throws "not one of the six" XRadio.msv4_mount(Mount(1, 1, 1))
     end
 
     @testset "the axis offset survives in memory" begin
@@ -55,24 +72,31 @@ XRadio.mount_from_msv4(::Val{Symbol("TEST-MEASURED")}, parallactic, elevation, o
     @testset "a name reads back as its mount" begin
         @test XRadio.mount_from_msv4("ALT-AZ") === MountAltAz()
         @test XRadio.mount_from_msv4("ALT-AZ+NASMYTH-L") === MountNasmythL()
-        @test XRadio.mount_from_msv4("X-Y", NaN, NaN, (0.0, 0.0, 2.0)) === MountXY((0.0, 0.0, 2.0))
+        @test XRadio.mount_from_msv4("X-Y", NaN, NaN, NaN, (0.0, 0.0, 2.0)) === MountXY((0.0, 0.0, 2.0))
         @test XRadio.mount_from_msv4("ORBITING") === MountOrbiting()
         @test XRadio.mount_from_msv4("OTHER") === MountOther()
-        @test_throws "XRadio has no mount type for `ALT-AZ+BWG-R`" XRadio.mount_from_msv4("ALT-AZ+BWG-R")
+        @test XRadio.mount_from_msv4("ALT-AZ+BWG-R") === MountBWGR()
+        @test XRadio.mount_from_msv4("ALT-AZ+BWG-L") === MountBWGL()
+        @test XRadio.mount_from_msv4("ALT-AZ+ROTATOR") === MountRotator()
+        @test XRadio.mount_from_msv4("SPACE-HALCA") === MountHALCA()
+        @test_throws "XRadio has no mount type for `ALT-AZ+BWG-X`" XRadio.mount_from_msv4("ALT-AZ+BWG-X")
     end
 
     @testset "coefficients are authoritative where stated" begin
-        @test XRadio.mount_from_msv4("ALT-AZ", 1.0, 0.0) === MountAltAz()
-        @test XRadio.mount_from_msv4("OTHER", 0.5, 0.0) === Mount(0.5, 0.0)
-        @test_throws "which are those of `ALT-AZ`" XRadio.mount_from_msv4("EQUATORIAL", 1.0, 0.0)
-        @test_throws "a store writes such a mount as `OTHER`" XRadio.mount_from_msv4("ALT-AZ", 0.5, 0.0)
-        @test_throws "states one coefficient and not the other" XRadio.mount_from_msv4("ALT-AZ", 1.0, NaN)
+        @test XRadio.mount_from_msv4("ALT-AZ", 1.0, 0.0, 0.0) === MountAltAz()
+        @test XRadio.mount_from_msv4("ALT-AZ+BWG-R", 1.0, 1.0, -1.0) === MountBWGR()
+        @test XRadio.mount_from_msv4("OTHER", 0.5, 0.0, 0.0) === Mount(0.5, 0.0, 0.0)
+        @test_throws "which are those of `ALT-AZ`" XRadio.mount_from_msv4("EQUATORIAL", 1.0, 0.0, 0.0)
+        @test_throws "which are those of `ALT-AZ+BWG-R`" XRadio.mount_from_msv4("ALT-AZ+NASMYTH-R", 1.0, 1.0, -1.0)
+        @test_throws "a store writes such a mount as `OTHER`" XRadio.mount_from_msv4("ALT-AZ", 0.5, 0.0, 0.0)
+        @test_throws "states some of its coefficients and not others" XRadio.mount_from_msv4("ALT-AZ", 1.0, NaN, 0.0)
+        @test_throws "states some of its coefficients and not others" XRadio.mount_from_msv4("ALT-AZ", 1.0, 0.0, NaN)
     end
 
     @testset "every mount round-trips through an antenna dataset" begin
         xds = synthetic_antenna(["AA", "BB", "CC", "DD"])
         stored = AbstractMount[
-            MountNasmythR((0.0, 0.0, 1.5)), Mount(1 // 2, 0, (0.5, 0.0, 0.0)),
+            MountNasmythR((0.0, 0.0, 1.5)), Mount(1 // 2, 0; offset = (0.5, 0.0, 0.0)),
             MountOrbiting(), MountXY((0.0, 2.0, 0.0)),
         ]
         XRadio.set_mounts!(xds, stored)
@@ -81,10 +105,30 @@ XRadio.mount_from_msv4(::Val{Symbol("TEST-MEASURED")}, parallactic, elevation, o
         @test collect(mounts(xds)) == stored
         @test lookup(mounts(xds), AntennaName) == ["AA", "BB", "CC", "DD"]
         @test eltype(mounts(xds)) == Union{
-            Mount{Float64, Float64, NTuple{3, Float64}},
+            Mount{Float64, Float64, Float64, NTuple{3, Float64}},
             MountOrbiting{NTuple{3, Float64}}, MountXY{NTuple{3, Float64}},
         }
         @test_throws DimensionMismatch XRadio.set_mounts!(xds, stored[1:2])
+    end
+
+    @testset "the new mounts round-trip through an antenna dataset" begin
+        xds = synthetic_antenna(["AA", "BB", "CC", "DD", "EE"])
+        stored = AbstractMount[
+            MountBWGR((0.0, 0.0, 1.0)), MountBWGL(), Mount(1, 1, 1),
+            MountRotator(), MountHALCA(),
+        ]
+        XRadio.set_mounts!(xds, stored)
+        @test isempty(check(xds))
+        @test collect(xds[:mount]) ==
+            ["ALT-AZ+BWG-R", "ALT-AZ+BWG-L", "OTHER", "ALT-AZ+ROTATOR", "SPACE-HALCA"]
+        @test collect(mounts(xds)) == stored
+    end
+
+    @testset "a store without the azimuth coefficient reads it as zero" begin
+        xds = synthetic_antenna(["AA", "BB"])
+        XRadio.set_mounts!(xds, [MountNasmythL(), MountXY()])
+        delete!(xds, :mount_azimuth)
+        @test collect(mounts(xds)) == [MountNasmythL(), MountXY()]
     end
 
     @testset "a store without the coefficients reads the name alone" begin
