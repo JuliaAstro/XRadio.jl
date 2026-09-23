@@ -34,6 +34,7 @@
         public_only = (
             :check, :validate, :SchemaIssue, :SchemaError,
             :gain_variable, :gain_quantity, :msv4_gain_curve,
+            :msv4_mount, :mount_from_msv4, :axis_offset, :set_mounts!,
         )
         for name in public_only
             @test isdefined(XRadio, name)

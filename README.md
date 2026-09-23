@@ -226,7 +226,7 @@ the value used when the file is silent, and whether it says so:
 | `observation_info.release_date` | `1858-11-17T00:00:00.000`, the MJD zero point | yes |
 | `VISIBILITY.units` | `uncalib`, when the `FLUX` column has no `TUNIT` | yes |
 | `gain_curve_xds` `measured_date` | the MJD zero point | yes |
-| `antenna_xds` `mount` | `OTHER`, for a mount MSv4 has no name for | yes |
+| `antenna_xds` `mount` | `ORBITING` or `OTHER`, for `MNTSTA` 2 and 6, which MSv4 reserves no name for | no |
 | `polarization` | the majority receptor basis, for an array that does not share one | yes |
 | `scan_intents` | `["UNSPECIFIED"]` | no |
 | `spectral_window_intents` | `["UNSPECIFIED"]` | no |
@@ -255,9 +255,15 @@ in a warning and its content does not reach the store: `INTERFEROMETER_MODEL`,
 does not define at all — a correlator's own extension, such as DiFX's `CALC` —
 is ignored without comment.
 
-Four columns of tables that are otherwise carried have no MSv4 field, and are
-dropped silently: `ARRAY_GEOMETRY`'s `STAXOF`, `PHASE-CAL`'s `PC_RATE` and
-`STATE`, and `WEATHER`'s `PRECIPITATION`.
+Three columns of tables that are otherwise carried have no MSv4 field, and are
+dropped silently: `PHASE-CAL`'s `PC_RATE` and `STATE`, and `WEATHER`'s
+`PRECIPITATION`.
+
+`ARRAY_GEOMETRY`'s `STAXOF` has no MSv4 field either, but is kept: the antenna
+dataset carries `ANTENNA_AXIS_OFFSET`, `MOUNT_PARALLACTIC` and
+`MOUNT_ELEVATION` as extension variables over `antenna_name`, so `mounts(ms)`
+gives each mount back with its axis offset. A reader that does not know them
+ignores them, as MSv4 permits.
 
 A gain curve that is not a polynomial in elevation or in zenith angle — a
 tabulated curve, or a spherical-harmonic expansion — cannot be written at all,

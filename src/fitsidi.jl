@@ -31,8 +31,10 @@ a sentinel date could be mistaken for a real embargo policy.
 Each Measurement Set carries the antennas its own baselines name and the fields
 its own rows observed, so a scan that ran on a subset of the array describes
 that subset rather than the whole. `STAXOF` has no field in MSv4's `antenna`
-dataset and is dropped; every other column of `ARRAY_GEOMETRY`, `ANTENNA` and
-`SOURCE` that MSv4 defines a home for is carried.
+dataset and is kept as the `ANTENNA_AXIS_OFFSET` extension variable, beside the
+mount coefficients [`mounts`](@ref) reads back; every other column of
+`ARRAY_GEOMETRY`, `ANTENNA` and `SOURCE` that MSv4 defines a home for is
+carried.
 
 The four optional calibration and environment tables become sub-datasets of
 every partition they have something to say about: `SYSTEM_TEMPERATURE` becomes

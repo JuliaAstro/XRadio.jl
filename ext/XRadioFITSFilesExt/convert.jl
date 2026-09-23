@@ -1009,19 +1009,9 @@ end
 # name the antennas that actually observed together, which is fewer than the
 # array whenever a station was down.
 function _antenna_dataset(s, numbers, band::Int)
-    identity = _antenna_identity(s, numbers)
-
-    unnamed = [
-        n for (n, a) in zip(identity.antenna_name, numbers)
-            if s.mounts[a] isa XRadio.MountOrbiting || s.mounts[a] isa XRadio.MountOther
-    ]
-    isempty(unnamed) || @warn "MSv4 has no `mount` name for these antennas' \
-                               mounts; writing \"OTHER\", which does not say \
-                               which they are." antennas = unnamed maxlog = 1
-
-    return XRadio.subdataset(
+    xds = XRadio.subdataset(
         :antenna;
-        identity...,
+        _antenna_identity(s, numbers)...,
         cartesian_pos_label = ["x", "y", "z"],
         antenna_position = [s.positions[a][i] for i in 1:3, a in numbers],
         antenna_receptor_angle =
@@ -1029,6 +1019,7 @@ function _antenna_dataset(s, numbers, band::Int)
         antenna_dish_diameter = s.diameters === nothing ? nothing :
             [s.diameters[a] for a in numbers],
     )
+    return XRadio.set_mounts!(xds, [s.mounts[a] for a in numbers])
 end
 
 # The fields of one partition. FITS-IDI states one direction per source, which

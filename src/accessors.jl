@@ -97,6 +97,153 @@ function antennas(ms::MeasurementSet)
 end
 
 """
+    mounts(ms) -> DimVector
+    mounts(antenna_xds) -> DimVector
+
+Each antenna's mount, over `antenna_name`. The element type is the `Union` of
+the mount types present, so an array of alt-azimuth, Nasmyth and equatorial
+mounts has the single concrete type `Mount{Float64, Float64, NTuple{3, Float64}}`.
+
+MSv4 stores a mount as a name. Where the store also carries the
+`MOUNT_PARALLACTIC`, `MOUNT_ELEVATION` and `ANTENNA_AXIS_OFFSET` variables that
+[`XRadio.set_mounts!`](@ref) writes, every [`Mount`](@ref) comes back exactly,
+including coefficient pairs MSv4 has no name for; otherwise the name alone
+decides, through [`XRadio.mount_from_msv4`](@ref), and the axis offset is zero.
+
+A Measurement Set without an antenna sub-dataset gives an empty vector.
+"""
+function mounts(ms::MeasurementSet)
+    haskey(branches(ms), :antenna) ||
+        return DimArray(typeof(MountAltAz())[], (dimtype(:antenna_name)(String[]),))
+    return mounts(branches(ms)[:antenna])
+end
+
+function mounts(xds::Dataset)
+    A = dimtype(:antenna_name)
+    antenna = _antenna_dim(xds)
+    haskey(xds, :mount) || throw(ArgumentError(
+        "this antenna dataset has no `mount` coordinate, which MSv4 requires"
+    ))
+    names = xds[:mount]
+    coefficients = haskey(xds, :mount_parallactic)
+    coefficients == haskey(xds, :mount_elevation) || throw(ArgumentError(
+        "this antenna dataset carries one of `MOUNT_PARALLACTIC` and " *
+            "`MOUNT_ELEVATION` without the other"
+    ))
+    offsets = haskey(xds, :antenna_axis_offset) ? xds[:antenna_axis_offset] : nothing
+    X = dimtype(:cartesian_pos_label)
+    result = map(eachindex(val(antenna))) do i
+        p, e = coefficients ?
+            (xds[:mount_parallactic][A(i)], xds[:mount_elevation][A(i)]) : (NaN, NaN)
+        offset = offsets === nothing ? _NO_OFFSET :
+            Tuple(Float64(offsets[A(i), X(At(c))]) for c in ("x", "y", "z"))
+        mount_from_msv4(names[A(i)], p, e, offset)
+    end
+    # The narrowest element type: a few mount types form a `Union` the
+    # compiler splits, where `AbstractMount` would dispatch on every element.
+    T = isempty(result) ? typeof(MountAltAz()) : mapreduce(typeof, (a, b) -> Union{a, b}, result)
+    return DimArray(Vector{T}(result), (antenna,))
+end
+
+"""
+    XRadio.set_mounts!(antenna_xds, mounts) -> antenna_xds
+
+Store `mounts`, one per antenna in `antenna_name` order, in an antenna dataset:
+the `mount` name MSv4 defines, and the `MOUNT_PARALLACTIC`, `MOUNT_ELEVATION`
+and `ANTENNA_AXIS_OFFSET` extension variables that let [`mounts`](@ref) give
+every mount back as it was.
+
+A mount that is not a coefficient pair stores `NaN` coefficients. A coefficient
+pair MSv4 has no name for is named `OTHER`. The axis offset is stated along the
+station's own `x`, `y` and `z`.
+"""
+function set_mounts!(xds::Dataset, mounts::AbstractVector{<:AbstractMount})
+    antenna = _antenna_dim(xds)
+    length(mounts) == length(antenna) || throw(DimensionMismatch(
+        "$(length(mounts)) mounts for $(length(antenna)) antennas"
+    ))
+    X = dimtype(:cartesian_pos_label)
+    xyz = dims(xds, X)
+    xyz === nothing && (xyz = X(Categorical(["x", "y", "z"])))
+    Tuple(val(xyz)) == ("x", "y", "z") || throw(ArgumentError(
+        "the antenna dataset labels its Cartesian axis $(collect(val(xyz))); " *
+            "an axis offset is stated along x, y and z"
+    ))
+    coefficients = map(_mount_coefficients, mounts)
+    xds[:mount] = DimArray(map(_stored_mount_name, collect(mounts)), (antenna,))
+    xds[:mount_parallactic] = DimArray(first.(coefficients), (antenna,))
+    xds[:mount_elevation] = DimArray(last.(coefficients), (antenna,))
+    offsets = [Float64(axis_offset(m)[c]) for c in 1:3, m in mounts]
+    xds[:antenna_axis_offset] = DimArray(offsets, (xyz, antenna); metadata = Dict{Symbol, Any}(:type => "quantity", :units => "m"))
+    return xds
+end
+
+"""
+    antenna_positions(ms) -> DimMatrix
+
+Each antenna's geocentric position in metres, over `cartesian_pos_label` and
+`antenna_name`, with the frame the store states in its metadata.
+
+MSv4 also allows positions in ellipsoid coordinates; those are refused rather
+than converted. A Measurement Set without an antenna sub-dataset gives an empty
+matrix.
+"""
+function antenna_positions(ms::MeasurementSet)
+    X, A = dimtype(:cartesian_pos_label), dimtype(:antenna_name)
+    haskey(branches(ms), :antenna) ||
+        return DimArray(zeros(3, 0), (X(Categorical(["x", "y", "z"])), A(String[])))
+    xds = branches(ms)[:antenna]
+    dims(xds[:antenna_position], X) === nothing && throw(ArgumentError(
+        "this Measurement Set states its antenna positions in ellipsoid " *
+            "coordinates, and XRadio does not convert them to Cartesian"
+    ))
+    return xds[:antenna_position]
+end
+
+"""
+    receptor_angles(ms) -> DimMatrix
+
+The rotation of each receptor about the feed axis, in radians, over
+`receptor_label` and `antenna_name`.
+
+MSv4 makes `ANTENNA_RECEPTOR_ANGLE` optional; a store without it gives `NaN`,
+which says the angles are unknown rather than zero.
+"""
+function receptor_angles(ms::MeasurementSet)
+    R, A = dimtype(:receptor_label), dimtype(:antenna_name)
+    haskey(branches(ms), :antenna) ||
+        return DimArray(zeros(0, 0), (R(String[]), A(String[])))
+    xds = branches(ms)[:antenna]
+    haskey(xds, :antenna_receptor_angle) && return xds[:antenna_receptor_angle]
+    receptor, antenna = dims(xds, R), _antenna_dim(xds)
+    receptor === nothing && throw(ArgumentError(
+        "this antenna dataset has no `receptor_label` dimension"
+    ))
+    return DimArray(fill(NaN, length(receptor), length(antenna)), (receptor, antenna))
+end
+
+"""
+    polarization_types(ms) -> DimMatrix{String}
+
+The polarization each receptor responds to, such as `"R"` or `"X"`, over
+`receptor_label` and `antenna_name`.
+"""
+function polarization_types(ms::MeasurementSet)
+    R, A = dimtype(:receptor_label), dimtype(:antenna_name)
+    haskey(branches(ms), :antenna) ||
+        return DimArray(Matrix{String}(undef, 0, 0), (R(String[]), A(String[])))
+    return branches(ms)[:antenna][:polarization_type]
+end
+
+function _antenna_dim(xds::Dataset)
+    antenna = dims(xds, dimtype(:antenna_name))
+    antenna === nothing && throw(ArgumentError(
+        "this dataset has no `antenna_name` dimension, so it describes no antennas"
+    ))
+    return antenna
+end
+
+"""
     baselines(ms) -> Vector{Tuple{String, String}}
     baselines(lookup) -> Vector{Tuple{String, String}}
 

@@ -49,7 +49,8 @@ export AbstractGainCurve, GainPolynomial, TabulatedGain, SphericalHarmonicGain,
     AtDeclination, gain
 export fitsidi2msv4, fitsidi_gain_curves
 export datagroups, datagroup, correlated, flags, weights, uvw
-export antennas, scans, fields, scan_intents, spectral_window_intents,
+export antennas, mounts, antenna_positions, receptor_angles, polarization_types,
+    scans, fields, scan_intents, spectral_window_intents,
     Intent, ScanIntents, SubscanIntents,
     frequencies, polarizations, times, spectralwindow,
     gaincurves, baseline, baselines, baseline_antennas, scan, field,
@@ -75,6 +76,7 @@ export BaselineID, Frequency, Polarization, UVWLabel, AntennaName, StationName,
     PHASE_CALIBRATION_SCHEMA, PHASED_ARRAY_SCHEMA, FIELD_SOURCE_SCHEMA,
     FIELD_SOURCE_EPHEMERIS_SCHEMA
 @compat public gain_variable, gain_quantity, msv4_gain_curve
+@compat public set_mounts!, mount_from_msv4, msv4_mount, axis_offset
 @compat public baseline_lookup, BaselineLookup
 @compat public scan_lookup, field_lookup, LabelLookup
 

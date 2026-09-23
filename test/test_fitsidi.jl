@@ -407,6 +407,10 @@ end
         @test metadata(ant[:antenna_position])[:coordinate_system] == "geocentric"
 
         @test collect(ant[:mount]) == ["ALT-AZ", "ALT-AZ+NASMYTH-R", "EQUATORIAL"]
+        @test collect(mounts(ant)) == [
+            MountAltAz((0.0, 0.0, 0.0)), MountNasmythR((1.5, 0.0, -1.0)),
+            MountEquatorial((0.0, 0.5, 0.0)),
+        ]
         @test collect(ant[:antenna_dish_diameter]) == [25.0, 30.0, 6.0]
         @test lookup(ant[:polarization_type], ReceptorLabel) == ["pol_0", "pol_1"]
         @test parent(ant[:polarization_type]) == ["R" "R" "R"; "L" "L" "L"]
@@ -863,14 +867,12 @@ end
         @test isempty(none[:curve])
     end
 
-    @testset "a mount MSv4 cannot name is written as OTHER" begin
-        # MNTSTA 2 (orbiting) and 6 (other) have no MSv4 name, and 3 (X-Y) does.
+    @testset "a mount MSv4 does not reserve keeps its own name" begin
         gt = synthetic_fitsidi(joinpath(dir, "mount.idifits"); mntsta = Int32[3, 2, 6])
-        ps = @test_logs (:warn, r"no `mount` name") match_mode = :any open(
-            ProcessingSet, to_msv4(gt, "mount.ps.zarr")
-        )
-        @test collect(branches(ps[:mount_00])[:antenna][:mount]) ==
-            ["X-Y", "OTHER", "OTHER"]
+        ps = open(ProcessingSet, to_msv4(gt, "mount.ps.zarr"))
+        ant = branches(ps[:mount_00])[:antenna]
+        @test collect(ant[:mount]) == ["X-Y", "ORBITING", "OTHER"]
+        @test collect(mounts(ant)) == [MountXY(), MountOrbiting(), MountOther()]
 
         gt = synthetic_fitsidi(joinpath(dir, "mnt7.idifits"); mntsta = Int32[0, 0, 7])
         @test_throws "MNTSTA 7 names no mount" to_msv4(gt, "mnt7.ps.zarr")
