@@ -119,11 +119,11 @@ says the datum must not be used and `WEIGHT` says how good it would have been.
   `Float32` cannot resolve.
 - `name`: base of the Measurement Set names, which are `name_00`, `name_01` and
   so on. Defaults to the input file's basename.
-- `zarr_format = 2`, `compressor`, `chunks`, `overwrite`, `validate`: as for
-  [`write`](@ref). `chunks` defaults to 128 times by 64 channels, since a
-  converted store is large enough that one chunk per array is unusable. Each
-  partition is checked as it is built, so a departure from the standard stops
-  the conversion where it arose rather than at the end.
+- `zarr_format = 2`, `compressor`, `chunks`, `chunk_bytes`, `validate`: as for
+  [`write`](@ref).
+- `mode = "w-"`: `"w-"` refuses a `dest` that exists, and `"w"` replaces it. Each partition is checked as it is built,
+  so a departure from the standard stops the conversion where it arose rather
+  than at the end.
 
 Requires `FITSFiles`:
 

@@ -41,6 +41,8 @@ data-group names are `Symbol`s (`:base`) rather than strings.
 | `load_processing_set(path, load_sub_datasets=False)` | no counterpart; a lazily opened sub-dataset is read only when accessed |
 | `load_processing_set(path, data_group_name=...)` | no counterpart |
 | `ps_xdt.to_zarr(path)` | `write(path, ps)`, which checks conformance first |
+| `ps_xdt.to_zarr(path, mode=...)` | `write(path, ps; mode = ...)`: the same `"w-"`, `"w"` and `"a"`; see [Writing stores](@ref) |
+| `ms_xdt.to_zarr(path/name, mode="a")` | `write(path, name => ms; mode = "a")`; see [Writing into an existing store](@ref) |
 | `convert_msv2_to_processing_set(ms, out)` | no counterpart |
 | no counterpart | [`fitsidi2msv4`](@ref), with `FITSFiles` loaded |
 

@@ -237,8 +237,10 @@ end
     ps = synthetic_set(1)
     path = joinpath(mktempdir(), "once.ps.zarr")
     write(path, ps)
-    @test_throws "pass `overwrite = true`" write(path, ps)
-    @test write(path, ps; overwrite = true) == path
+    @test_throws "pass `mode = \"w\"` to replace it" write(path, ps)
+    @test write(path, ps; mode = "w") == path
+    @test_throws "mode must be one of \"w-\", \"w\", \"a\"" write(path, ps; mode = "r+")
+    @test_throws "`replace` applies to mode \"a\"" write(path, ps; mode = "w", replace = true)
 end
 
 @testset "scan intents" begin
@@ -1085,6 +1087,153 @@ end
     # gives them in order, as it does for any other iterable.
     @test map(spectralwindow, ps) == fill("spw_0", 3)
     @test map(gaincurves, values(ps)) isa Vector
+end
+
+@testset "chunk shapes" begin
+    ms = synthetic_visibility(; ntime = 100, nfreq = 64)
+    step = sizeof(ComplexF32) * 2 * 3 * 64   # one time step of the visibilities
+    stored_chunks(p, name) = XRadio.Zarr.zopen(p).groups["a"].arrays[name].metadata.chunks
+    function written(; kw...)
+        p = joinpath(mktempdir(), "chunks.ps.zarr")
+        write(p, ProcessingSet(OrderedDict(:a => ms)); kw...)
+        return p
+    end
+
+    @testset "the default fits whole time steps to the target" begin
+        p = written(; chunk_bytes = 10 * step)
+        # (polarization, frequency, baseline_id, time), fastest first
+        @test stored_chunks(p, "VISIBILITY") == (2, 64, 3, 10)
+        @test stored_chunks(p, "FLAG") == (2, 64, 3, 10)
+        @test stored_chunks(p, "UVW") == (3, 3, 10)
+        @test stored_chunks(p, "time") == (100,)
+        @test read(ProcessingSet, p)[1][:visibility] == ms[:visibility]
+    end
+
+    @testset "a small dataset is one chunk" begin
+        @test stored_chunks(written(), "VISIBILITY") == (2, 64, 3, 100)
+    end
+
+    @testset "frequency is cut when one time step exceeds the target" begin
+        @test stored_chunks(written(; chunk_bytes = step ÷ 4), "VISIBILITY") == (2, 16, 3, 1)
+    end
+
+    @testset "named dimensions are fixed and the rest fill the target" begin
+        p = written(; chunks = (; baseline_id = 1), chunk_bytes = 10 * step)
+        @test stored_chunks(p, "VISIBILITY") == (2, 64, 1, 30)
+        p = written(; chunks = (time = 7, polarization = 1), chunk_bytes = 1)
+        @test stored_chunks(p, "VISIBILITY") == (1, 1, 1, 7)
+    end
+
+    @testset "chunks that cannot be followed are an error" begin
+        p = joinpath(mktempdir(), "bad.ps.zarr")
+        ps = ProcessingSet(OrderedDict(:a => ms))
+        @test_throws "`chunks` names :frequncy, which is not a dimension of the data" write(
+            p, ps; chunks = (; frequncy = 16)
+        )
+        @test_throws "the chunk size for `time` must be a positive integer" write(
+            p, ps; chunks = (; time = 0)
+        )
+        @test_throws "chunk_bytes must be positive" write(p, ps; chunk_bytes = 0)
+        @test !ispath(p)
+    end
+end
+
+@testset "writing into an existing store" begin
+    ms = synthetic_visibility()
+    function stored()
+        p = joinpath(mktempdir(), "append.ps.zarr")
+        write(p, ProcessingSet(OrderedDict(:a => ms, :b => ms)))
+        return p
+    end
+    modified(p) = stat(joinpath(p, "a", "VISIBILITY", ".zarray")).mtime
+
+    @testset "a new layer and data group are added" begin
+        p = stored()
+        before = modified(p)
+        m = copy(open(ProcessingSet, p)[:a])
+        m[:visibility_corrected] = rebuild(m[:visibility], 2 .* collect(parent(m[:visibility])))
+        add_datagroup!(m, :corrected; correlated_data = "VISIBILITY_CORRECTED")
+        @test write(p, :a => m; mode = "a") == p
+        back = open(ProcessingSet, p)
+        @test correlated(back[:a], :corrected) == 2 .* ms[:visibility]
+        @test correlated(back[:a]) == ms[:visibility]
+        @test modified(p) == before
+        @test !haskey(datagroups(back[:b]), :corrected)
+        @test isempty(check(back))
+    end
+
+    @testset "a new sub-dataset is written" begin
+        p = stored()
+        m = copy(open(ProcessingSet, p)[:a])
+        extra = copy(m.field_and_source_base)
+        m.field_and_source_extra = extra
+        write(p, :a => m; mode = "a")
+        @test haskey(branches(open(ProcessingSet, p)[:a]), :field_and_source_extra)
+    end
+
+    @testset "mode \"a\" creates a store that is not there" begin
+        p = joinpath(mktempdir(), "new.ps.zarr")
+        write(p, :a => ms; mode = "a")
+        @test collect(keys(read(ProcessingSet, p))) == [:a]
+        @test metadata(read(ProcessingSet, p))[:type] == "processing_set"
+    end
+
+    @testset "mode \"a\" with a processing set writes every member and its attributes" begin
+        p = stored()
+        ps = open(ProcessingSet, p)
+        out = ProcessingSet(
+            OrderedDict(:a => copy(ps[:a]), :c => ms),
+            merge(metadata(ps), Dict{Symbol, Any}(:note => "added"))
+        )
+        out[:a][:weight_other] = ms[:weight]
+        write(p, out; mode = "a")
+        back = read(ProcessingSet, p)
+        @test collect(keys(back)) == [:a, :b, :c]
+        @test back[:a][:weight_other] == ms[:weight]
+        @test metadata(back)[:note] == "added"
+    end
+
+    @testset "writing one Measurement Set keeps the store's attributes" begin
+        p = stored()
+        root = XRadio.Zarr.zopen(p, "w")
+        XRadio.Zarr.writeattrs(
+            XRadio.Zarr.ZarrFormat(2), root.storage, root.path,
+            Dict{String, Any}("type" => "processing_set", "note" => "kept")
+        )
+        write(p, :c => ms; mode = "a")
+        @test metadata(read(ProcessingSet, p))[:note] == "kept"
+    end
+
+    @testset "a Measurement Set the store lacks is written whole" begin
+        p = stored()
+        write(p, :c => ms; mode = "a")
+        back = read(ProcessingSet, p)
+        @test collect(keys(back)) == [:a, :b, :c]
+        @test back[:c][:visibility] == ms[:visibility]
+    end
+
+    @testset "a changed layer is replaced only when asked" begin
+        p = stored()
+        m = copy(open(ProcessingSet, p)[:a])
+        m[:weight] = rebuild(m[:weight], 3 .* collect(parent(m[:weight])))
+        @test_throws "`WEIGHT` of `a` is not the stored array; pass `replace = true`" write(
+            p, :a => m; mode = "a"
+        )
+        @test read(ProcessingSet, p)[:a][:weight] == ms[:weight]
+        write(p, :a => m; mode = "a", replace = true)
+        @test read(ProcessingSet, p)[:a][:weight] == 3 .* ms[:weight]
+        @test !ispath(joinpath(p, "a", "WEIGHT.replacing"))
+    end
+
+    @testset "what cannot be appended is an error" begin
+        p = stored()
+        @test_throws "pass `mode = \"w\"` to replace it, or `mode = \"a\"` to write into it" write(p, :a => ms)
+        m = copy(open(ProcessingSet, p)[:a])
+        first_two = Ti(At(collect(lookup(dims(m, Ti)))[1:2]))
+        @test_throws "`time` of `a` differs from the stored one" write(
+            p, :a => m[first_two]; mode = "a"
+        )
+    end
 end
 
 @testset "building a modified Measurement Set" begin

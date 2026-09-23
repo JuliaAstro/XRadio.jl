@@ -363,5 +363,5 @@ end
     # accident — but can be, deliberately.
     path = joinpath(mktempdir(), "bad.ps.zarr")
     @test_throws SchemaError write(path, ps)
-    @test write(path, ps; validate = false, overwrite = true) == path
+    @test write(path, ps; validate = false) == path
 end

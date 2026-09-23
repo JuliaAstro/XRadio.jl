@@ -23,40 +23,231 @@ when deliberately writing a store that does not conform.
   write the fixed-width strings the standard specifies for v3, so those arrays
   come out variable-length and a strict check calls their dtype wrong. Version
   2 has no such gap and is what this package defaults to until it closes.
+  Writing into an existing store keeps the store's own version.
 - `compressor`: the Zarr compressor for the data arrays. Defaults to
   `Zarr.BloscCompressor(cname = "lz4", clevel = 5)`, which decompresses
   markedly faster than zstd on visibility data for a small size cost.
-- `chunks`: a dimension-name-to-size mapping fixing the chunk shape. The
-  default is one chunk per array, which is right for small datasets and
-  wrong for large ones — a store meant for partial reads needs chunking.
-- `overwrite = false`: whether to replace an existing store at `path`.
+- `chunks = (;)`: chunk sizes for the dimensions named, by their MSv4 names,
+  such as `(; baseline_id = 1)`. A name that is not a dimension of the data is
+  an error.
+- `chunk_bytes = 16 MiB`: the uncompressed size the dimensions `chunks` leaves
+  open are fitted to; see [Chunk shapes](@ref).
+- `mode = "w-"`: `"w-"` creates a store and refuses a `path` that exists;
+  `"w"` replaces whatever is at `path`; `"a"` writes into the store at `path`,
+  creating it if there is none. See [Writing into an existing store](@ref).
+- `replace = false`: in mode `"a"`, whether a layer the store holds may be
+  rewritten when `ps` holds something else there.
 - `validate = true`: whether to check conformance before writing.
 - `schemas = ()`: dataset specifications of the caller's own, for sub-dataset
   types the standard does not define. They decide both what conforms and what
   each layer is named on disk; see [`schema_types`](@ref).
 
 ```julia
-write("track.ps.zarr", ps; chunks = Dict(:time => 64, :frequency => 128))
+write("track.ps.zarr", ps)                              # scan-sized chunks
+write("track.ps.zarr", ps; chunks = (; baseline_id = 1))  # one baseline per chunk
 ```
+
+To write a single Measurement Set, see
+[`write(path, name => ms)`](@ref Base.write(::AbstractString, ::Pair{Symbol, MeasurementSet})).
 """
 function Base.write(
         path::AbstractString, ps::ProcessingSet;
+        mode::AbstractString = "w-", replace::Bool = false, kw...
+    )
+    return _write_members(path, pairs(ps), metadata(ps); mode, replace, kw...)
+end
+
+"""
+    write(path, name => ms; mode = "w-", replace = false, kw...) -> path
+
+Write the Measurement Set `ms` as the Measurement Set `name` of the store at
+`path`. In `mode = "a"` this adds one Measurement Set to a store, or adds to
+one it holds, leaving the store's other Measurement Sets and its own attributes
+as they are; see [Writing into an existing store](@ref). In `"w-"` and `"w"` it
+creates a store holding `ms` alone.
+
+This is how calibrated visibilities join the store they were computed from,
+without rewriting the visibilities they came from:
+
+```julia
+ps = open(ProcessingSet, path)
+ms = copy(ps[:track_0])
+ms[:visibility_corrected] = rebuild(ms[:visibility], corrected)
+add_datagroup!(ms, :corrected; correlated_data = "VISIBILITY_CORRECTED")
+write(path, :track_0 => ms; mode = "a")
+```
+
+The keywords are as for writing a processing set.
+"""
+function Base.write(
+        path::AbstractString, (name, ms)::Pair{Symbol, MeasurementSet};
+        mode::AbstractString = "w-", replace::Bool = false, kw...
+    )
+    return _write_members(path, (name => ms,), nothing; mode, replace, kw...)
+end
+
+const _WRITE_MODES = ("w-", "w", "a")
+
+# Write the `name => ms` pairs of `members` to the store at `path`. The store's
+# own attributes become `meta`; `nothing` keeps those of a store written into
+# and gives a new store the bare `processing_set` type.
+function _write_members(
+        path::AbstractString, members, meta;
+        mode::AbstractString, replace::Bool,
         zarr_format::Integer = 2,
         compressor = Zarr.BloscCompressor(cname = "lz4", clevel = 5),
-        chunks = Dict{Symbol, Int}(),
-        overwrite::Bool = false,
+        chunks::NamedTuple = (;),
+        chunk_bytes::Integer = DEFAULT_CHUNK_BYTES,
         validate::Bool = true,
         schemas = (),
     )
-    validate && XRadio.validate(ps; schemas)
-
+    mode in _WRITE_MODES || throw(
+        ArgumentError(
+            "mode must be one of " * join(repr.(_WRITE_MODES), ", ") * "; got $(repr(mode))"
+        )
+    )
+    replace && mode != "a" && throw(
+        ArgumentError("`replace` applies to mode \"a\", which writes into a store; mode is $(repr(mode))")
+    )
+    sets = OrderedDict{Symbol, MeasurementSet}(members)
+    validate && XRadio.validate(
+        meta === nothing ? ProcessingSet(sets) : ProcessingSet(sets, meta); schemas
+    )
+    chunks = ChunkRule(chunks, chunk_bytes, values(sets))
     table = schema_types(schemas)
-    root = _create_store(path, metadata(ps); zarr_format, overwrite)
-    for (name, ms) in pairs(ps)
-        _write_tree(root, string(name), ms; zarr_format, compressor, chunks, table)
+
+    appending = mode == "a" && ispath(path)
+    if appending
+        root = _open_store(path)
+        zarr_format = root.zarr_format isa Zarr.ZarrFormat{3} ? 3 : 2
+        meta === nothing || Zarr.writeattrs(
+            Zarr.ZarrFormat(zarr_format), root.storage, root.path, _to_attrs(meta)
+        )
+    else
+        root = _create_store(
+            path, something(meta, Dict{Symbol, Any}(:type => "processing_set"));
+            zarr_format, overwrite = mode == "w"
+        )
+    end
+    for (name, ms) in sets
+        key = string(name)
+        if appending && haskey(root.groups, key)
+            group = root.groups[key]
+            stored = _read_measurement_set(group; lazy = true)
+            _append_tree(group, stored, ms; replace, zarr_format, compressor, chunks, table)
+        else
+            _write_tree(root, key, ms; zarr_format, compressor, chunks, table)
+        end
     end
     _consolidate(root)
     return path
+end
+
+# An existing processing-set store, opened for writing.
+function _open_store(path::AbstractString)
+    isdir(path) || throw(ArgumentError("`$path` is not a directory store"))
+    root = Zarr.zopen(path, "w")
+    type = get(root.attrs, "type", nothing)
+    type == "processing_set" || throw(
+        ArgumentError(
+            "`$path` is not an MSv4 processing set: its `type` attribute is $(repr(type))"
+        )
+    )
+    return root
+end
+
+# Write into the stored node `group`, read back as `stored`, what `tree` holds
+# and it does not.
+function _append_tree(group, stored, tree; replace, zarr_format, compressor, chunks, table)
+    where_ = strip(group.path, '/')
+    for d in getfield(tree, :dims)
+        dname = msv4name(d)
+        have = dims(stored, DimensionalData.basetypeof(d))
+        if have === nothing
+            coord = DimArray(collect(val(d)), (d,); metadata = metadata(lookup(d)))
+            _write_array(group, string(dname), coord; zarr_format, compressor, chunks = nothing)
+        else
+            isequal(collect(val(have)), collect(val(d))) || throw(
+                ArgumentError(
+                    "`$dname` of `$where_` differs from the stored one; a Measurement " *
+                        "Set appended to a store must keep the store's coordinates"
+                )
+            )
+        end
+    end
+
+    auxiliary = _auxiliary_coords(tree, table)
+    allcoords = sort!(collect(values(auxiliary)))
+    shape = chunk_sizes(chunks, tree)
+    for key in keys(tree)
+        diskname = _diskname(tree, key, table)
+        write_as = n -> _write_array(
+            group, n, tree[key]; zarr_format, compressor, chunks = shape,
+            coords = haskey(auxiliary, key) ? String[] : allcoords
+        )
+        if !haskey(group.arrays, diskname)
+            write_as(diskname)
+        elseif !_is_stored_as(tree[key], group.arrays[diskname])
+            replace || throw(
+                ArgumentError(
+                    "`$diskname` of `$where_` is not the stored array; pass " *
+                        "`replace = true` to rewrite it"
+                )
+            )
+            _replace_array(group, diskname, write_as)
+        end
+    end
+    Zarr.writeattrs(
+        Zarr.ZarrFormat(zarr_format), group.storage, group.path, _to_attrs(metadata(tree))
+    )
+
+    for (subkey, sub) in branches(tree)
+        n = nodename(subkey)
+        if haskey(group.groups, n)
+            _append_tree(
+                group.groups[n], branches(stored)[subkey], sub;
+                replace, zarr_format, compressor, chunks, table
+            )
+        else
+            _write_tree(group, n, sub; zarr_format, compressor, chunks, table)
+        end
+    end
+    return group
+end
+
+# Whether `layer` holds the stored array `z` itself, as a lazy read of it does.
+# Strings are read into memory even lazily, so a string layer is compared by
+# value; they are labels, and small.
+function _is_stored_as(layer, z::Zarr.ZArray)
+    data = parent(layer)
+    eltype(data) <: AbstractString &&
+        return size(data) == size(z) && isequal(data, _unwrap_strings(Array(z)))
+    data isa Zarr.ZArray || return false
+    folder = _folder(data.storage)
+    folder === nothing && return false
+    return folder == _folder(z.storage) && strip(data.path, '/') == strip(z.path, '/')
+end
+
+_folder(s::Zarr.DirectoryStore) = realpath(s.folder)
+_folder(s::Zarr.ConsolidatedStore) = _folder(s.parent)
+_folder(s) = nothing
+
+# Replace a stored array by writing the new one beside it and then moving it
+# into place, so that data computed lazily from the old array is read before
+# the old array is gone.
+function _replace_array(group, name, write_as)
+    folder = _folder(group.storage)
+    folder === nothing && throw(
+        ArgumentError("replacing an array is supported only in a directory store")
+    )
+    staged = name * ".replacing"
+    ispath(joinpath(folder, group.path, staged)) &&
+        rm(joinpath(folder, group.path, staged); recursive = true)
+    write_as(staged)
+    old = joinpath(folder, group.path, name)
+    rm(old; recursive = true)
+    mv(joinpath(folder, group.path, staged), old)
+    return nothing
 end
 
 # Gather every node's metadata into one blob at the root, so that opening the
@@ -87,7 +278,7 @@ end
 function _create_store(path::AbstractString, meta; zarr_format::Integer, overwrite::Bool)
     if ispath(path)
         overwrite || throw(
-            ArgumentError("`$path` exists; pass `overwrite = true` to replace it.")
+            ArgumentError("`$path` exists; pass `mode = \"w\"` to replace it, or `mode = \"a\"` to write into it")
         )
         rm(path; recursive = true)
     end
@@ -107,7 +298,7 @@ function _write_tree(
     # dimensions are its parent's, and are written there.
     for d in getfield(tree, :dims)
         coord = DimArray(collect(val(d)), (d,); metadata = metadata(lookup(d)))
-        _write_array(group, string(msv4name(d)), coord; zarr_format, compressor, chunks)
+        _write_array(group, string(msv4name(d)), coord; zarr_format, compressor, chunks = nothing)
     end
 
     # Each data variable names the non-index coordinates of its dataset, which
@@ -118,11 +309,12 @@ function _write_tree(
     # mentioned nowhere and read back as a variable.
     auxiliary = _auxiliary_coords(tree, table)
     allcoords = sort!(collect(values(auxiliary)))
+    shape = chunk_sizes(chunks, tree)
     for key in keys(tree)
         coords = haskey(auxiliary, key) ? String[] : allcoords
         _write_array(
             group, _diskname(tree, key, table), tree[key];
-            zarr_format, compressor, chunks, coords
+            zarr_format, compressor, chunks = shape, coords
         )
     end
     for (subkey, sub) in branches(tree)
@@ -187,12 +379,11 @@ function _write_array(
 end
 
 # Chunk sizes are given per dimension name, in MSv4 terms; the array's own axis
-# order decides where each lands.
-function _chunk_shape(array, chunks)
-    isempty(chunks) && return size(array)
+# order decides where each lands. `nothing` is one chunk.
+_chunk_shape(array, ::Nothing) = size(array)
+function _chunk_shape(array, sizes::AbstractDict)
     return ntuple(ndims(array)) do i
-        d = msv4name(dims(array)[i])
-        min(get(chunks, d, size(array, i)), size(array, i))
+        min(get(sizes, msv4name(dims(array)[i]), size(array, i)), size(array, i))
     end
 end
 

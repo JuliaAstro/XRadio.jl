@@ -11,6 +11,7 @@ Private = false
 Base.open(::Type{ProcessingSet}, ::Any)
 Base.read(::Type{ProcessingSet}, ::Any)
 Base.write(::AbstractString, ::ProcessingSet)
+Base.write(::AbstractString, ::Pair{Symbol, MeasurementSet})
 Base.isvalid(::Union{Dataset, MeasurementSet, ProcessingSet})
 Base.copy(::Union{MeasurementSet, Dataset})
 ```

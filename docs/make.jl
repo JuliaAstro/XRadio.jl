@@ -11,6 +11,7 @@ makedocs(;
         "Home" => "index.md",
         "Selecting data" => "selection.md",
         "Modifying data" => "modifying.md",
+        "Writing stores" => "writing.md",
         "Coming from xradio" => "xradio.md",
         "Reference" => "reference.md",
     ],

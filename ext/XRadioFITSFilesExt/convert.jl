@@ -1146,10 +1146,14 @@ function XRadio.fitsidi2msv4(
         name::AbstractString = first(splitext(basename(path))),
         zarr_format::Integer = 2,
         compressor = XRadio.Zarr.BloscCompressor(cname = "lz4", clevel = 5),
-        chunks = Dict(:time => 128, :frequency => 64),
-        overwrite::Bool = false,
+        chunks::NamedTuple = (;),
+        chunk_bytes::Integer = XRadio.DEFAULT_CHUNK_BYTES,
+        mode::AbstractString = "w-",
         validate::Bool = true,
     )
+    mode in ("w-", "w") || throw(ArgumentError(
+        "fitsidi2msv4 creates a store; mode must be \"w-\" or \"w\", got $(repr(mode))"
+    ))
     element_type === nothing || element_type <: AbstractFloat || throw(ArgumentError(
         "element_type must be a floating-point type; got $element_type"
     ))
@@ -1327,7 +1331,7 @@ function XRadio.fitsidi2msv4(
 
     root = XRadio._create_store(
         dest, Dict{Symbol, Any}(:type => "processing_set");
-        zarr_format, overwrite
+        zarr_format, overwrite = mode == "w"
     )
     index = 0
     width = max(2, ndigits(length(ranges) * layout.no_band - 1))
@@ -1340,7 +1344,7 @@ function XRadio.fitsidi2msv4(
             validate && XRadio.validate(ms)
             XRadio._write_tree(
                 root, string(name, "_", lpad(index, width, '0')), ms;
-                zarr_format, compressor, chunks
+                zarr_format, compressor, chunks = XRadio.ChunkRule(chunks, chunk_bytes, (ms,))
             )
             index += 1
         end

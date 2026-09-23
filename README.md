@@ -70,7 +70,7 @@ reference's `query` and `sel`.
 
 ```julia
 write("out.ps.zarr", ps)
-write("out.ps.zarr", ps; chunks = Dict(:time => 64, :frequency => 128))
+write("out.ps.zarr", ps; chunks = (time = 64, frequency = 128))
 ```
 
 Data is checked against the standard before anything is written, so a store this

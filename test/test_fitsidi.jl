@@ -1060,9 +1060,10 @@ end
 
         gt = synthetic_fitsidi(joinpath(dir, "twice.idifits"))
         to_msv4(gt, "twice.ps.zarr")
-        @test_throws "pass `overwrite = true`" to_msv4(gt, "twice.ps.zarr")
-        @test to_msv4(gt, "twice.ps.zarr"; overwrite = true) ==
+        @test_throws "pass `mode = \"w\"` to replace it" to_msv4(gt, "twice.ps.zarr")
+        @test to_msv4(gt, "twice.ps.zarr"; mode = "w") ==
             joinpath(dir, "twice.ps.zarr")
+        @test_throws "fitsidi2msv4 creates a store" to_msv4(gt, "twice.ps.zarr"; mode = "a")
     end
 
     @testset "what the standard permits that the VLBA files do not show" begin
