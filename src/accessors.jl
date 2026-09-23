@@ -470,6 +470,31 @@ fields(ms::MeasurementSet) = haskey(ms, :field_name) ? copy(labels(field_lookup(
 fields(ps::ProcessingSet) = _distinct(fields, ps)
 
 """
+    sources(ms, group = :base) -> Vector{String}
+    sources(ps) -> Vector{String}
+
+The distinct source names in `ms`, from the [`field_and_source`](@ref) dataset
+of `group`, or across every Measurement Set of `ps`, in the order they first
+occur.
+
+A data group naming no `field_and_source` dataset gives an empty result, so
+that a selection over a processing set whose members differ is not an error.
+One naming a dataset the Measurement Set does not hold is an error, as it is
+for `field_and_source`.
+
+See also [`fields`](@ref): a field is where the telescope pointed and a source
+is what it observed there, and the two need not share a name.
+"""
+function sources(ms::MeasurementSet, group::Symbol = :base)
+    haskey(datagroup(ms, group), :field_and_source) || return String[]
+    fs = field_and_source(ms, group)
+    stated = haskey(fs, :source_name) ? vec(collect(fs[:source_name])) :
+        _lookup_values(fs, :source_name, String)
+    return unique!(String.(stated))
+end
+sources(ps::ProcessingSet) = _distinct(sources, ps)
+
+"""
     field_and_source(ms, group = :base) -> Dataset
 
 The `field_and_source` dataset the data group `group` points at: the fields
@@ -879,55 +904,79 @@ function spectralwindow(ms::MeasurementSet)
     return String(get(metadata(lookup(d)), :spectral_window_name, ""))
 end
 
-# What each `select` keyword asks of a Measurement Set. The keywords are
-# singular where the accessor is plural, since each names one value to match
-# rather than the set being searched.
-const _SELECT_BY = (
-    antenna = antennas,
-    field = fields,
-    intent = scan_intents,
-    scan = scans,
-    spectralwindow = spectralwindow,
-)
+# `partition_info` for the base data group, less the group's name, which
+# `query` does not match on; with the Measurement Set's name and its first and
+# last channel, as the reference's summary takes them, and the scan intents
+# parsed so that they match as `scan_intents` does.
+function _summary_row(name::Symbol, ms::MeasurementSet)
+    info = partition_info(ms)
+    freqs = frequencies(ms)
+    return merge(
+        (; name = String(name)),
+        Base.structdiff(info, NamedTuple{(:data_group_name,)}),
+        (;
+            scan_intents = Intent.(info.scan_intents),
+            start_frequency = isempty(freqs) ? freqs : first(freqs),
+            end_frequency = isempty(freqs) ? freqs : last(freqs),
+        ),
+    )
+end
 
 """
-    select(ps::ProcessingSet; kwargs...) -> ProcessingSet
+    query(ps::ProcessingSet; kwargs...) -> ProcessingSet
 
-The Measurement Sets of `ps` that state every attribute asked for, keeping
-their names and the set's own attributes.
+The Measurement Sets of `ps` whose summary matches every keyword, keeping their
+names and the set's own attributes.
 
-The keywords are `antenna`, `field`, `intent`, `scan` and `spectralwindow`,
-spelled as the accessors are but singular, since each names one value to match
-rather than the set being searched. A keyword takes one name or a collection of
-them, and a collection matches a Measurement Set stating any of its values.
-Several keywords together must all match.
+A keyword names a column of the summary: `name`, `spectral_window_name`,
+`spectral_window_intents`, `field_name`, `polarization_setup`, `scan_name`,
+`source_name`, `scan_intents`, `line_name`, `start_frequency` and
+`end_frequency`. These are the fields of [`partition_info`](@ref) for the base
+data group, plus the Measurement Set's name in `ps` and its first and last
+channel frequency.
 
 ```julia
-select(ps; field = "M87")                       # one source
-select(ps; field = "M87", spectralwindow = "spw_2")
-select(ps; scan = ["3", "4", "5"])              # any of three scans
-select(ps; intent = "CALIBRATE_BANDPASS")       # whatever the subintent
+query(ps; field_name = "M87")
+query(ps; source_name = ["M87", "3C 273"])              # either source
+query(ps; start_frequency = 220e9 .. 230e9)             # an interval
+query(ps; scan_intents = "CALIBRATE_BANDPASS")          # whatever the subintent
+query(ps; field_name = contains("M87"))                 # a predicate
 ```
 
-`intent` takes an [`Intent`](@ref), a `ScanIntents` member or the string form,
-and matches against [`scan_intents`](@ref). An intent naming no subintent
-matches a scan whatever subintent it states; `"CALIBRATE_BANDPASS#ON_SOURCE"`
-matches only that one.
+A Measurement Set matches a keyword when any value its column states is one
+asked for. The column is a collection, as `field_name` is, or one value, as
+`spectral_window_name` is. What is asked for is
 
-The result is a `ProcessingSet`, so selections chain. `filter(f, ps)` remains
-for predicates these keywords do not reach.
+  - a value, matching an equal one;
+  - a vector, tuple or set, matching any of its values;
+  - an interval, matching a value inside it;
+  - a function, called on each stated value and returning a `Bool`.
 
-An unrecognized keyword is an error rather than a selection that quietly keeps
-everything.
+Keywords together must all match.
 
-This keeps or drops whole Measurement Sets and never cuts one. To cut inside
-one, index it with its dimensions:
+A scan intent naming no subintent matches whichever subintent the store states;
+`"CALIBRATE_BANDPASS#ON_SOURCE"` matches only that one. It may be given as an
+[`Intent`](@ref), a `ScanIntents` member or the string form.
+
+An unknown keyword is an error, as is a value that could never equal what the
+column states, such as a number asked of names: either would otherwise keep
+nothing, or everything, without saying why.
+
+For anything the summary does not state, `filter(f, ps)` takes any predicate:
 
 ```julia
+filter(ms -> "LA" in antennas(ms), ps)
+filter(ms -> ("LA", "PV") in baselines(ms), ps)
+```
+
+`query` keeps or drops whole Measurement Sets and never cuts one. Cutting inside
+one is indexing, with the store's own dimension names as keywords, which is what
+the reference spells `sel`:
+
+```julia
+ms[time = t0 .. t1, baseline_id = At(7)]
 ms[baselines(ms, "LA")]                      # baselines touching an antenna
 ms[scan(ms, "3")]                            # one scan's integrations
-ms[Ti(t0 .. t1)]                             # a time window
-ms[baseline_id = At(7)]                      # the store's own dimension name
 correlated(ms)[baseline(ms, ("BR", "LA"))]   # one baseline, on a layer
 ```
 
@@ -942,27 +991,61 @@ the Measurement Set has no `baseline_id` dimension and `baseline_antenna1_name`
 holds `"BR"`. Keep the dimension by selecting a one-element collection instead,
 `BaselineID(At([id]))`.
 """
-function select(ps::ProcessingSet; kwargs...)
+function query(ps::ProcessingSet; kwargs...)
     asked = values(kwargs)
-    unknown = setdiff(keys(asked), keys(_SELECT_BY))
-    isempty(unknown) || throw(
-        ArgumentError(
-            "`select` has no keyword $(join(string.('`', unknown, '`'), ", ")); " *
-                "it accepts " * join(string.(keys(_SELECT_BY)), ", ")
-        )
+    kept = OrderedDict{Symbol, MeasurementSet}(
+        name => ms for (name, ms) in pairs(ps)
+            if isempty(asked) || _answers(_summary_row(name, ms), asked)
     )
-    return filter(ps) do ms
-        all(k -> _states(_SELECT_BY[k](ms), asked[k]), keys(asked))
-    end
+    return ProcessingSet(kept, copy(metadata(ps)))
 end
 
-# Whether what a Measurement Set states — one name, as `spectralwindow` gives,
-# or many, as `fields` does — includes any of the names asked for.
-_states(have, want) = any(w -> _includes(have, w), _wanted(want))
+# Every keyword is checked before any is matched, so a misspelled keyword or a
+# value that can never match is reported even where another keyword already
+# rules the Measurement Set out.
+function _answers(row::NamedTuple, asked::NamedTuple)
+    unknown = setdiff(keys(asked), keys(row))
+    isempty(unknown) || throw(
+        ArgumentError(
+            "`query` has no keyword $(join(string.('`', unknown, '`'), ", ")); " *
+                "it accepts " * join(string.(keys(row)), ", ")
+        )
+    )
+    for k in keys(asked), w in _alternatives(asked[k])
+        T = eltype(_stated_values(row[k]))
+        _comparable(T, w) || throw(
+            ArgumentError(
+                "`query` asks `$k` for $(repr(w)), which can never equal the $T " *
+                    "values it states"
+            )
+        )
+    end
+    return all(k -> _matches(row[k], asked[k]), keys(asked))
+end
 
-_includes(have::AbstractString, want) = have == want
-_includes(have::AbstractVector{Intent}, want) = any(h -> _covers(Intent(want), h), have)
-_includes(have, want) = want in have
+_matches(stated, want) =
+    any(w -> any(h -> _match(h, w), _stated_values(stated)), _alternatives(want))
+
+_stated_values(stated::Union{AbstractArray, AbstractSet}) = stated
+_stated_values(stated) = (stated,)
+
+_alternatives(want::Union{AbstractVector, Tuple, AbstractSet}) = want
+_alternatives(want) = (want,)
+
+_match(have, want::AbstractInterval) = have in want
+_match(have, want::Function) = want(have)::Bool
+_match(have, want) = _equals(have, want)
+
+_equals(have::Intent, want) = _covers(Intent(want), have)
+_equals(have, want) = isequal(have, want)
+
+_comparable(::Type, ::Function) = true
+_comparable(T::Type, want::AbstractInterval) = _comparable(T, leftendpoint(want))
+_comparable(T::Type, want) =
+    want isa T ||
+    (T <: Intent && want isa Union{ScanIntents.T, AbstractString}) ||
+    (T <: Number && want isa Number) ||
+    (T <: AbstractString && want isa AbstractString)
 
 # A wanted intent that names no subintent asks only what the scan was for, so
 # it matches whichever subintent the store states. One that names a subintent
@@ -970,15 +1053,6 @@ _includes(have, want) = want in have
 _covers(want::Intent, have::Intent) =
     want.intent == have.intent &&
     (want.subintent === nothing || want.subintent == have.subintent)
-
-_wanted(want::AbstractString) = (want,)
-_wanted(want::Union{Intent, ScanIntents.T}) = (want,)
-_wanted(want::Union{AbstractVector, Tuple}) = want
-_wanted(want) = throw(
-    ArgumentError(
-        "a `select` keyword takes a name or a collection of names; got $(repr(want))"
-    )
-)
 
 # The values of an index coordinate, or an empty vector when the tree has no
 # such dimension. A present dimension supplies its own element type and an

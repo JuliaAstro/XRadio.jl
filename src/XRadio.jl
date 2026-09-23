@@ -37,6 +37,7 @@ using Reexport
 
 using DimensionalData: @dim, Dimension, DimArray, DimStack, DimTree, branches, val
 using DimensionalData.Lookups: Lookups, Categorical, Sampled
+using IntervalSets: AbstractInterval, leftendpoint
 using OrderedCollections: OrderedDict
 
 import JSON
@@ -50,12 +51,12 @@ export AbstractGainCurve, GainPolynomial, TabulatedGain, SphericalHarmonicGain,
 export fitsidi2msv4, fitsidi_gain_curves
 export datagroups, datagroup, correlated, flags, weights, uvw
 export antennas, mounts, antenna_positions, receptor_angles, polarization_types,
-    scans, fields, scan_intents, spectral_window_intents,
+    scans, fields, sources, scan_intents, spectral_window_intents,
     Intent, ScanIntents, SubscanIntents,
     frequencies, polarizations, times, spectralwindow,
     gaincurves, baseline, baselines, baseline_antennas, scan, field,
     field_and_source, partition_info,
-    select, transform
+    query, transform
 export BaselineID, Frequency, Polarization, UVWLabel, AntennaName, StationName,
     FieldName, ReceptorLabel, ElementID, CartesianPosLabel, CartesianPosLabelLocal,
     EllipsoidDirLabel, EllipsoidDisLabel, SkyDirLabel, SkyDisLabel, LocalSkyDirLabel,

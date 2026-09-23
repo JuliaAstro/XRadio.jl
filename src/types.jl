@@ -223,7 +223,7 @@ Two kinds of disagreement are errors rather than a value quietly winning:
     only one of them states is carried through.
 
 ```julia
-merge(select(ps; field = "M87"), select(ps; field = "3C273"))
+merge(query(ps; field_name = "M87"), query(ps; field_name = "3C273"))
 ```
 
 Sets taken from one store agree by construction, which is the case this serves.

@@ -414,6 +414,29 @@ end
         @test_throws KeyError field_and_source(ms, :nonexistent)
     end
 
+    @testset "sources" begin
+        @test sources(ms) == ["source_0"]
+
+        # Distinct, in the order they first occur, from the group's dataset.
+        out = deepcopy(ms)
+        other = XRadio.Dataset(; metadata = Dict{Symbol, Any}(:type => "field_and_source"))
+        other[:source_name] = DimArray(
+            ["zeta", "alpha", "zeta"], (FieldName(Categorical(["f1", "f2", "f3"])),)
+        )
+        branches(out)[:field_and_source_corrected] = other
+        metadata(out)[:data_groups][:corrected] = merge(
+            datagroup(out), Dict{Symbol, Any}(:field_and_source => "field_and_source_corrected_xds")
+        )
+        @test sources(out, :corrected) == ["zeta", "alpha"]
+        @test sources(out) == ["source_0"]
+
+        # No dataset named is no sources; a dataset named but missing is a fault.
+        delete!(metadata(out)[:data_groups][:corrected], :field_and_source)
+        @test sources(out, :corrected) == String[]
+        metadata(out)[:data_groups][:corrected][:field_and_source] = "field_and_source_gone_xds"
+        @test_throws "which this Measurement Set does not hold" sources(out, :corrected)
+    end
+
     @testset "intents" begin
         out = deepcopy(ms)
         metadata(out)[:observation_info][:intents] = ["CALIBRATE_BANDPASS#ON_SOURCE"]
@@ -727,7 +750,7 @@ end
         ps = ProcessingSet(
             OrderedCollections.OrderedDict{Symbol, MeasurementSet}(:a => whole)
         )
-        @test select(ps; scan = "1")[1] === whole
+        @test query(ps; scan_name = "1")[1] === whole
     end
 
     @testset "the answer is the caller's to keep" begin
@@ -754,8 +777,10 @@ end
     end
 end
 
-@testset "selecting Measurement Sets by attribute" begin
-    function varied(; field, spw, scan, ants, intents = ["OBSERVE_TARGET#ON_SOURCE"])
+@testset "querying Measurement Sets" begin
+    function varied(;
+            field, spw, scan, ants, source = field, intents = ["OBSERVE_TARGET#ON_SOURCE"]
+        )
         ms = synthetic_visibility()
         t = dims(ms, Ti)
         ms[:field_name] = DimArray(fill(field, length(t)), (t,))
@@ -765,101 +790,140 @@ end
         )
         metadata(lookup(dims(ms, Frequency)))[:spectral_window_name] = spw
         branches(ms)[:antenna] = synthetic_antenna(ants)
+        fs = Dataset(; metadata = Dict{Symbol, Any}(:type => "field_and_source"))
+        fs[:source_name] = DimArray([source], (FieldName(Categorical([field])),))
+        branches(ms)[:field_and_source_base] = fs
         return ms
     end
 
     ps = ProcessingSet(
         OrderedCollections.OrderedDict{Symbol, MeasurementSet}(
-            :a => varied(field = "M87", spw = "spw_0", scan = "1", ants = ["AA", "BB"]),
+            :a => varied(
+                field = "M87", spw = "spw_0", scan = "1", ants = ["AA", "BB"],
+                source = "Virgo A",
+            ),
             :b => varied(
                 field = "M87", spw = "spw_1", scan = "2", ants = ["AA", "CC"],
-                intents = ["CALIBRATE_BANDPASS#ON_SOURCE"],
+                source = "Virgo A", intents = ["CALIBRATE_BANDPASS#ON_SOURCE"],
             ),
             :c => varied(
                 field = "3C273", spw = "spw_0", scan = "3", ants = ["BB", "CC"],
-                intents = ["CALIBRATE_BANDPASS"],
+                source = "3C 273", intents = ["CALIBRATE_BANDPASS"],
             ),
         )
     )
+    names(got) = collect(keys(got))
 
-    @testset "one attribute" begin
-        @test collect(keys(select(ps; field = "M87"))) == [:a, :b]
-        @test collect(keys(select(ps; spectralwindow = "spw_0"))) == [:a, :c]
-        @test collect(keys(select(ps; scan = "3"))) == [:c]
-        @test collect(keys(select(ps; antenna = "AA"))) == [:a, :b]
+    @testset "the summary row" begin
+        row = XRadio._summary_row(:a, ps[:a])
+        @test keys(row) == (
+            :name, :spectral_window_name, :spectral_window_intents, :field_name,
+            :polarization_setup, :scan_name, :source_name, :scan_intents, :line_name,
+            :start_frequency, :end_frequency,
+        )
+        @test row.name == "a"
+        @test row.scan_intents == [Intent("OBSERVE_TARGET#ON_SOURCE")]
+        @test row.start_frequency == first(frequencies(ps[:a]))
+        @test row.end_frequency == last(frequencies(ps[:a]))
     end
 
-    @testset "several attributes must all match" begin
-        @test collect(keys(select(ps; field = "M87", spectralwindow = "spw_0"))) == [:a]
-        @test isempty(select(ps; field = "3C273", scan = "1"))
+    @testset "one column" begin
+        @test names(query(ps; field_name = "M87")) == [:a, :b]
+        @test names(query(ps; spectral_window_name = "spw_0")) == [:a, :c]
+        @test names(query(ps; scan_name = "3")) == [:c]
+        @test names(query(ps; source_name = "Virgo A")) == [:a, :b]
+        @test names(query(ps; name = "b")) == [:b]
     end
 
-    @testset "a collection matches any of its values" begin
-        @test collect(keys(select(ps; scan = ["1", "3"]))) == [:a, :c]
-        @test collect(keys(select(ps; spectralwindow = ("spw_0", "spw_1")))) == [:a, :b, :c]
-        @test collect(keys(select(ps; antenna = ["CC"]))) == [:b, :c]
+    @testset "several criteria must all match" begin
+        @test names(query(ps; field_name = "M87", spectral_window_name = "spw_0")) == [:a]
+        @test isempty(query(ps; field_name = "3C273", scan_name = "1"))
+    end
+
+    @testset "a vector or set matches any of its values" begin
+        @test names(query(ps; scan_name = ["1", "3"])) == [:a, :c]
+        @test names(query(ps; scan_name = Set(["1", "3"]))) == [:a, :c]
+        @test names(query(ps; source_name = ["3C 273"], scan_name = "3")) == [:c]
+    end
+
+    @testset "an interval matches a value inside it" begin
+        f0 = first(frequencies(ps[:a]))
+        @test names(query(ps; start_frequency = (f0 - 1) .. (f0 + 1))) == [:a, :b, :c]
+        @test isempty(query(ps; start_frequency = (f0 + 1) .. (f0 + 2)))
+    end
+
+    @testset "a function is a predicate on each value" begin
+        @test names(query(ps; field_name = startswith("3C"))) == [:c]
+        @test names(query(ps; spectral_window_name = endswith("_1"))) == [:b]
+        @test_throws TypeError query(ps; field_name = length)
+    end
+
+    @testset "a tuple matches any of its values" begin
+        @test names(query(ps; scan_name = ("1", "3"))) == [:a, :c]
+    end
+
+    @testset "what the summary does not state is a filter" begin
+        @test names(filter(ms -> "AA" in antennas(ms), ps)) == [:a, :b]
+        bl = first(baselines(ps[:a]))
+        @test names(filter(ms -> bl in baselines(ms), ps)) == [:a, :b, :c]
     end
 
     @testset "the result is a processing set" begin
-        got = select(ps; field = "M87")
+        got = query(ps; field_name = "M87")
         @test got isa ProcessingSet
         @test metadata(got)[:type] == "processing_set"
-        # Selections chain, and chaining agrees with asking for both at once.
-        @test keys(select(got; spectralwindow = "spw_1")) ==
-            keys(select(ps; field = "M87", spectralwindow = "spw_1"))
-        @test isempty(select(ps; field = "NOSUCH"))
-        @test select(ps; field = "NOSUCH") isa ProcessingSet
-        # No keyword asks for nothing, so nothing is excluded.
-        @test keys(select(ps)) == keys(ps)
+        # Queries chain, and chaining agrees with asking for both at once.
+        @test keys(query(got; spectral_window_name = "spw_1")) ==
+            keys(query(ps; field_name = "M87", spectral_window_name = "spw_1"))
+        @test isempty(query(ps; field_name = "NOSUCH"))
+        @test query(ps; field_name = "NOSUCH") isa ProcessingSet
+        # Nothing asked for excludes nothing.
+        @test keys(query(ps)) == keys(ps)
     end
 
     @testset "by intent" begin
         # A wanted intent naming no subintent asks only what the scan was for,
         # so it matches whichever subintent the store states.
-        @test collect(keys(select(ps; intent = "CALIBRATE_BANDPASS"))) == [:b, :c]
-        # One that names a subintent asks for both halves.
-        @test collect(keys(select(ps; intent = "CALIBRATE_BANDPASS#ON_SOURCE"))) == [:b]
-        @test collect(keys(select(ps; intent = "OBSERVE_TARGET"))) == [:a]
+        @test names(query(ps; scan_intents = "CALIBRATE_BANDPASS")) == [:b, :c]
+        @test names(query(ps; scan_intents = "CALIBRATE_BANDPASS#ON_SOURCE")) == [:b]
+        @test names(query(ps; scan_intents = "OBSERVE_TARGET")) == [:a]
 
-        # The enumeration member and the parsed intent say the same thing as
-        # the string does.
-        @test keys(select(ps; intent = ScanIntents.CALIBRATE_BANDPASS)) ==
-            keys(select(ps; intent = "CALIBRATE_BANDPASS"))
-        @test keys(select(ps; intent = Intent(ScanIntents.OBSERVE_TARGET))) ==
-            keys(select(ps; intent = "OBSERVE_TARGET"))
+        @test keys(query(ps; scan_intents = ScanIntents.CALIBRATE_BANDPASS)) ==
+            keys(query(ps; scan_intents = "CALIBRATE_BANDPASS"))
+        @test keys(query(ps; scan_intents = Intent(ScanIntents.OBSERVE_TARGET))) ==
+            keys(query(ps; scan_intents = "OBSERVE_TARGET"))
+        @test names(query(
+            ps; scan_intents = ["OBSERVE_TARGET", "CALIBRATE_BANDPASS#ON_SOURCE"]
+        )) == [:a, :b]
+        @test isempty(query(ps; scan_intents = "CALIBRATE_POINTING"))
 
-        @test collect(keys(select(
-            ps; intent = ["OBSERVE_TARGET", "CALIBRATE_BANDPASS#ON_SOURCE"]
-        ))) == [:a, :b]
-        @test isempty(select(ps; intent = "CALIBRATE_POINTING"))
-        # `intent` narrows alongside the other keywords rather than replacing
-        # them.
-        @test collect(keys(select(ps; intent = "CALIBRATE_BANDPASS", field = "M87"))) ==
-            [:b]
-
-        # An intent outside the ASDM enumerations is an error, not a name that
-        # quietly matches nothing.
-        @test_throws ArgumentError select(ps; intent = "NOT_AN_INTENT")
-        @test_throws "is not an ASDM scan intent" select(ps; intent = "NOT_AN_INTENT")
+        @test_throws ArgumentError query(ps; scan_intents = "NOT_AN_INTENT")
+        @test_throws "is not an ASDM scan intent" query(ps; scan_intents = "NOT_AN_INTENT")
     end
 
     @testset "an unknown keyword is an error" begin
-        # The whole risk of a keyword-driven selector is a typo silently
-        # selecting everything.
-        @test_throws ArgumentError select(ps; spectral_window = "spw_0")
-        @test_throws "no keyword `spectral_window`" select(ps; spectral_window = "spw_0")
-        @test_throws "accepts antenna, field, intent, scan, spectralwindow" select(
-            ps; spectral_window = "spw_0"
-        )
-        @test_throws "no keyword `source`, `freq`" select(ps; source = "M87", freq = 1)
-        # `source` is not a synonym for `field`: MSv4 distinguishes them and
-        # this package has no `sources` accessor to honor the distinction.
-        @test_throws ArgumentError select(ps; source = "M87")
+        @test_throws ArgumentError query(ps; field = "M87")
+        @test_throws "no keyword `field`" query(ps; field = "M87")
+        @test_throws "accepts name, spectral_window_name" query(ps; field = "M87")
+        @test_throws "no keyword `sources`, `freq`" query(ps; sources = "M87", freq = 1)
+        # The reference's data group keyword narrows rather than matches; here
+        # it is not a column.
+        @test_throws "no keyword `data_group_name`" query(ps; data_group_name = :base)
+        # An empty set states no columns, so nothing is asked and nothing is
+        # kept.
+        @test isempty(query(filter(ms -> false, ps); field = "M87"))
     end
 
-    @testset "a keyword takes names" begin
-        @test_throws "takes a name or a collection of names" select(ps; field = 3)
-        @test_throws "got 3" select(ps; field = 3)
+    @testset "a value that can never match is an error" begin
+        @test_throws ArgumentError query(ps; field_name = 3)
+        @test_throws "asks `field_name` for 3, which can never equal the String values" query(
+            ps; field_name = 3
+        )
+        @test_throws "can never equal" query(ps; field_name = :M87)
+        @test_throws "can never equal" query(ps; start_frequency = "230e9")
+        # Reported even where another keyword already decides.
+        @test_throws "can never equal" query(ps; scan_name = ["1", 1])
+        @test_throws "can never equal" query(ps; scan_name = "NOSUCH", field_name = 3)
     end
 end
 
@@ -867,7 +931,7 @@ end
     ms = synthetic_set(1)[1]
     t = val(dims(ms, Ti))
 
-    # What `select`'s docstring points at for cutting a Measurement Set, as
+    # What `query`'s docstring points at for cutting a Measurement Set, as
     # against choosing whole ones out of a processing set.
     @test length(dims(ms[baselines(ms, "AA")], BaselineID)) == 2
     @test length(dims(ms[Ti(t[1] .. t[2])], Ti)) == 2
@@ -990,7 +1054,7 @@ end
 
     # Merging the parts of a selection puts the set back together.
     @test keys(merge(
-        select(ps; scan = "1"), filter(ms -> false, ps)
+        query(ps; scan_name = "1"), filter(ms -> false, ps)
     )) == keys(ps)
 end
 
@@ -1008,7 +1072,7 @@ end
 
     # The result is a processing set, so it composes with the rest.
     @test length(filter(m -> true, got)) == 3
-    @test keys(select(got; field = "field_0")) == keys(got)
+    @test keys(query(got; field_name = "field_0")) == keys(got)
 
     @testset "`f` must return a Measurement Set" begin
         @test_throws ArgumentError transform(gaincurves, ps)

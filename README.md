@@ -27,7 +27,7 @@ ms = ps[1]                                   # one Measurement Set v4
 correlated(ms)          # the visibilities, via the base data group
 antennas(ms)            # ["DV02_A015", "DV06_T704", …]
 frequencies(ms)         # channel centres, in Hz
-scans(ms), fields(ms)
+scans(ms), fields(ms), sources(ms)
 scan_intents(ms)        # [Intent("OBSERVE_TARGET#ON_SOURCE")]
 ```
 
@@ -47,19 +47,29 @@ enumerated.
 
 ## Selecting
 
-`select` narrows a processing set to the Measurement Sets stating the
-attributes asked for, by `antenna`, `field`, `scan` or `spectralwindow`:
+`query` narrows a processing set to the Measurement Sets whose summary matches
+every keyword. A keyword names a column of the summary, which is
+`partition_info(ms)` plus the Measurement Set's `name` and its
+`start_frequency` and `end_frequency`:
 
 ```julia
-select(ps; field = "M87")                       # one source
-select(ps; field = "M87", spectralwindow = "spw_2")
-select(ps; scan = ["3", "4", "5"])              # any of three scans
+query(ps; field_name = "M87")                        # one field
+query(ps; source_name = "M87")                       # one source, whatever the field
+query(ps; field_name = "M87", spectral_window_name = "spw_2")
+query(ps; scan_name = ["3", "4", "5"])               # any of three scans
+query(ps; start_frequency = 220e9 .. 230e9)          # an interval
+query(ps; field_name = startswith("3C"))             # a predicate
 ```
 
-A keyword takes one name or a collection of them, several keywords must all
-match, and an unrecognized keyword is an error rather than a selection that
-quietly keeps everything. The result is a `ProcessingSet`, so selections chain;
-`filter(f, ps)` remains for predicates the keywords do not reach.
+A value matches an equal one and a collection any of its values. Several
+keywords must all match, and an unknown keyword, or a value that could never
+match, is an error rather than a query that quietly keeps everything or
+nothing. The result is a `ProcessingSet`, so queries chain; `filter(f, ps)`
+takes any predicate, for what the summary does not state:
+
+```julia
+filter(ms -> "DV02_A015" in antennas(ms), ps)
+```
 
 `transform(f, ps)` turns each Measurement Set into another one, keeping the
 names, so the result is a processing set again. Reading a value out of each
@@ -71,10 +81,13 @@ map(gaincurves, values(ps))                          # Vector, in ps's order
 ```
 
 Within one Measurement Set, a `MeasurementSet` is a `DimensionalData.DimTree`,
-so everything that library offers applies:
+so everything that library offers applies. Keyword indexing takes the store's
+own dimension names:
 
 ```julia
 vis = ms[:visibility]
+
+ms[time = t0 .. t1, baseline_id = At(7)]   # a time window on one baseline
 
 vis[Polarization(At("XX"))]          # one polarization product
 vis[Frequency(1:64)]                 # the first 64 channels
