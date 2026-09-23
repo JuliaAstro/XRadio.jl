@@ -68,6 +68,12 @@ export BaselineID, Frequency, Polarization, UVWLabel, AntennaName, StationName,
 # caller's namespace.
 @compat public check, validate, SchemaIssue, SchemaError
 @compat public DatasetSpec, ArraySpec, AttrSpec, DictSpec, schema_types, extend
+# `extend` builds on a schema, so the schemas themselves are part of the
+# extension surface.
+@compat public SCHEMAS, VISIBILITY_SCHEMA, SPECTRUM_SCHEMA, ANTENNA_SCHEMA,
+    POINTING_SCHEMA, WEATHER_SCHEMA, SYSTEM_CALIBRATION_SCHEMA, GAIN_CURVE_SCHEMA,
+    PHASE_CALIBRATION_SCHEMA, PHASED_ARRAY_SCHEMA, FIELD_SOURCE_SCHEMA,
+    FIELD_SOURCE_EPHEMERIS_SCHEMA
 @compat public gain_variable, gain_quantity, msv4_gain_curve
 @compat public baseline_lookup, BaselineLookup
 @compat public scan_lookup, field_lookup, LabelLookup
