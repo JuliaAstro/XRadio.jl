@@ -79,6 +79,23 @@ observation's own duration, since FITS-IDI states one curve for a whole file,
 and its coefficients are against the angle in **degrees**, which is the
 convention casacore and AIPS write and MSv4 inherits without stating.
 
+`WEIGHT` is the inverse variance of `VISIBILITY` as stored. `WEIGHTYP`
+(AIPS Memo 114) says what the file's `WEIGHT` column holds. `NORMAL` weights
+are already that, and are only rescaled by `VIS_SCAL²`. `CORRELAT` and
+`CORRTIME` weights are validity fractions `f`, from which the radiometer
+equation gives the inverse variance of a correlation coefficient,
+`f · 2Δν · τ · η_a · η_b`. `Δν` is the channel width, `τ` the integration time,
+and `η` each antenna's quantization efficiency, which its `ANTENNA` row's
+`NO_LEVELS` fixes: `2/π`, 0.8098 and 0.8825 for 2, 3 and 4 levels, assuming
+optimal thresholds; other correlator losses are not modeled, and any other
+level count is refused. The visibilities are not correlation coefficients until
+divided by `√(A_a · A_b)`, the amplitudes of the two antennas'
+autocorrelations of the receptors the product pairs, so each weight is divided
+by `A_a · A_b`. A sample whose autocorrelations are missing, flagged, or not
+positive is flagged and keeps the radiometer weight. A partition with no
+autocorrelations at all keeps radiometer weights throughout, with a warning:
+they are right only if the correlator wrote correlation coefficients.
+
 A `FLAG` table is expanded onto the dense `FLAG` array. Its rows are *ranges* —
 a source, an antenna pair with `0` as a wildcard, a frequency setup, a time
 range, a band selector, a channel range and a polarization selector — and
@@ -100,13 +117,6 @@ says the datum must not be used and `WEIGHT` says how good it would have been.
   is not enumerated.
 - `release_date`: ISO 8601 date on which the data may become public. Defaults
   to the MJD zero point, with a warning.
-- `weight_mode = :auto`: how the on-disk `WEIGHT` column becomes an MSv4
-  weight. `:auto` follows the `WEIGHTYP` keyword, which usually says the column
-  holds validity fractions rather than the `1/σ²` MSv4 wants and so needs the
-  radiometer conversion `f · 2Δν · τ · η²`. `:radiometer` converts regardless,
-  `:validity` writes the column through unchanged.
-- `weight_efficiency = 1.0`: the correlator efficiency `η` of that conversion.
-  It sets the absolute weight scale, not the relative weighting.
 - `integration_time`: seconds, required only for a file with no `INTTIM`
   column. FITS-IDI makes that column optional and MSv4's time axis does not, so
   the value has to come from somewhere; inferring it from the spacing of the

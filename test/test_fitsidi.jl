@@ -263,6 +263,25 @@ end
 
     conversion_issues(ps) = sort!([i.message for i in check(ps)])
 
+    # The inverse variance of the stored visibility a CORRELAT weight implies,
+    # `f · 2Δν · τ · η_a · η_b / (A_a · A_b)`, as `(polarization, channel,
+    # baseline, time)` in MSv4's order: `A` is the amplitude of each antenna's
+    # autocorrelation of the receptor the product names.
+    function correlat_weight(gt, band, times)
+        _, _, perm = pol_axis(gt.no_stkd, gt.stk_1, gt.cdelt2)
+        η = Dict(2 => 2 / π, 3 => 0.8098, 4 => 0.8825)
+        auto = Dict(a => i for (i, (a, b)) in pairs(gt.baselines) if a == b)
+        receptors = ((1, 1), (1, 2), (2, 1), (2, 2))
+        parallel = (1, 4)
+        amplitude(a, r, c, k) = abs(gt.visibility[perm[parallel[r]], c, band, auto[a], k])
+        return [
+            gt.weight[perm[p], band, bi, k] * 2 * gt.ch_width * gt.inttim *
+                η[gt.no_levels[a]] * η[gt.no_levels[b]] /
+                (amplitude(a, receptors[p][1], c, k) * amplitude(b, receptors[p][2], c, k))
+                for p in 1:4, c in 1:gt.nchan, (bi, (a, b)) in pairs(gt.baselines), k in times
+        ]
+    end
+
     @testset "the dense grid holds the values that went in" begin
         gt = synthetic_fitsidi(joinpath(dir, "grid.idifits"))
         ps = open(ProcessingSet, to_msv4(gt, "grid.ps.zarr"))
@@ -303,14 +322,10 @@ end
         # UU/VV/WW are seconds of light travel on disk and metres in MSv4.
         @test parent(uvw) ≈ gt.uvw[:, :, times] .* 299792458.0
 
-        # `WEIGHTYP = "CORRELAT"` weights are validity fractions, so they are
-        # thermal weights only after `2 Δν τ η²`, and they are per band on disk
-        # but per channel in MSv4.
-        scale = 2 * gt.ch_width * gt.inttim
-        for c in 1:gt.nchan
-            @test parent(weight)[:, c, :, :] ≈
-                gt.weight[perm, band, :, times] .* Float32(scale)
-        end
+        # `WEIGHTYP = "CORRELAT"` weights are validity fractions, per band on
+        # disk; in MSv4 they are per channel, and the inverse variance of the
+        # visibility as stored, autocorrelations and all.
+        @test parent(weight) ≈ correlat_weight(gt, band, times)
 
         # The frequency axis describes the one spectral window it came from.
         fmeta = metadata(lookup(vis, Frequency))
@@ -491,8 +506,11 @@ end
         ms = open(ProcessingSet, to_msv4(gt, "flagpol.ps.zarr"))[:flagpol_00]
         @test lookup(ms[:flag], Polarization) == ["RR", "RL", "LR", "LL"]
         @test all(parent(ms[:flag])[4, 2:3, :, :])
-        @test !any(parent(ms[:flag])[1:3, :, :, :])
-        @test !any(parent(ms[:flag])[4, [1, 4], :, :])
+        # Flagging LL flags each antenna's second-receptor autocorrelation, so
+        # the cross hands, whose weights need it, are flagged with it.
+        @test all(parent(ms[:flag])[2:3, 2:3, :, :])
+        @test !any(parent(ms[:flag])[1, :, :, :])
+        @test !any(parent(ms[:flag])[:, [1, 4], :, :])
 
         # BANDS selects a spectral window, which is a whole partition here.
         gt = synthetic_fitsidi(joinpath(dir, "flagband.idifits"); flags = [(; bands = (0, 1))])
@@ -957,21 +975,65 @@ end
         # Already `1/σ²`, so nothing is applied.
         @test ms[:weight][1, 1, 1, 1] == normal.weight[1, 1, 1, 1]
 
-        # `:validity` writes the column through whatever the keyword says.
-        correlat = synthetic_fitsidi(joinpath(dir, "corr.idifits"))
-        ms = open(
-            ProcessingSet, to_msv4(correlat, "validity.ps.zarr"; weight_mode = :validity)
-        )[:corr_00]
-        @test ms[:weight][1, 1, 1, 1] == correlat.weight[1, 1, 1, 1]
+        # Each antenna's digitizer sets its own efficiency.
+        mixed = synthetic_fitsidi(joinpath(dir, "levels.idifits"); no_levels = [2, 3, 4])
+        ms = open(ProcessingSet, to_msv4(mixed, "levels.ps.zarr"))[:levels_00]
+        @test parent(ms[:weight]) ≈ correlat_weight(mixed, 1, 1:3)
 
-        # Efficiency scales the whole conversion, not the relative weighting.
-        ms = open(
-            ProcessingSet, to_msv4(correlat, "eta.ps.zarr"; weight_efficiency = 0.5)
-        )[:corr_00]
-        scale = 2 * correlat.ch_width * correlat.inttim * 0.25
-        @test ms[:weight][1, 1, 1, 1] ≈ correlat.weight[1, 1, 1, 1] * Float32(scale)
+        eight = synthetic_fitsidi(joinpath(dir, "eight.idifits"); no_levels = [2, 8, 4])
+        @test_throws "antenna 2 8 NO_LEVELS" to_msv4(eight, "eight.ps.zarr")
+        @test_throws "both 2 and 4 NO_LEVELS" IDI.quantization_efficiencies(
+            (; data = (; ANTENNA_NO = [1, 1], NO_LEVELS = [2, 4]))
+        )
+        # NORMAL weights need no efficiency, so the level count is not read.
+        eight_normal = synthetic_fitsidi(
+            joinpath(dir, "eightn.idifits"); no_levels = [2, 8, 4], weightyp = "NORMAL"
+        )
+        @test to_msv4(eight_normal, "eightn.ps.zarr") isa AbstractString
 
-        @test_throws "weight_mode must be" to_msv4(correlat, "wm.ps.zarr"; weight_mode = :other)
+        other = synthetic_fitsidi(joinpath(dir, "other.idifits"); weightyp = "SIGMA")
+        @test_throws "WEIGHTYP is \"SIGMA\"" to_msv4(other, "other.ps.zarr")
+    end
+
+    @testset "a CORRELAT weight without its autocorrelations" begin
+        # Antenna 1's autocorrelation is missing at the second time: every
+        # product naming antenna 1 is flagged there and keeps its radiometer
+        # weight, since the inverse variance of its value cannot be formed.
+        gt = synthetic_fitsidi(
+            joinpath(dir, "noauto.idifits"); present = (b, k) -> !(b == 1 && k == 2)
+        )
+        ms = open(ProcessingSet, to_msv4(gt, "noauto.ps.zarr"))[:noauto_00]
+        expected = correlat_weight(gt, 1, [1, 3])
+        weight, flag = parent(ms[:weight]), parent(ms[:flag])
+        @test weight[:, :, :, [1, 3]] ≈ expected
+        @test !any(flag[:, :, :, [1, 3]])
+        _, _, perm = pol_axis(gt.no_stkd, gt.stk_1, gt.cdelt2)
+        radiometer = 2 * gt.ch_width * gt.inttim * 0.8825^2
+        for (bi, (a, b)) in pairs(gt.baselines)
+            if 1 in (a, b)
+                @test all(view(flag, :, :, bi, 2))
+                a == b && continue
+                for c in 1:gt.nchan
+                    @test weight[:, c, bi, 2] ≈ gt.weight[perm, 1, bi, 2] .* radiometer
+                end
+            else
+                @test weight[:, :, bi, 2] ≈ correlat_weight(gt, 1, [2])[:, :, bi, 1]
+                @test !any(view(flag, :, :, bi, 2))
+            end
+        end
+
+        # A file with no autocorrelations at all keeps radiometer weights, and
+        # says so.
+        crosses = [(1, 2), (1, 3), (2, 3)]
+        gt = synthetic_fitsidi(joinpath(dir, "crosses.idifits"); baselines = crosses)
+        path = @test_logs (:warn, r"4 partition\(s\) hold no autocorrelations") match_mode = :any to_msv4(
+            gt, "crosses.ps.zarr"
+        )
+        ms = open(ProcessingSet, path)[:crosses_00]
+        for c in 1:gt.nchan
+            @test parent(ms[:weight])[:, c, :, :] ≈ gt.weight[perm, 1, :, 1:3] .* radiometer
+        end
+        @test !any(ms[:flag])
     end
 
     @testset "element type" begin

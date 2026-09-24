@@ -129,8 +129,8 @@ independent of the file's own `DATE`/`TIME` split.
 # Keywords
 
 Array: `antenna_names`, `positions` (3 x n, metres, geocentric), `mntsta`,
-`staxof` (3 x n, metres), `diameters`, `poltya`, `poltyb`, `array_name`,
-`array_center`.
+`staxof` (3 x n, metres), `diameters`, `poltya`, `poltyb`, `no_levels`,
+`array_name`, `array_center`.
 
 Sky: `source_names`, `ra` and `dec` (degrees, one per source), `equinox`.
 
@@ -196,6 +196,7 @@ function synthetic_fitsidi(
         diameters = fill(25.0f0, length(antenna_names)),
         poltya = fill("R", length(antenna_names)),
         poltyb = fill("L", length(antenna_names)),
+        no_levels = fill(4, length(antenna_names)),
         array_name = "TESTARR",
         array_center = (0.0, 0.0, 0.0),
         frame = "GEOCENTRIC",
@@ -400,7 +401,7 @@ function synthetic_fitsidi(
             ANTENNA_NO = Int32.(1:nant),
             ARRAY = ones(Int32, nant),
             FREQID = ones(Int32, nant),
-            NO_LEVELS = fill(Int32(2), nant),
+            NO_LEVELS = Int32.(no_levels),
             POLTYA = collect(poltya),
             POLAA = _idi_column([zeros(Float32, nband) for _ in 1:nant]),
             POLTYB = collect(poltyb),
@@ -523,7 +524,7 @@ function synthetic_fitsidi(
     return (;
         path,
         antenna_names, nosta = collect(1:nant), positions, mntsta, staxof,
-        diameters, poltya, poltyb, array_name,
+        diameters, poltya, poltyb, no_levels, array_name,
         source_names, ra, dec, equinox,
         ref_freq, band_freq, ch_width, nchan, nband, no_stkd, stk_1, cdelt2,
         frequencies = freqs,

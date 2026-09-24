@@ -108,29 +108,65 @@ seconds a Julian date would contribute at a spacing of 0.5 ms.
 unix_seconds(date, time) = (date - _UNIX_EPOCH_JD) * 86400 + time * 86400
 
 """
-    weight_scaling(weightyp, mode) -> Bool
+    radiometer_weights(weightyp) -> Bool
 
-Whether the on-disk `WEIGHT` column needs the radiometer conversion to become
-an MSv4 weight.
+Whether the on-disk `WEIGHT` column holds validity fractions, which become
+weights only through the radiometer equation.
 
 `WEIGHTYP` (AIPS Memo 114, Table 14) declares what the column holds.
 `"NORMAL"` means it is already a true weight, `1/σ²`. `"CORRELAT"` and
 `"CORRTIME"` mean it is a validity fraction in `[0, 1]` — the fraction of the
-integration that correlated — which is not a variance at all, and becomes one
-only as `f · 2Δν · τ · η²`. An absent `WEIGHTYP` means `"CORRELAT"`, which the
-memo states and which matters because that is the case needing conversion.
-
-`mode` is `:auto` to follow the keyword, `:radiometer` to convert regardless,
-or `:validity` to write the raw column through unchanged.
+integration that correlated — which is not a variance at all. An absent
+`WEIGHTYP` means `"CORRELAT"`, as the memo states. Any other value throws.
 """
-function weight_scaling(weightyp::AbstractString, mode::Symbol)
-    mode in (:auto, :radiometer, :validity) || throw(ArgumentError(
-        "weight_mode must be :auto (follow WEIGHTYP), :radiometer (always " *
-            "convert) or :validity (never convert); got $(repr(mode))"
+function radiometer_weights(weightyp::AbstractString)
+    kind = uppercase(_trim(weightyp))
+    kind == "NORMAL" && return false
+    kind in ("CORRELAT", "CORRTIME") && return true
+    throw(ArgumentError(
+        "FITS-IDI WEIGHTYP is $(repr(weightyp)); AIPS Memo 114 defines NORMAL, " *
+            "CORRELAT and CORRTIME"
     ))
-    mode === :validity && return false
-    mode === :radiometer && return true
-    return uppercase(_trim(weightyp)) != "NORMAL"
+end
+
+const _QUANTIZATION_EFFICIENCY = Dict(2 => 2 / π, 3 => 0.8098, 4 => 0.8825)
+
+"""
+    quantization_efficiencies(antenna_hdu) -> Dict{Int, Float64}
+
+Each antenna's digitizer efficiency `η`, keyed by `ANTENNA_NO`, from its
+`NO_LEVELS`: the fraction of the unquantized signal-to-noise ratio a
+correlation keeps, in the weak-signal limit with optimal thresholds and output
+levels (Thompson, Moran & Swenson, *Interferometry and Synthesis in Radio
+Astronomy*, ch. 8). Two, three and four levels give `2/π`, 0.8098 and 0.8825.
+A baseline's efficiency is the geometric mean of its antennas'.
+
+Any other level count throws, as does one that changes between an antenna's
+rows or a table without the column.
+"""
+function quantization_efficiencies(antenna_hdu)
+    data = antenna_hdu.data
+    hascol(data, :NO_LEVELS) || throw(ArgumentError(
+        "FITS-IDI ANTENNA has no NO_LEVELS column, which the radiometer " *
+            "conversion of CORRELAT weights needs"
+    ))
+    levels = Dict{Int, Int}()
+    for (no, n) in zip(column(data, :ANTENNA_NO), column(data, :NO_LEVELS))
+        known = get!(levels, Int(no), Int(n))
+        known == n || throw(ArgumentError(
+            "FITS-IDI ANTENNA gives antenna $no both $known and $n NO_LEVELS; " *
+                "a digitizer that changes during the observation is not supported"
+        ))
+    end
+    return Dict(
+        no => get(_QUANTIZATION_EFFICIENCY, n) do
+                throw(ArgumentError(
+                    "FITS-IDI ANTENNA gives antenna $no $n NO_LEVELS; the " *
+                        "quantization efficiency is tabulated for 2, 3 and 4"
+                ))
+            end
+            for (no, n) in levels
+    )
 end
 
 """
@@ -1140,8 +1176,6 @@ function XRadio.fitsidi2msv4(
         scan_intents = [XRadio.Intent(XRadio.ScanIntents.UNSPECIFIED)],
         spectral_window_intents::AbstractVector{<:AbstractString} = ["UNSPECIFIED"],
         release_date::Union{Nothing, AbstractString} = nothing,
-        weight_mode::Symbol = :auto,
-        weight_efficiency::Real = 1.0,
         integration_time::Union{Nothing, Real} = nothing,
         element_type::Union{Nothing, Type} = nothing,
         name::AbstractString = first(splitext(basename(path))),
@@ -1185,8 +1219,7 @@ function XRadio.fitsidi2msv4(
                                their content is not carried into the store." dropped
 
     layout = uv_matrix_layout(uv)
-    weightyp = card_string(uv, "WEIGHTYP", "CORRELAT")
-    radiometer = weight_scaling(weightyp, weight_mode)
+    radiometer = radiometer_weights(card_string(uv, "WEIGHTYP", "CORRELAT"))
 
     # `VIS_SCAL` lets a near-real-time correlator write accumulated sums and
     # leave the normalization to the reader. Absent, it is 1. Where weights are
@@ -1196,7 +1229,7 @@ function XRadio.fitsidi2msv4(
         "UV_DATA VIS_SCAL is $vis_scal; it divides every visibility amplitude " *
             "and must be positive"
     ))
-    weight_scal = uppercase(_trim(weightyp)) == "NORMAL" ? vis_scal^2 : 1.0
+    weight_scal = radiometer ? 1.0 : vis_scal^2
     _, products, perm = pol_axis(
         layout.no_stkd,
         Int(card(uv, "STK_1", round(Int, Float64(card(uv, "CRVAL2", -1.0))))),
@@ -1216,6 +1249,10 @@ function XRadio.fitsidi2msv4(
     band_freq = Float64.(rowvalues(column(fqd, :BANDFREQ), 1))
     reference_frequency = reference_frequencies(ref_freq, band_freq)
     ch_width = Float64.(rowvalues(column(fqd, :CH_WIDTH), 1))
+    radiometer && any(iszero, ch_width) && throw(ArgumentError(
+        "FITS-IDI FREQUENCY gives a zero CH_WIDTH, and the radiometer " *
+            "conversion of CORRELAT weights needs the channel width"
+    ))
     length(band_freq) == layout.no_band || throw(ArgumentError(
         "FITS-IDI FREQUENCY gives $(length(band_freq)) bands, the UV_DATA " *
             "data matrix $(layout.no_band)"
@@ -1311,7 +1348,8 @@ function XRadio.fitsidi2msv4(
         observation_span = maximum(times) - minimum(times),
         ref_freq, band_freq, reference_frequency,
         ch_width, radiometer, vis_scal, weight_scal, inttim,
-        efficiency = Float64(weight_efficiency), perm, layout,
+        efficiency = radiometer ? quantization_efficiencies(an) : Dict{Int, Float64}(),
+        without_autocorrelations = Ref(0), perm, layout,
         # Stored as MSv4 states them, but validated on the way in: an intent
         # outside the ASDM enumerations cannot reach the store.
         scan_intents = [string(XRadio.Intent(i)) for i in scan_intents],
@@ -1351,8 +1389,59 @@ function XRadio.fitsidi2msv4(
         end
     end
     XRadio._consolidate(root)
+    n = shared.without_autocorrelations[]
+    n > 0 && @warn "$n partition(s) hold no autocorrelations, so their CORRELAT \
+                    weights are radiometer weights, which are 1/σ² only if the \
+                    correlator wrote correlation coefficients." file = path
     return dest
 end
+
+function _baseline_efficiency(efficiency, code, ::Type{F}) where {F}
+    a1, a2 = baseline_antennas(code)
+    η(a) = get(efficiency, a) do
+        throw(ArgumentError(
+            "FITS-IDI BASELINE $code names antenna $a, which the ANTENNA table " *
+                "does not describe"
+        ))
+    end
+    return F(η(a1) * η(a2))
+end
+
+# A radiometer weight is the inverse variance of the correlation coefficient
+# `V / √(A_a · A_b)`, and the store holds `V`, so each weight is divided by the
+# product of the autocorrelation amplitudes of the receptors its product pairs.
+# Within one file a receptor's letter is the same in a cross product and in its
+# antenna's autocorrelation. A sample without both amplitudes unflagged, finite
+# and positive is flagged and keeps its radiometer weight. Returns `false`,
+# changing nothing, for a partition that holds no autocorrelations.
+function _divide_by_autocorrelations!(weight, flag, vis, codes, products)
+    autos = Dict{Int, Int}()
+    for (b, code) in pairs(codes)
+        a1, a2 = baseline_antennas(code)
+        a1 == a2 && (autos[a1] = b)
+    end
+    isempty(autos) && return false
+    same = Dict(p[1] => q for (q, p) in pairs(products) if p[1] == p[2])
+    for (b, code) in pairs(codes)
+        b1, b2 = map(a -> get(autos, a, 0), baseline_antennas(code))
+        for p in axes(weight, 1)
+            q1, q2 = get(same, products[p][1], 0), get(same, products[p][2], 0)
+            for k in axes(weight, 4), c in axes(weight, 2)
+                power = _autocorrelation(vis, flag, q1, c, b1, k) *
+                    _autocorrelation(vis, flag, q2, c, b2, k)
+                if isfinite(power) && power > 0
+                    weight[p, c, b, k] /= power
+                else
+                    flag[p, c, b, k] = true
+                end
+            end
+        end
+    end
+    return true
+end
+
+_autocorrelation(vis, flag, q, c, b, k) =
+    (q == 0 || b == 0 || flag[q, c, b, k]) ? real(eltype(vis))(NaN) : abs(vis[q, c, b, k])
 
 # One MSv4: the rows of `range` for one band, regridded onto the dense grid
 # their distinct times and baselines imply.
@@ -1383,10 +1472,9 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
     source_at = Vector{Int}(undef, ntime)
 
     # `WEIGHTYP = 'CORRELAT'` weights are validity fractions rather than
-    # variances; `f · 2Δν · τ · η²` is the thermal weight they imply. The
-    # band-constant part is hoisted, leaving the per-row integration time.
-    wfactor = s.radiometer ?
-        F(2 * abs(s.ch_width[band]) * s.efficiency^2) : zero(F)
+    # variances; `f · 2Δν · τ · η_a · η_b` is the inverse variance they imply
+    # for a correlation coefficient.
+    wfactor = F(2 * abs(s.ch_width[band]))
     visnorm, wscal = F(inv(s.vis_scal)), F(s.weight_scal)
     percell = layout.ncomplex == 3
 
@@ -1399,7 +1487,9 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
         field_name[k] = s.source_names[s.source_of[Int(rows.source_id[r])]]
         scan_name[k] = s.scan_of[r]
         source_at[k] = Int(rows.source_id[r])
-        scale = wscal * (iszero(wfactor) ? one(F) : wfactor * F(s.inttim[r]))
+        scale = s.radiometer ?
+            wfactor * F(s.inttim[r]) * _baseline_efficiency(s.efficiency, rows.baseline[r], F) :
+            wscal
         for c in 1:nchan, (p, sp) in enumerate(s.perm)
             re = block.flux[1, sp, c, band, i]
             im = block.flux[2, sp, c, band, i]
@@ -1418,6 +1508,9 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
     end
 
     _apply_flags!(flag, s.flag_ranges, codes, grid_times, source_at, band, s.freqid, nchan)
+    if s.radiometer && !_divide_by_autocorrelations!(weight, flag, vis, codes, s.products)
+        s.without_autocorrelations[] += 1
+    end
 
     labels, mixed = _partition_polarization(s.products, s.bases, codes)
     sources = sort!(unique(s.source_of[Int(rows.source_id[r])] for r in range))

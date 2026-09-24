@@ -246,11 +246,12 @@ file.
 
 Two conversions rescale the data rather than relabeling it. `WEIGHTYP =
 "CORRELAT"` means the `WEIGHT` column holds validity fractions rather than the
-`1/σ²` MSv4 wants, so each is converted by `f · 2Δν · τ · η²`, with `η` the
-correlator efficiency from the `weight_efficiency` keyword; `weight_mode`
-overrides the choice of whether to convert at all. And a `VIS_SCAL` keyword,
-which lets a near-real-time correlator write accumulated sums, divides into
-every visibility amplitude.
+`1/σ²` MSv4 wants, so each becomes `f · 2Δν · τ · η_a · η_b / (A_a · A_b)`: the
+radiometer weight of a correlation coefficient, with each antenna's
+quantization efficiency `η` from its `NO_LEVELS`, divided by the product of the
+two autocorrelation amplitudes because the store holds the visibility before
+that normalization. And a `VIS_SCAL` keyword, which lets a near-real-time
+correlator write accumulated sums, divides into every visibility amplitude.
 
 Flagging leaves the weights alone: `FLAG` says a datum must not be used, and
 `WEIGHT` says how good it would have been.
