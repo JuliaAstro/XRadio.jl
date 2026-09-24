@@ -14,6 +14,7 @@ Base.write(::AbstractString, ::ProcessingSet)
 Base.write(::AbstractString, ::Pair{Symbol, MeasurementSet})
 Base.isvalid(::Union{Dataset, MeasurementSet, ProcessingSet})
 Base.copy(::Union{MeasurementSet, Dataset})
+Base.read(::Union{MeasurementSet, Dataset})
 ```
 
 ## Intents

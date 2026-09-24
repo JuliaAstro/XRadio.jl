@@ -1089,6 +1089,128 @@ end
     @test map(gaincurves, values(ps)) isa Vector
 end
 
+# Six integrations: three scans, the first and last on the same field.
+function revisiting_set()
+    ms = XRadio.Testing.measurement_set(; times = 1.6e9 .+ 30.0 .* (0:5))
+    ms[:scan_name] = rebuild(ms[:scan_name], ["1", "1", "2", "2", "3", "3"])
+    ms[:field_name] = rebuild(ms[:field_name], ["A", "A", "B", "B", "A", "A"])
+    return ProcessingSet(OrderedDict(:track => ms), Dict{Symbol, Any}(:type => "processing_set", :note => "kept"))
+end
+
+@testset "reading a Measurement Set into memory" begin
+    ps = XRadio.Testing.processing_set(; nscan = 2)
+    path = joinpath(mktempdir(), "read.ps.zarr")
+    write(path, ps)
+    lazy = open(ProcessingSet, path)[1]
+    ms = read(lazy)
+
+    in_memory(tree) = all(A -> A isa Array, values(DimensionalData.data(tree))) &&
+        all(in_memory, values(branches(tree)))
+    @test !in_memory(lazy)
+    @test in_memory(ms)
+    @test ms[:visibility] == lazy[:visibility][:, :, :, :]
+    @test ms.antenna[:antenna_position] == ps[1].antenna[:antenna_position]
+    # Sub-datasets stay linked to the Measurement Set, as a copy's do.
+    @test getfield(ms.antenna, :tree) === ms
+
+    @testset "a view reads only what it selects" begin
+        piece = read(view(lazy, scan(lazy, "1")))
+        @test in_memory(piece)
+        @test times(piece) == times(lazy)
+    end
+
+    @testset "one in memory keeps its arrays" begin
+        again = read(ms)
+        @test parent(again[:visibility]) === parent(ms[:visibility])
+        delete!(again, :weight)
+        @test haskey(ms, :weight)
+    end
+end
+
+@testset "splitting Measurement Sets by time" begin
+    ps = revisiting_set()
+
+    by_scan = splitby(ps, ms -> ms[:scan_name])
+    @test by_scan isa ProcessingSet
+    @test collect(keys(by_scan)) == [:track_1, :track_2, :track_3]
+    @test [only(scans(ms)) for ms in by_scan] == ["1", "2", "3"]
+    @test times(by_scan[:track_2]) == times(ps[1])[3:4]
+    @test metadata(by_scan) == metadata(ps)
+
+    @testset "a revisited field is one piece" begin
+        by_field = splitby(ps, ms -> ms[:field_name])
+        @test collect(keys(by_field)) == [:track_A, :track_B]
+        @test times(by_field[:track_A]) == times(ps[1])[[1, 2, 5, 6]]
+        @test scans(by_field[:track_A]) == ["1", "3"]
+    end
+
+    @testset "time bins" begin
+        t0 = first(times(ps[1]))
+        bins = splitby(ps, ms -> floor.(Int, (times(ms) .- t0) ./ 60))
+        @test collect(keys(bins)) == [:track_0, :track_1, :track_2]
+        @test length.(times.(values(bins))) == [2, 2, 2]
+    end
+
+    @testset "a tuple label names each part" begin
+        both = splitby(ps, ms -> collect(zip(ms[:field_name], ms[:scan_name])))
+        @test collect(keys(both)) == [:track_A_1, :track_B_2, :track_A_3]
+    end
+
+    @testset "a lazily opened set is split without reading" begin
+        path = joinpath(mktempdir(), "split.ps.zarr")
+        write(path, ps)
+        lazy = splitby(open(ProcessingSet, path), ms -> ms[:scan_name])
+        @test !(parent(lazy[1][:visibility]) isa Array)
+        @test read(lazy[:track_3])[:visibility] == by_scan[:track_3][:visibility]
+    end
+
+    @testset "labels that are not one per integration" begin
+        @test_throws "5 labels for the 6 times" splitby(ps, ms -> ones(5))
+        @test_throws "stated over baseline_id" splitby(
+            ps, ms -> ms[:baseline_antenna1_name]
+        )
+        @test_throws "must give a vector of one label per integration" splitby(
+            ps, ms -> "1"
+        )
+    end
+
+    @testset "names that coincide" begin
+        @test_throws "two Measurement Sets named `track_1`" splitby(
+            ps, ms -> [1, 1, "1", "1", 2, 2]
+        )
+    end
+end
+
+@testset "grouping Measurement Sets" begin
+    ps = XRadio.Testing.processing_set(; nscan = 2, nspw = 2)
+    groups = groupby(ps, ms -> (spectralwindow(ms), only(scans(ms))))
+
+    @test groups isa OrderedDict{Tuple{String, String}, ProcessingSet}
+    @test collect(keys(groups)) ==
+        [("spw_0", "1"), ("spw_1", "1"), ("spw_0", "2"), ("spw_1", "2")]
+    @test keys(groups[("spw_1", "2")]) == Set([:synthetic_03])
+
+    by_window = groupby(ps, spectralwindow)
+    @test collect(keys(by_window)) == ["spw_0", "spw_1"]
+    @test collect(keys(by_window["spw_1"])) == [:synthetic_01, :synthetic_03]
+    # Members are the Measurement Sets themselves, not copies or reads.
+    @test by_window["spw_1"][:synthetic_03] === ps[:synthetic_03]
+    @test metadata(by_window["spw_0"]) == metadata(ps)
+
+    @testset "a Measurement Set holding several scans is not cut" begin
+        whole = groupby(revisiting_set(), ms -> length(scans(ms)))
+        @test collect(keys(whole)) == [3]
+        @test length(times(only(values(whole))[1])) == 6
+    end
+
+    @testset "scan groups from a split" begin
+        g = groupby(splitby(revisiting_set(), ms -> ms[:scan_name]), ms -> only(scans(ms)))
+        @test collect(keys(g)) == ["1", "2", "3"]
+    end
+
+    @test isempty(groupby(filter(_ -> false, ps), spectralwindow))
+end
+
 @testset "chunk shapes" begin
     ms = synthetic_visibility(; ntime = 100, nfreq = 64)
     step = sizeof(ComplexF32) * 2 * 3 * 64   # one time step of the visibilities

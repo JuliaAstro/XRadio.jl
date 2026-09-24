@@ -40,6 +40,7 @@ data-group names are `Symbol`s (`:base`) rather than strings.
 | `load_processing_set(path, include_variables=[...])` / `drop_variables=[...]` | `delete!(ms, :weight)` on each Measurement Set, for example through [`transform`](@ref) |
 | `load_processing_set(path, load_sub_datasets=False)` | no counterpart; a lazily opened sub-dataset is read only when accessed |
 | `load_processing_set(path, data_group_name=...)` | no counterpart |
+| `ms_xdt.load()`, on a lazily opened Measurement Set | `read(ms)`, which also reads a `view` of one |
 | `ps_xdt.to_zarr(path)` | `write(path, ps)`, which checks conformance first |
 | `ps_xdt.to_zarr(path, mode=...)` | `write(path, ps; mode = ...)`: the same `"w-"`, `"w"` and `"a"`; see [Writing stores](@ref) |
 | `ms_xdt.to_zarr(path/name, mode="a")` | `write(path, name => ms; mode = "a")`; see [Writing into an existing store](@ref) |
@@ -65,7 +66,8 @@ data-group names are `Symbol`s (`:base`) rather than strings.
 | `ps_xdt.xr_ps.get_combined_field_and_source_xds_ephemeris()` | no counterpart |
 | `ps_xdt.xr_ps.get_combined_antenna_xds()` | no counterpart; [`antennas`](@ref) per Measurement Set |
 | `ps_xdt.xr_ps.plot_phase_centers()`, `plot_antenna_positions()` | no counterpart |
-| no counterpart | [`transform`](@ref), `merge`, and [`scans`](@ref), [`fields`](@ref), [`sources`](@ref) across the set |
+| xarray's `groupby("scan_name")` on each Measurement Set | [`splitby(ps, ms -> ms[:scan_name])`](@ref splitby), which returns a processing set of one Measurement Set per scan; see [Splitting and grouping](@ref) |
+| no counterpart | [`transform`](@ref), `merge`, `groupby`, and [`scans`](@ref), [`fields`](@ref), [`sources`](@ref) across the set |
 
 ## A Measurement Set
 

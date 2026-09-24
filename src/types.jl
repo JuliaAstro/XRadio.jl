@@ -312,14 +312,38 @@ ms2[:weight] = rebuild(ms[:weight], new_weights)
 """
 Base.copy(tree::Union{MeasurementSet, Dataset}) = _copy_node(tree, dims(tree), nothing)
 
+"""
+    read(ms::MeasurementSet) -> MeasurementSet
+    read(xds::Dataset) -> Dataset
+
+`ms` with every layer, coordinate and sub-dataset held in memory, as xarray's
+`load` gives. A lazily opened Measurement Set, or a `view` of one, reads its
+data from the store here, once; one already in memory keeps its arrays, so
+reading it again costs nothing.
+
+The result is structured as [`copy`](@ref Base.copy(::Union{MeasurementSet, Dataset}))
+structures one, so changing its layers or attributes leaves `ms` as it was.
+
+```julia
+ps = open(ProcessingSet, "track.ps.zarr")
+ms = ps[1]
+one_scan = read(view(ms, scan(ms, "3")))
+```
+"""
+Base.read(tree::Union{MeasurementSet, Dataset}) =
+    _copy_node(tree, dims(tree), nothing, _in_memory)
+
+_in_memory(A::DenseArray) = A
+_in_memory(A::AbstractArray) = Array(A)
+
 # A sub-dataset linked to its parent states only the dimensions the parent does
 # not, and reads the rest through it. A copy keeps each sub-dataset's link as it
 # was, pointed at the copied parent; the top of a copy has no parent, so it
 # keeps every dimension it reads.
-function _copy_node(tree, own_dims::Tuple, parent)
+function _copy_node(tree, own_dims::Tuple, parent, load = identity)
     node = DimensionalData.rebuild(
         tree;
-        data = copy(DimensionalData.data(tree)),
+        data = DimensionalData.DataDict(k => load(A) for (k, A) in DimensionalData.data(tree)),
         dims = map(_own_attributes, own_dims),
         layerdims = copy(DimensionalData.layerdims(tree)),
         layermetadata = DimensionalData.DataDict(
@@ -332,7 +356,7 @@ function _copy_node(tree, own_dims::Tuple, parent)
     for (name, branch) in pairs(branches(tree))
         linked = getfield(branch, :tree) === tree
         branches(node)[name] = _copy_node(
-            branch, getfield(branch, :dims), linked ? node : getfield(branch, :tree)
+            branch, getfield(branch, :dims), linked ? node : getfield(branch, :tree), load
         )
     end
     return node
