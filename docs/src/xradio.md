@@ -66,7 +66,7 @@ data-group names are `Symbol`s (`:base`) rather than strings.
 | `ps_xdt.xr_ps.get_combined_field_and_source_xds_ephemeris()` | no counterpart |
 | `ps_xdt.xr_ps.get_combined_antenna_xds()` | no counterpart; [`antennas`](@ref) per Measurement Set |
 | `ps_xdt.xr_ps.plot_phase_centers()`, `plot_antenna_positions()` | no counterpart |
-| xarray's `groupby("scan_name")` on each Measurement Set | [`splitby(ps, ms -> ms[:scan_name])`](@ref splitby), which returns a processing set of one Measurement Set per scan; see [Splitting and grouping](@ref) |
+| xarray's `groupby("scan_name")` on each Measurement Set | `groupby(ps, ms -> ms[:scan_name])`, which returns one processing set per scan across the Measurement Sets; see [Grouping](@ref) |
 | no counterpart | [`transform`](@ref), `merge`, `groupby`, and [`scans`](@ref), [`fields`](@ref), [`sources`](@ref) across the set |
 
 ## A Measurement Set

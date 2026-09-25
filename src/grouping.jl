@@ -1,48 +1,52 @@
 """
-    splitby(ps::ProcessingSet, f) -> ProcessingSet
+    groupby(ps::ProcessingSet, f) -> OrderedDict{key, ProcessingSet}
 
-`ps` with each Measurement Set cut along `time` by the labels `f(ms)` gives it,
-one per integration: the integrations sharing a label become one Measurement
-Set. Labels come in the order they first occur, and each piece keeps every
-integration its label names, contiguous or not, so a field observed twice is
-one piece.
+The time samples of `ps` gathered by label. `f(ms)` labels each time sample of
+a Measurement Set: a vector as long as `times(ms)`, or an array over `time`
+alone whose times are those of `ms`, such as a coordinate the Measurement Set
+states per integration. A value that is not an array labels the whole
+Measurement Set.
+
+Each label maps to a processing set holding, for every Measurement Set with
+samples under that label, those samples under the Measurement Set's own name,
+with `ps`'s attributes. Labels come in the order they first occur, across the
+Measurement Sets in order and along `time` within each, and a label need not
+name contiguous samples, so a field observed twice is one group.
 
 ```julia
-splitby(ps, ms -> ms[:scan_name])                    # one Measurement Set per scan
-splitby(ps, ms -> ms[:field_name])                   # per field
-splitby(ps, ms -> floor.(Int, times(ms) ./ 600))     # per ten-minute bin
+groupby(ps, ms -> ms[:scan_name])                    # per scan name
+groupby(ps, ByScan())                                # per (source, scan)
+groupby(ps, ms -> floor.(Int, times(ms) ./ 600))     # per ten-minute bin
+groupby(ps, spectralwindow)                          # per spectral window
 ```
 
-`f(ms)` is a vector as long as `times(ms)`, or an array over `time` alone whose
-times are those of `ms`, such as a coordinate the Measurement Set states per
-integration. Anything else is an error.
-
-Each piece is a `view` of its Measurement Set, so splitting a lazily opened set
-reads no data; [`read`](@ref Base.read(::Union{MeasurementSet, Dataset}))
-brings one piece into memory. A piece is named after its Measurement Set and
-its label, `name_label`, with the parts of a tuple label joined by `_`. Two
-pieces whose names coincide are an error.
-
-See also [`groupby`](@ref DimensionalData.groupby(::ProcessingSet, ::Any)),
-which gathers Measurement Sets without cutting them.
+A member is a `view` of its Measurement Set, or the Measurement Set itself
+where one label covers all of it, so grouping a lazily opened set reads no
+data; [`read`](@ref Base.read(::Union{MeasurementSet, Dataset})) brings a
+member into memory.
 """
-function splitby(ps::ProcessingSet, f)
-    pieces = OrderedDict{Symbol, MeasurementSet}()
+function DimensionalData.groupby(ps::ProcessingSet, f)
+    groups = OrderedDict{Any, OrderedDict{Symbol, MeasurementSet}}()
+    add!(label, name, ms) =
+        get!(() -> OrderedDict{Symbol, MeasurementSet}(), groups, label)[name] = ms
     for (name, ms) in pairs(ps)
-        t = _time_values(ms)
-        split = LabelLookup(:label, _time_labels(f(ms), ms, t))
-        for label in labels(split)
-            key = Symbol(name, '_', _label_name(label))
-            haskey(pieces, key) && throw(
-                ArgumentError(
-                    "splitting gives two Measurement Sets named `$key`; " *
-                        "labels whose names coincide cannot both be kept"
-                )
-            )
-            pieces[key] = view(ms, dimtype(:time)(At(t[positions(split, label)])))
+        given = f(ms)
+        if given isa AbstractArray
+            t = _time_values(ms)
+            split = LabelLookup(:label, _time_labels(given, ms, t))
+            for label in labels(split)
+                pos = positions(split, label)
+                piece = length(pos) == length(t) ? ms : view(ms, dimtype(:time)(At(t[pos])))
+                add!(label, name, piece)
+            end
+        else
+            add!(given, name, ms)
         end
     end
-    return ProcessingSet(pieces, copy(metadata(ps)))
+    K = isempty(groups) ? Any : mapreduce(typeof, typejoin, keys(groups))
+    return OrderedDict{K, ProcessingSet}(
+        label => ProcessingSet(sets, copy(metadata(ps))) for (label, sets) in groups
+    )
 end
 
 function _time_labels(given::DimensionalData.AbstractDimArray, ms, t)
@@ -66,39 +70,63 @@ function _time_labels(given::AbstractVector, ms, t)
     return collect(given)
 end
 
-_time_labels(given, ms, t) = throw(
+_time_labels(given::AbstractArray, ms, t) = throw(
     ArgumentError(
-        "`f` gave a $(nameof(typeof(given))); it must give a vector of one label " *
-            "per integration, $(length(t)) for this Measurement Set"
+        "`f` gave a $(join(size(given), '×')) array; it must give a vector of one " *
+            "label per integration, $(length(t)) for this Measurement Set, or a " *
+            "single label for the whole Measurement Set"
     )
 )
 
-_label_name(label) = string(label)
-_label_name(label::Tuple) = join(map(_label_name, label), '_')
-
 """
-    groupby(ps::ProcessingSet, f) -> OrderedDict{key, ProcessingSet}
+    ByScan()
 
-The Measurement Sets of `ps` gathered by the key `f(ms)`: each key maps to a
-processing set of the Measurement Sets that give it, under their own names and
-`ps`'s attributes. Keys come in the order they first occur, and so do the
-Measurement Sets within a group.
+The scan criterion for [`groupby`](@ref DimensionalData.groupby(::ProcessingSet, ::Any)):
+`ByScan()(ms)` labels each time sample of `ms` with `(source = …, scan = …)`,
+the source observed and the scan name, so `groupby(ps, ByScan())` gathers every
+spectral window of a scan into one group.
 
-```julia
-groupby(ps, spectralwindow)
-groupby(splitby(ps, ms -> ms[:scan_name]), ms -> (only(sources(ms)), only(scans(ms))))
-```
-
-`groupby` neither cuts a Measurement Set nor reads one; a Measurement Set
-holding several scans stays whole under whatever key `f` gives it.
-[`splitby`](@ref) cuts first where a key must describe each piece.
+The scan is the `scan_name` coordinate. The source comes from the base data
+group's [`field_and_source`](@ref) dataset: its `source_name` stated per time,
+or per field and matched through the `field_name` coordinate. A Measurement
+Set that cannot name one source and one scan per time sample is an error.
 """
-function DimensionalData.groupby(ps::ProcessingSet, f)
-    keys_ = [f(ms) for ms in ps]
-    groups = OrderedDict{eltype(keys_), ProcessingSet}()
-    for (key, (name, ms)) in zip(keys_, pairs(ps))
-        group = get!(() -> ProcessingSet(OrderedDict{Symbol, MeasurementSet}(), copy(metadata(ps))), groups, key)
-        getfield(group, :sets)[name] = ms
+struct ByScan end
+
+function (::ByScan)(ms::MeasurementSet)
+    t = _time_values(ms)
+    haskey(ms, :scan_name) || throw(
+        ArgumentError("this Measurement Set states no `scan_name`, so its samples have no scan")
+    )
+    scan = _time_labels(ms[:scan_name], ms, t)
+    source = _sources_per_time(ms, t)
+    return [(source = String(s), scan = String(c)) for (s, c) in zip(source, scan)]
+end
+
+function _sources_per_time(ms::MeasurementSet, t)
+    fs = field_and_source(ms)
+    haskey(fs, :source_name) || throw(
+        ArgumentError("the `field_and_source` dataset states no `source_name`")
+    )
+    stated = fs[:source_name]
+    d = dims(stated)
+    length(d) == 1 && only(d) isa dimtype(:field_name) || return _time_labels(stated, ms, t)
+    haskey(ms, :field_name) || throw(
+        ArgumentError(
+            "sources are stated per field, but this Measurement Set states no " *
+                "`field_name` per time"
+        )
+    )
+    by_field = Dict(zip(String.(lookup(only(d))), String.(parent(stated))))
+    return map(_time_labels(ms[:field_name], ms, t)) do field
+        get(by_field, String(field)) do
+            throw(
+                ArgumentError(
+                    "field `$field` observed at some time is not in the " *
+                        "`field_and_source` dataset, which lists " *
+                        join(sort!(collect(keys(by_field))), ", ")
+                )
+            )
+        end
     end
-    return groups
 end

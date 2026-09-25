@@ -6,8 +6,7 @@ Selection works at two levels, and each level has its own functions:
   `filter`, [`transform`](@ref) and `merge`. They keep or drop whole
   Measurement Sets and return a `ProcessingSet`, so they chain. None of them
   cuts inside a Measurement Set.
-  [`splitby`](@ref) cuts each Measurement Set into one per label along
-  `time`, and `groupby` gathers Measurement Sets under a key.
+  `groupby` gathers time samples, across Measurement Sets, under a label.
 - **Cutting inside a Measurement Set**: indexing, `ms[...]`, with
   DimensionalData selectors. [`baseline`](@ref), [`baselines`](@ref),
   [`scan`](@ref) and [`field`](@ref) turn antenna, scan and field names into
@@ -134,49 +133,40 @@ merge(query(ps; field_name = "M87"), query(ps; field_name = "3C 273"))
 To combine sets that disagree, construct the result with the attributes it
 should have: `ProcessingSet(sets, attrs)`.
 
-## Splitting and grouping
+## Grouping
 
 A Measurement Set may hold several scans or fields, and one scan is often
-spread over several Measurement Sets, one per spectral window. `splitby` and
-`groupby` rearrange a processing set around such labels. Both take the
-processing set first and a function of one Measurement Set second.
-
-### `splitby`: one Measurement Set per label
-
-`splitby(ps, f)` cuts each Measurement Set along `time` by the labels `f(ms)`
-gives, one per integration. The integrations sharing a label become one
-Measurement Set, named `name_label`:
+spread over several Measurement Sets, one per spectral window. `groupby(ps, f)`
+gathers the time samples of a processing set under labels: `f(ms)` gives one
+label per integration, and the result is an `OrderedDict` from each label to a
+processing set holding, for every Measurement Set with samples under it, those
+samples under the Measurement Set's own name.
 
 ```julia
-splitby(ps, ms -> ms[:scan_name])                    # per scan
-splitby(ps, ms -> ms[:field_name])                   # per field
-splitby(ps, ms -> floor.(Int, times(ms) ./ 600))     # per ten-minute bin
+groupby(ps, ms -> ms[:scan_name])                    # per scan name
+groupby(ps, ms -> ms[:field_name])                   # per field
+groupby(ps, ms -> floor.(Int, times(ms) ./ 600))     # per ten-minute bin
+groupby(ps, spectralwindow)                          # per spectral window
 ```
 
-A label keeps every integration it names, so a field observed twice is one
-Measurement Set with a gap in time. Labels come in the order they first occur.
-`f` must give a vector as long as `times(ms)`, or an array over `time` alone
-with the same times; anything else throws an `ArgumentError`, as do two pieces
-whose names coincide.
+`f` gives a vector as long as `times(ms)`, or an array over `time` alone with
+the same times; any other array throws an `ArgumentError`. A value that is not
+an array, such as `spectralwindow(ms)`, labels the whole Measurement Set. A
+label keeps every integration it names, so a field observed twice is one group
+with a gap in time. Labels come in the order they first occur.
 
-Each piece is a `view`, so splitting a lazily opened processing set reads
-nothing. `read(ms)` brings one Measurement Set, a piece or a whole one, into
-memory.
-
-### `groupby`: Measurement Sets under a key
-
-`groupby(ps, f)` returns an `OrderedDict` from each key `f(ms)` to the
-processing set of the Measurement Sets that give it, in the order the keys
-first occur. It neither cuts nor reads, so a key describing one scan follows a
-`splitby`:
+[`ByScan`](@ref)`()` labels each integration with its source and scan, so one
+group holds every spectral window of a scan:
 
 ```julia
-groups = groupby(splitby(ps, ms -> ms[:scan_name]),
-                 ms -> (only(sources(ms)), only(scans(ms))))
-for ((source, scan), group) in groups
-    # every spectral window of one scan
+for (key, group) in groupby(ps, ByScan())
+    # every spectral window of scan key.scan on source key.source
 end
 ```
+
+A member is a `view`, or the Measurement Set itself where one label covers all
+of it, so grouping a lazily opened processing set reads nothing. `read(ms)`
+brings one member into memory.
 
 ## Cutting inside a Measurement Set
 
@@ -313,6 +303,8 @@ partition_info
 Base.filter(::Any, ::ProcessingSet)
 transform
 Base.merge(::ProcessingSet, ::ProcessingSet...)
+DimensionalData.groupby(::ProcessingSet, ::Any)
+ByScan
 baseline
 baselines
 scan

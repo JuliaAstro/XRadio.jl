@@ -1094,6 +1094,12 @@ function revisiting_set()
     ms = XRadio.Testing.measurement_set(; times = 1.6e9 .+ 30.0 .* (0:5))
     ms[:scan_name] = rebuild(ms[:scan_name], ["1", "1", "2", "2", "3", "3"])
     ms[:field_name] = rebuild(ms[:field_name], ["A", "A", "B", "B", "A", "A"])
+    ms.field_and_source_base = XRadio.subdataset(
+        :field_and_source;
+        field_name = ["A", "B"], sky_dir_label = ["ra", "dec"], source_name = ["SA", "SB"],
+        field_phase_center_direction = [0.5 0.6; 0.3 0.2],
+        array_metadata = (; field_phase_center_direction = (; frame = "icrs")),
+    )
     return ProcessingSet(OrderedDict(:track => ms), Dict{Symbol, Any}(:type => "processing_set", :note => "kept"))
 end
 
@@ -1127,61 +1133,74 @@ end
     end
 end
 
-@testset "splitting Measurement Sets by time" begin
+@testset "grouping time samples" begin
     ps = revisiting_set()
 
-    by_scan = splitby(ps, ms -> ms[:scan_name])
-    @test by_scan isa ProcessingSet
-    @test collect(keys(by_scan)) == [:track_1, :track_2, :track_3]
-    @test [only(scans(ms)) for ms in by_scan] == ["1", "2", "3"]
-    @test times(by_scan[:track_2]) == times(ps[1])[3:4]
-    @test metadata(by_scan) == metadata(ps)
+    by_scan = groupby(ps, ms -> ms[:scan_name])
+    @test by_scan isa OrderedDict{String, ProcessingSet}
+    @test collect(keys(by_scan)) == ["1", "2", "3"]
+    @test [collect(keys(g)) for g in values(by_scan)] == [[:track], [:track], [:track]]
+    @test times(by_scan["2"][:track]) == times(ps[1])[3:4]
+    @test metadata(by_scan["2"]) == metadata(ps)
 
-    @testset "a revisited field is one piece" begin
-        by_field = splitby(ps, ms -> ms[:field_name])
-        @test collect(keys(by_field)) == [:track_A, :track_B]
-        @test times(by_field[:track_A]) == times(ps[1])[[1, 2, 5, 6]]
-        @test scans(by_field[:track_A]) == ["1", "3"]
+    @testset "a revisited field is one group" begin
+        by_field = groupby(ps, ms -> ms[:field_name])
+        @test collect(keys(by_field)) == ["A", "B"]
+        @test times(by_field["A"][:track]) == times(ps[1])[[1, 2, 5, 6]]
+        @test scans(by_field["A"][:track]) == ["1", "3"]
     end
 
     @testset "time bins" begin
         t0 = first(times(ps[1]))
-        bins = splitby(ps, ms -> floor.(Int, (times(ms) .- t0) ./ 60))
-        @test collect(keys(bins)) == [:track_0, :track_1, :track_2]
-        @test length.(times.(values(bins))) == [2, 2, 2]
+        bins = groupby(ps, ms -> floor.(Int, (times(ms) .- t0) ./ 60))
+        @test collect(keys(bins)) == [0, 1, 2]
+        @test [length(times(g[:track])) for g in values(bins)] == [2, 2, 2]
     end
 
-    @testset "a tuple label names each part" begin
-        both = splitby(ps, ms -> collect(zip(ms[:field_name], ms[:scan_name])))
-        @test collect(keys(both)) == [:track_A_1, :track_B_2, :track_A_3]
+    @testset "ByScan" begin
+        @test ByScan()(ps[1]) == [
+            (source = "SA", scan = "1"), (source = "SA", scan = "1"),
+            (source = "SB", scan = "2"), (source = "SB", scan = "2"),
+            (source = "SA", scan = "3"), (source = "SA", scan = "3"),
+        ]
+        g = groupby(ps, ByScan())
+        @test collect(keys(g)) ==
+            [(source = "SA", scan = "1"), (source = "SB", scan = "2"), (source = "SA", scan = "3")]
+        @test times(g[(source = "SB", scan = "2")][:track]) == times(ps[1])[3:4]
     end
 
-    @testset "a lazily opened set is split without reading" begin
-        path = joinpath(mktempdir(), "split.ps.zarr")
+    @testset "ByScan gathers every window of a scan" begin
+        pw = XRadio.Testing.processing_set(; nscan = 2, nspw = 2)
+        g = groupby(pw, ByScan())
+        @test length(g) == 2
+        @test [collect(keys(m)) for m in values(g)] ==
+            [[:synthetic_00, :synthetic_01], [:synthetic_02, :synthetic_03]]
+        # One label covering a Measurement Set keeps the Measurement Set itself.
+        @test first(values(g))[:synthetic_00] === pw[:synthetic_00]
+    end
+
+    @testset "ByScan needs one source per time" begin
+        ms = copy(ps[1])
+        ms[:field_name] = rebuild(ms[:field_name], ["A", "A", "C", "C", "A", "A"])
+        @test_throws "field `C` observed at some time is not in the `field_and_source` dataset" ByScan()(ms)
+    end
+
+    @testset "a lazily opened set is grouped without reading" begin
+        path = joinpath(mktempdir(), "group.ps.zarr")
         write(path, ps)
-        lazy = splitby(open(ProcessingSet, path), ms -> ms[:scan_name])
-        @test !(parent(lazy[1][:visibility]) isa Array)
-        @test read(lazy[:track_3])[:visibility] == by_scan[:track_3][:visibility]
+        lazy = groupby(open(ProcessingSet, path), ms -> ms[:scan_name])
+        @test !(parent(lazy["3"][:track][:visibility]) isa Array)
+        @test read(lazy["3"][:track])[:visibility] == by_scan["3"][:track][:visibility]
     end
 
     @testset "labels that are not one per integration" begin
-        @test_throws "5 labels for the 6 times" splitby(ps, ms -> ones(5))
-        @test_throws "stated over baseline_id" splitby(
-            ps, ms -> ms[:baseline_antenna1_name]
-        )
-        @test_throws "must give a vector of one label per integration" splitby(
-            ps, ms -> "1"
-        )
-    end
-
-    @testset "names that coincide" begin
-        @test_throws "two Measurement Sets named `track_1`" splitby(
-            ps, ms -> [1, 1, "1", "1", 2, 2]
-        )
+        @test_throws "5 labels for the 6 times" groupby(ps, ms -> ones(5))
+        @test_throws "stated over baseline_id" groupby(ps, ms -> ms[:baseline_antenna1_name])
+        @test_throws "gave a 6×2 array" groupby(ps, ms -> ones(6, 2))
     end
 end
 
-@testset "grouping Measurement Sets" begin
+@testset "grouping Measurement Sets by a scalar key" begin
     ps = XRadio.Testing.processing_set(; nscan = 2, nspw = 2)
     groups = groupby(ps, ms -> (spectralwindow(ms), only(scans(ms))))
 
@@ -1201,11 +1220,6 @@ end
         whole = groupby(revisiting_set(), ms -> length(scans(ms)))
         @test collect(keys(whole)) == [3]
         @test length(times(only(values(whole))[1])) == 6
-    end
-
-    @testset "scan groups from a split" begin
-        g = groupby(splitby(revisiting_set(), ms -> ms[:scan_name]), ms -> only(scans(ms)))
-        @test collect(keys(g)) == ["1", "2", "3"]
     end
 
     @test isempty(groupby(filter(_ -> false, ps), spectralwindow))
