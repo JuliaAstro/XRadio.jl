@@ -26,6 +26,20 @@ to be told about it.
 @dim ReceptorLabel "Receptor (feed) label"
 @dim ElementID "Phased-array element identifier"
 
+"""
+    AntennaName
+
+The `antenna_name` dimension: unique name for each antenna(_station).
+"""
+AntennaName
+
+"""
+    StationName
+
+The `station_name` dimension of the weather sub-dataset: station name.
+"""
+StationName
+
 @dim CartesianPosLabel "Cartesian position component"
 @dim CartesianPosLabelLocal "Cartesian position component, antenna-local frame"
 @dim EllipsoidDirLabel "Ellipsoidal direction component"
