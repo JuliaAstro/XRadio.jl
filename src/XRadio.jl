@@ -56,7 +56,7 @@ export antennas, mounts, antenna_positions, receptor_angles, polarization_types,
     frequencies, polarizations, times, spectralwindow,
     gaincurves, baseline, baselines, baseline_antennas, scan, field,
     field_and_source, partition_info,
-    query, transform, ByScan
+    query, transform, ByScan, average
 export BaselineID, Frequency, Polarization, UVWLabel, AntennaName, StationName,
     FieldName, ReceptorLabel, ElementID, CartesianPosLabel, CartesianPosLabelLocal,
     EllipsoidDirLabel, EllipsoidDisLabel, SkyDirLabel, SkyDisLabel, LocalSkyDirLabel,
@@ -104,6 +104,7 @@ include("zarr/chunks.jl")
 include("zarr/write.jl")
 include("accessors.jl")
 include("grouping.jl")
+include("averaging.jl")
 include("fitsidi.jl")
 include("testing.jl")
 
