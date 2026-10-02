@@ -186,4 +186,58 @@ using XRadio: Testing, subdataset
         @test all(ms -> length(times(ms)) == 1, avg)
         @test isempty(check(avg))
     end
+    @testset "over channels" begin
+        f = frequencies(ms)
+        width = XRadio.value(metadata(lookup(ms, Frequency))[:channel_width])
+        two = average(ms, ChannelBins(2))
+        V, W, F = two[:visibility], two[:weight], two[:flag]
+        @test size(V) == (4, 4, 3, 4)
+        @test frequencies(two) == [(f[i] + f[i + 1]) / 2 for i in 1:2:8]
+        @test XRadio.value(metadata(lookup(two, Frequency))[:channel_width]) == 2 * width
+        @test times(two) == times(ms)
+        @test parent(two[:uvw]) == parent(ms[:uvw])
+        @test (at(V, 1, 0, 1), at(W, 1, 0, 1), at(F, 1, 0, 1)) == (1 + 1im, 1, false)
+        @test isnan(real(at(V, 1, 1, 1))) && (at(W, 1, 1, 1), at(F, 1, 1, 1)) == (0, true)
+        @test at(V, 1, 0, 2) ≈ (11 + 9im) / 4 && at(W, 1, 0, 2) == 4
+        @test isempty(check(two))
+    end
+
+    @testset "time then channels equals both at once" begin
+        both = average(ms, ByScan(), ChannelBins(2))
+        @test isequal(parent(both[:visibility]), parent(average(average(ms, ByScan()), ChannelBins(2))[:visibility]))
+        @test isequal(parent(average(ms, ChannelBins(2), ByScan())[:visibility]), parent(both[:visibility]))
+        v, w, fl = parent(ms[:visibility]), parent(ms[:weight]), parent(ms[:flag])
+        scan_of = [1, 1, 2, 2]
+        for I in CartesianIndices(parent(both[:visibility]))
+            p, c, b, s = Tuple(I)
+            num, den = zero(ComplexF64), 0.0
+            for ch in (2c - 1):(2c), t in findall(==(s), scan_of)
+                wi, vi = w[p, ch, b, t], v[p, ch, b, t]
+                (fl[p, ch, b, t] || !(wi > 0) || !isfinite(vi)) && continue
+                num += wi * vi
+                den += wi
+            end
+            @test parent(both[:weight])[I] == den
+            iszero(den) || @test parent(both[:visibility])[I] ≈ num / den
+        end
+        @test isempty(check(both))
+    end
+
+    @testset "channel labels" begin
+        apart = average(ms, ByChannel(_ -> [1, 2, 1, 2, 3, 4, 3, 4]))
+        f = frequencies(ms)
+        @test frequencies(apart) == [(f[1] + f[3]) / 2, (f[2] + f[4]) / 2, (f[5] + f[7]) / 2, (f[6] + f[8]) / 2]
+        @test length(frequencies(average(ms, ByChannel(_ -> :all)))) == 1
+        @test XRadio.averaging_axis(ByScan()) == :time
+        @test XRadio.averaging_axis(ChannelBins(2)) == :frequency
+        @test_throws "positive number of channels" ChannelBins(0)
+        @test_throws "gathers 3 channels" average(ms, ChannelBins(3))
+        @test_throws "same frequency" average(ms, ByChannel(_ -> [1, 2, 2, 1, 3, 3, 4, 4]))
+        @test_throws "one label per channel" average(ms, ByChannel(_ -> [1, 2]))
+        odd = copy(ms)
+        odd[:mystery] = DimArray(rand(8), (dims(ms, Frequency),))
+        @test_throws "`mystery` is stated per frequency" average(odd, ChannelBins(2))
+        ps = Testing.processing_set(; nscan = 2, nspw = 2, ntime = 3)
+        @test isempty(check(average(ps, ByScan(), ChannelBins(4))))
+    end
 end
