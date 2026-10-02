@@ -1026,6 +1026,16 @@ end
     @test collect(keys(merge(last_two, first_two))) ==
         [:test_02, :test_03, :test_00, :test_01]
 
+    @testset "a processing set from a collection of them" begin
+        @test collect(keys(ProcessingSet([first_two, last_two]))) ==
+            [:test_00, :test_01, :test_02, :test_03]
+        keyed = OrderedCollections.OrderedDict(:a => last_two, :b => first_two)
+        @test collect(keys(ProcessingSet(keyed))) == [:test_02, :test_03, :test_00, :test_01]
+        @test collect(keys(ProcessingSet(groupby(ps, ms -> ms[:scan_name])))) ==
+            collect(keys(ps))
+        @test_throws "names a Measurement Set `test_00`" ProcessingSet([first_two, first_two])
+    end
+
     @testset "a shared name is an error" begin
         # Two Measurement Sets under one name are two different observations,
         # so neither may win silently.

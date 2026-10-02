@@ -540,6 +540,25 @@ function Base.merge(ps::ProcessingSet, others::ProcessingSet...)
 end
 
 """
+    ProcessingSet(sets::AbstractDict{<:Any, ProcessingSet}) -> ProcessingSet
+    ProcessingSet(sets::AbstractVector{ProcessingSet}) -> ProcessingSet
+
+The Measurement Sets of every processing set in `sets`, in order, in one
+processing set: [`merge`](@ref Base.merge(::ProcessingSet, ::ProcessingSet...))
+of them, with its errors for a shared name or a disagreeing attribute. A
+dictionary contributes its values, so the groups of
+[`groupby`](@ref DimensionalData.groupby(::ProcessingSet, ::Any)), or results
+keyed by them, join back into one set.
+
+```julia
+averaged = Dict(label => average(g, ByScan()) for (label, g) in groupby(ps, ByScan()))
+ProcessingSet(averaged)
+```
+"""
+ProcessingSet(sets::AbstractDict{<:Any, ProcessingSet}) = merge(values(sets)...)
+ProcessingSet(sets::AbstractVector{ProcessingSet}) = merge(sets...)
+
+"""
     transform(f, ps::ProcessingSet) -> ProcessingSet
 
 `f` applied to each Measurement Set of `ps`, keeping their names and the set's
