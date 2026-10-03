@@ -36,6 +36,10 @@ mount coefficients [`mounts`](@ref) reads back; every other column of
 `ARRAY_GEOMETRY`, `ANTENNA` and `SOURCE` that MSv4 defines a home for is
 carried.
 
+Each spectral window's frequency coordinate records its 1-based FITS-IDI band
+as the `fitsidi_band` attribute, an extension MSv4 has no field for. It is the
+AIPS IF number that ANTAB files index, which [`read_antab!`](@ref) reads.
+
 The four optional calibration and environment tables become sub-datasets of
 every partition they have something to say about: `SYSTEM_TEMPERATURE` becomes
 `system_calibration_xds`, `PHASE-CAL` becomes `phase_calibration_xds`,

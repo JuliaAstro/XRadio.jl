@@ -48,7 +48,7 @@ export AbstractMount, Mount, MountAltAz, MountEquatorial, MountNasmythR, MountNa
     MountBWGR, MountBWGL, MountRotator, MountXY, MountOrbiting, MountHALCA, MountOther
 export AbstractGainCurve, GainPolynomial, TabulatedGain, SphericalHarmonicGain,
     AtDeclination, gain
-export fitsidi2msv4, fitsidi_gain_curves
+export fitsidi2msv4, fitsidi_gain_curves, read_antab!
 export datagroups, datagroup, add_datagroup!, correlated, flags, weights, uvw
 export antennas, mounts, antenna_positions, receptor_angles, polarization_types,
     scans, fields, sources, scan_intents, spectral_window_intents,
@@ -106,6 +106,7 @@ include("zarr/write.jl")
 include("accessors.jl")
 include("grouping.jl")
 include("averaging.jl")
+include("antab.jl")
 include("fitsidi.jl")
 include("testing.jl")
 

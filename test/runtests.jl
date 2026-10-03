@@ -25,4 +25,5 @@ include("synthetic_fitsidi.jl")
     include("test_mount.jl")
     include("test_gaincurve.jl")
     include("test_fitsidi.jl")
+    include("test_antab.jl")
 end

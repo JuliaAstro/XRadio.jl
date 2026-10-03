@@ -1541,7 +1541,7 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
             metadata = Dict{Symbol, Any}(
                 :type => "spectral_coord", :units => "Hz", :observer => "TOPO",
                 :spectral_window_name => spectral_window_name(band),
-
+                :fitsidi_band => band,
                 :spectral_window_intents => s.spectral_window_intents,
                 :reference_frequency => XRadio.Measure(
                     s.reference_frequency[band],
