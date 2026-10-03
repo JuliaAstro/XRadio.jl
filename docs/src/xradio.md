@@ -86,7 +86,7 @@ data-group names are `Symbol`s (`:base`) rather than strings.
 | `ms_xdt.xr_ms.get_field_and_source_xds("base")` | [`field_and_source`](@ref)`(ms, :base)` |
 | `ms_xdt.xr_ms.get_partition_info("base")` | [`partition_info`](@ref)`(ms, :base)` |
 | `ms_xdt.xr_ms.add_data_group(name, {...}, shared_with)` | [`add_datagroup!(ms, name; shared_with, ...)`](@ref add_datagroup!); see [Data groups](@ref) |
-| no counterpart | [`baselines`](@ref), [`scans`](@ref), [`fields`](@ref), [`sources`](@ref), [`mounts`](@ref), [`gaincurves`](@ref) |
+| no counterpart | [`baselines`](@ref), [`scans`](@ref), [`fields`](@ref), [`sources`](@ref), [`mounts`](@ref), [`gaincurves`](@ref), [`system_temperatures`](@ref) |
 
 ## Modifying a Measurement Set
 

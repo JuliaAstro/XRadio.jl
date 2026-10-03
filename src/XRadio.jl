@@ -54,7 +54,7 @@ export antennas, mounts, antenna_positions, receptor_angles, polarization_types,
     scans, fields, sources, scan_intents, spectral_window_intents,
     Intent, ScanIntents, SubscanIntents,
     frequencies, polarizations, times, spectralwindow,
-    gaincurves, baseline, baselines, baseline_antennas, scan, field,
+    gaincurves, system_temperatures, baseline, baselines, baseline_antennas, scan, field,
     field_and_source, partition_info,
     query, transform, ByScan, ChannelBins, ByChannel, average
 export BaselineID, Frequency, Polarization, UVWLabel, AntennaName, StationName,

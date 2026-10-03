@@ -361,6 +361,48 @@ end
             OrderedCollections.OrderedDict{Symbol, MeasurementSet}()
         )) == String[]
     end
+
+    @testset "system temperatures" begin
+        identity = (;
+            antenna_name = ["AA", "BB"], station_name = ["AA", "BB"],
+            receptor_label = ["pol_0", "pol_1"],
+            polarization_type = ["R" "R"; "L" "L"],
+        )
+        # Distinct values everywhere, so a transposed read shows.
+        ownclock = XRadio.subdataset(
+            :system_calibration; identity...,
+            time_system_cal = [1.0e9, 1.0e9 + 60],
+            tsys = reshape(Float64.(1:8), 2, 2, 2),
+        )
+        out = deepcopy(ms)
+        branches(out)[:system_calibration] = ownclock
+        tsys = system_temperatures(out)
+        @test tsys == ownclock[:tsys]
+        @test tsys == system_temperatures(ownclock)
+        @test tsys[AntennaName(At("BB")), ReceptorLabel(At("pol_0")), TimeSystemCal(2)] == 7.0
+        @test metadata(tsys)[:units] == "K"
+
+        # The store's own axes come back as they are, so which clock and which
+        # frequency resolution it used is the dimension type.
+        resolved = XRadio.subdataset(
+            :system_calibration; identity...,
+            time = [1.0e9], frequency = [2.2e11, 2.3e11, 2.4e11],
+            tsys = reshape(Float64.(1:12), 3, 2, 1, 2),
+        )
+        tsys = system_temperatures(resolved)
+        @test hasdim(tsys, Ti) && hasdim(tsys, XRadio.Frequency)
+        @test !hasdim(tsys, TimeSystemCal)
+        @test tsys[AntennaName(At("BB")), ReceptorLabel(At("pol_1")), XRadio.Frequency(3)] == [12.0]
+
+        # Nothing to read is an empty result, not an error.
+        @test isempty(system_temperatures(ms))
+        @test all(hasdim(system_temperatures(ms), (AntennaName, ReceptorLabel, TimeSystemCal)))
+        tantonly = XRadio.subdataset(
+            :system_calibration; identity...,
+            time_system_cal = [1.0e9], tant = fill(3.0, 2, 1, 2),
+        )
+        @test isempty(system_temperatures(tantonly))
+    end
 end
 
 

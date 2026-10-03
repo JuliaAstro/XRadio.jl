@@ -980,6 +980,47 @@ function _no_gain_curves()
 end
 
 """
+    system_temperatures(ms) -> DimArray
+    system_temperatures(system_calibration_xds) -> DimArray
+
+The total system temperature, `TSYS`, a Measurement Set records, in kelvin.
+
+The result is the stored array, over `AntennaName`, `ReceptorLabel` and a time
+axis, plus a frequency axis where the store resolves one. MSv4 lets the time
+axis be the correlated data's own (`Ti`) or the calibration system's clock
+(`TimeSystemCal`), and the frequency axis be `Frequency`, `FrequencySystemCal`
+or absent; the dimension types say which the store used, and nothing is
+interpolated onto the visibilities' axes. A temperature the store does not have
+is `NaN`.
+
+```julia
+tsys = system_temperatures(ms)
+tsys[AntennaName(At("BR")), ReceptorLabel(At("pol_0"))]
+```
+
+A Measurement Set with no system calibration dataset, or one without `TSYS`,
+gives an empty result over `AntennaName`, `ReceptorLabel` and `TimeSystemCal`.
+"""
+function system_temperatures(ms::MeasurementSet)
+    haskey(branches(ms), :system_calibration) || return _no_system_temperatures()
+    return system_temperatures(branches(ms)[:system_calibration])
+end
+
+function system_temperatures(xds::Dataset)
+    haskey(xds, :tsys) || return _no_system_temperatures()
+    return xds[:tsys]
+end
+
+function _no_system_temperatures()
+    over = (
+        dimtype(:receptor_label)(String[]),
+        dimtype(:time_system_cal)(Float64[]),
+        dimtype(:antenna_name)(String[]),
+    )
+    return DimArray(fill(NaN, 0, 0, 0), over; metadata = Dict{Symbol, Any}(:units => "K"))
+end
+
+"""
     spectralwindow(ms) -> String
 
 The name of the spectral window `ms` covers. MSv4 replaces MSv2's numeric data

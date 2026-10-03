@@ -609,6 +609,12 @@ end
             @test parent(branches(ps[:cal_01])[:system_calibration][:tsys])[:, 1, 1] ==
                 tsys(1)[:, 2]
 
+            # The accessor reads the same array, `NaN` where a station reported none.
+            got = system_temperatures(ps[:cal_00])
+            @test isequal(collect(got), collect(sc[:tsys]))
+            @test got[AntennaName(At(gt.antenna_names[2])), TimeSystemCal(1)] == tsys(2)[:, 1]
+            @test all(isnan, got[AntennaName(At(gt.antenna_names[3]))])
+
             # The identity coordinates are the antenna dataset's, less the
             # mount and the telescope, which this dataset does not carry.
             @test collect(sc[:station_name]) == gt.antenna_names
@@ -890,6 +896,7 @@ end
         none = gaincurves(ps[:nocal_00])
         @test keys(none) == (:curve, :sensitivity)
         @test isempty(none[:curve])
+        @test isempty(system_temperatures(ps[:nocal_00]))
     end
 
     @testset "a mount MSv4 does not reserve keeps its own name" begin
