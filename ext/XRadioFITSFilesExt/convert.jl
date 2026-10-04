@@ -147,8 +147,8 @@ rows or a table without the column.
 function quantization_efficiencies(antenna_hdu)
     data = antenna_hdu.data
     hascol(data, :NO_LEVELS) || throw(ArgumentError(
-        "FITS-IDI ANTENNA has no NO_LEVELS column, which the radiometer " *
-            "conversion of CORRELAT weights needs"
+        "FITS-IDI ANTENNA has no NO_LEVELS column, from which the quantization " *
+            "efficiency follows"
     ))
     levels = Dict{Int, Int}()
     for (no, n) in zip(column(data, :ANTENNA_NO), column(data, :NO_LEVELS))
@@ -1348,7 +1348,6 @@ function XRadio.fitsidi2msv4(
         observation_span = maximum(times) - minimum(times),
         ref_freq, band_freq, reference_frequency,
         ch_width, radiometer, vis_scal, weight_scal, inttim,
-        efficiency = radiometer ? quantization_efficiencies(an) : Dict{Int, Float64}(),
         without_autocorrelations = Ref(0), perm, layout,
         # Stored as MSv4 states them, but validated on the way in: an intent
         # outside the ASDM enumerations cannot reach the store.
@@ -1394,17 +1393,6 @@ function XRadio.fitsidi2msv4(
                     weights are radiometer weights, which are 1/σ² only if the \
                     correlator wrote correlation coefficients." file = path
     return dest
-end
-
-function _baseline_efficiency(efficiency, code, ::Type{F}) where {F}
-    a1, a2 = baseline_antennas(code)
-    η(a) = get(efficiency, a) do
-        throw(ArgumentError(
-            "FITS-IDI BASELINE $code names antenna $a, which the ANTENNA table " *
-                "does not describe"
-        ))
-    end
-    return F(η(a1) * η(a2))
 end
 
 # A radiometer weight is the inverse variance of the correlation coefficient
@@ -1472,8 +1460,8 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
     source_at = Vector{Int}(undef, ntime)
 
     # `WEIGHTYP = 'CORRELAT'` weights are validity fractions rather than
-    # variances; `f · 2Δν · τ · η_a · η_b` is the inverse variance they imply
-    # for a correlation coefficient.
+    # variances; `f · 2Δν · τ` is the inverse variance they imply for a
+    # correlation coefficient as the correlator wrote it.
     wfactor = F(2 * abs(s.ch_width[band]))
     visnorm, wscal = F(inv(s.vis_scal)), F(s.weight_scal)
     percell = layout.ncomplex == 3
@@ -1488,7 +1476,7 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
         scan_name[k] = s.scan_of[r]
         source_at[k] = Int(rows.source_id[r])
         scale = s.radiometer ?
-            wfactor * F(s.inttim[r]) * _baseline_efficiency(s.efficiency, rows.baseline[r], F) :
+            wfactor * F(s.inttim[r]) :
             wscal
         for c in 1:nchan, (p, sp) in enumerate(s.perm)
             re = block.flux[1, sp, c, band, i]

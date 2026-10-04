@@ -88,11 +88,12 @@ convention casacore and AIPS write and MSv4 inherits without stating.
 are already that, and are only rescaled by `VIS_SCAL²`. `CORRELAT` and
 `CORRTIME` weights are validity fractions `f`, from which the radiometer
 equation gives the inverse variance of a correlation coefficient,
-`f · 2Δν · τ · η_a · η_b`. `Δν` is the channel width, `τ` the integration time,
-and `η` each antenna's quantization efficiency, which its `ANTENNA` row's
-`NO_LEVELS` fixes: `2/π`, 0.8098 and 0.8825 for 2, 3 and 4 levels, assuming
-optimal thresholds; other correlator losses are not modeled, and any other
-level count is refused. The visibilities are not correlation coefficients until
+`f · 2Δν · τ`, with `Δν` the channel width and `τ` the integration time. The
+visibilities are not corrected for quantization loss: a correlation of
+digitized signals keeps a fraction `η_a · η_b` of the unquantized amplitude
+(0.78 on a 2-bit baseline), and its noise is that of the coefficient as written,
+so the weight carries no `η`; correcting the amplitudes is a calibration step.
+The visibilities are not correlation coefficients until
 divided by `√(A_a · A_b)`, the amplitudes of the two antennas'
 autocorrelations of the receptors the product pairs, so each weight is divided
 by `A_a · A_b`. A sample whose autocorrelations are missing, flagged, or not

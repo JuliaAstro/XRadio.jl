@@ -264,19 +264,17 @@ end
     conversion_issues(ps) = sort!([i.message for i in check(ps)])
 
     # The inverse variance of the stored visibility a CORRELAT weight implies,
-    # `f · 2Δν · τ · η_a · η_b / (A_a · A_b)`, as `(polarization, channel,
+    # `f · 2Δν · τ / (A_a · A_b)`, as `(polarization, channel,
     # baseline, time)` in MSv4's order: `A` is the amplitude of each antenna's
     # autocorrelation of the receptor the product names.
     function correlat_weight(gt, band, times)
         _, _, perm = pol_axis(gt.no_stkd, gt.stk_1, gt.cdelt2)
-        η = Dict(2 => 2 / π, 3 => 0.8098, 4 => 0.8825)
         auto = Dict(a => i for (i, (a, b)) in pairs(gt.baselines) if a == b)
         receptors = ((1, 1), (1, 2), (2, 1), (2, 2))
         parallel = (1, 4)
         amplitude(a, r, c, k) = abs(gt.visibility[perm[parallel[r]], c, band, auto[a], k])
         return [
-            gt.weight[perm[p], band, bi, k] * 2 * gt.ch_width * gt.inttim *
-                η[gt.no_levels[a]] * η[gt.no_levels[b]] /
+            gt.weight[perm[p], band, bi, k] * 2 * gt.ch_width * gt.inttim /
                 (amplitude(a, receptors[p][1], c, k) * amplitude(b, receptors[p][2], c, k))
                 for p in 1:4, c in 1:gt.nchan, (bi, (a, b)) in pairs(gt.baselines), k in times
         ]
@@ -982,21 +980,20 @@ end
         # Already `1/σ²`, so nothing is applied.
         @test ms[:weight][1, 1, 1, 1] == normal.weight[1, 1, 1, 1]
 
-        # Each antenna's digitizer sets its own efficiency.
+        # The digitizers' levels do not enter the weights.
         mixed = synthetic_fitsidi(joinpath(dir, "levels.idifits"); no_levels = [2, 3, 4])
         ms = open(ProcessingSet, to_msv4(mixed, "levels.ps.zarr"))[:levels_00]
         @test parent(ms[:weight]) ≈ correlat_weight(mixed, 1, 1:3)
-
         eight = synthetic_fitsidi(joinpath(dir, "eight.idifits"); no_levels = [2, 8, 4])
-        @test_throws "antenna 2 8 NO_LEVELS" to_msv4(eight, "eight.ps.zarr")
+        ms = open(ProcessingSet, to_msv4(eight, "eight.ps.zarr"))[:eight_00]
+        @test parent(ms[:weight]) ≈ correlat_weight(eight, 1, 1:3)
+
+        @test IDI.quantization_efficiencies(
+            (; data = (; ANTENNA_NO = [1, 2], NO_LEVELS = [2, 4]))
+        ) == Dict(1 => 2 / π, 2 => 0.8825)
         @test_throws "both 2 and 4 NO_LEVELS" IDI.quantization_efficiencies(
             (; data = (; ANTENNA_NO = [1, 1], NO_LEVELS = [2, 4]))
         )
-        # NORMAL weights need no efficiency, so the level count is not read.
-        eight_normal = synthetic_fitsidi(
-            joinpath(dir, "eightn.idifits"); no_levels = [2, 8, 4], weightyp = "NORMAL"
-        )
-        @test to_msv4(eight_normal, "eightn.ps.zarr") isa AbstractString
 
         other = synthetic_fitsidi(joinpath(dir, "other.idifits"); weightyp = "SIGMA")
         @test_throws "WEIGHTYP is \"SIGMA\"" to_msv4(other, "other.ps.zarr")
@@ -1015,7 +1012,7 @@ end
         @test weight[:, :, :, [1, 3]] ≈ expected
         @test !any(flag[:, :, :, [1, 3]])
         _, _, perm = pol_axis(gt.no_stkd, gt.stk_1, gt.cdelt2)
-        radiometer = 2 * gt.ch_width * gt.inttim * 0.8825^2
+        radiometer = 2 * gt.ch_width * gt.inttim
         for (bi, (a, b)) in pairs(gt.baselines)
             if 1 in (a, b)
                 @test all(view(flag, :, :, bi, 2))
