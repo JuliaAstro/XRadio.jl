@@ -89,3 +89,24 @@ hold is written whole.
 ```@docs; canonical=false
 Base.write(::AbstractString, ::Pair{Symbol, MeasurementSet})
 ```
+
+## Writing a template, then filling it
+
+`write(path, ps; data = false)` writes a store shaped like `ps` without its
+data: coordinates, attributes and sub-datasets are written as usual, and each
+Measurement Set's data variables are created empty. Results are then written
+into it region by region, through the layers of a store opened with
+`mode = "r+"`, without holding the whole result in memory:
+
+```julia
+write(out, ps; data = false)
+ms = open(ProcessingSet, out; mode = "r+")[:track_0]
+ms[:visibility][Ti(1:10)] .= vis      # the first ten integrations
+ms[:flag][Ti(1:10)] .= flags
+```
+
+An unwritten sample reads as flagged: `FLAG` is `true` there, a real-valued
+layer `NaN`, and a complex one zero. A half-filled store therefore conforms and
+reads correctly, and the empty layers take no space on disk beyond their
+metadata. `data = false` also works with `mode = "a"`, creating the layers a
+Measurement Set adds empty, but cannot be combined with `replace = true`.

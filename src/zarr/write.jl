@@ -37,6 +37,10 @@ when deliberately writing a store that does not conform.
   creating it if there is none. See [Writing into an existing store](@ref).
 - `replace = false`: in mode `"a"`, whether a layer the store holds may be
   rewritten when `ps` holds something else there.
+- `data = true`: `false` writes a template: coordinates, attributes and
+  sub-datasets as usual, and each Measurement Set's data variables created
+  empty, to be filled later through `open(ProcessingSet, path; mode = "r+")`.
+  See [Writing a template, then filling it](@ref).
 - `validate = true`: whether to check conformance before writing.
 - `schemas = ()`: dataset specifications of the caller's own, for sub-dataset
   types the standard does not define. They decide both what conforms and what
@@ -100,6 +104,7 @@ function _write_members(
         chunk_bytes::Integer = DEFAULT_CHUNK_BYTES,
         validate::Bool = true,
         schemas = (),
+        data::Bool = true,
     )
     mode in _WRITE_MODES || throw(
         ArgumentError(
@@ -108,6 +113,9 @@ function _write_members(
     )
     replace && mode != "a" && throw(
         ArgumentError("`replace` applies to mode \"a\", which writes into a store; mode is $(repr(mode))")
+    )
+    replace && !data && throw(
+        ArgumentError("`data = false` cannot replace stored layers; it only creates empty ones")
     )
     sets = OrderedDict{Symbol, MeasurementSet}(members)
     validate && XRadio.validate(
@@ -134,9 +142,9 @@ function _write_members(
         if appending && haskey(root.groups, key)
             group = root.groups[key]
             stored = _read_measurement_set(group; lazy = true)
-            _append_tree(group, stored, ms; replace, zarr_format, compressor, chunks, table)
+            _append_tree(group, stored, ms; replace, zarr_format, compressor, chunks, table, data)
         else
-            _write_tree(root, key, ms; zarr_format, compressor, chunks, table)
+            _write_tree(root, key, ms; zarr_format, compressor, chunks, table, data)
         end
     end
     _consolidate(root)
@@ -158,7 +166,7 @@ end
 
 # Write into the stored node `group`, read back as `stored`, what `tree` holds
 # and it does not.
-function _append_tree(group, stored, tree; replace, zarr_format, compressor, chunks, table)
+function _append_tree(group, stored, tree; replace, zarr_format, compressor, chunks, table, data = true)
     where_ = strip(group.path, '/')
     for d in getfield(tree, :dims)
         dname = msv4name(d)
@@ -183,7 +191,8 @@ function _append_tree(group, stored, tree; replace, zarr_format, compressor, chu
         diskname = _diskname(tree, key, table)
         write_as = n -> _write_array(
             group, n, tree[key]; zarr_format, compressor, chunks = shape,
-            coords = haskey(auxiliary, key) ? String[] : allcoords
+            coords = haskey(auxiliary, key) ? String[] : allcoords,
+            empty = !data && !haskey(auxiliary, key),
         )
         if !haskey(group.arrays, diskname)
             write_as(diskname)
@@ -288,7 +297,7 @@ end
 
 function _write_tree(
         parent::Zarr.ZGroup, name::AbstractString, tree;
-        zarr_format, compressor, chunks, table = MSV4_SCHEMA_TYPES
+        zarr_format, compressor, chunks, table = MSV4_SCHEMA_TYPES, data = true
     )
     group = Zarr.zgroup(parent, name; attrs = _to_attrs(metadata(tree)))
 
@@ -314,7 +323,8 @@ function _write_tree(
         coords = haskey(auxiliary, key) ? String[] : allcoords
         _write_array(
             group, _diskname(tree, key, table), tree[key];
-            zarr_format, compressor, chunks = shape, coords
+            zarr_format, compressor, chunks = shape, coords,
+            empty = !data && !haskey(auxiliary, key),
         )
     end
     for (subkey, sub) in branches(tree)
@@ -354,9 +364,9 @@ end
 
 function _write_array(
         group::Zarr.ZGroup, name::AbstractString, array;
-        zarr_format, compressor, chunks, coords = String[]
+        zarr_format, compressor, chunks, coords = String[], empty = false
     )
-    data = _to_storable(parent(array), zarr_format)
+    data = empty ? parent(array) : _to_storable(parent(array), zarr_format)
     # MSv4 states dimensions slowest-varying first, the reverse of the order a
     # Julia array's axes run in.
     dnames = reverse(collect(map(msv4name, dims(array))))
@@ -372,11 +382,23 @@ function _write_array(
         chunks = _chunk_shape(array, chunks),
         compressor = _isstring(eltype(data)) ? Zarr.NoCompressor() : compressor,
         attrs, zarr_format,
+        (empty ? (; fill_value = _template_fill(eltype(data), name)) : (;))...,
     )
-    z[axes(data)...] = data
+    empty || (z[axes(data)...] = data)
     zarr_format == 3 && _finalize_v3_metadata(z, dnames)
+    zarr_format == 2 && empty && _finalize_v2_fill(z)
     return z
 end
+
+# What an unwritten sample of a template layer reads as: flagged, or not a
+# number. Complex layers read zero: Zarr.jl cannot store a non-finite complex
+# fill value.
+_template_fill(::Type{Bool}, name) = true
+_template_fill(::Type{T}, name) where {T <: AbstractFloat} = T(NaN)
+_template_fill(::Type{T}, name) where {T <: Complex{<:AbstractFloat}} = zero(T)
+_template_fill(::Type{T}, name) where {T} = throw(
+    ArgumentError("a template layer must be Bool, floating-point or complex; `$name` is $T")
+)
 
 # Chunk sizes are given per dimension name, in MSv4 terms; the array's own axis
 # order decides where each lands. `nothing` is one chunk.
@@ -408,13 +430,28 @@ function _finalize_v3_metadata(z::Zarr.ZArray, dnames)
     dtype = get(json, "data_type", nothing)
     if dtype isa AbstractString && haskey(_V3_COMPLEX_NAMES, dtype)
         json["data_type"] = _V3_COMPLEX_NAMES[dtype]
-        fill = get(json, "fill_value", nothing)
-        fill isa AbstractDict && haskey(fill, "re") && haskey(fill, "im") &&
-            (json["fill_value"] = [fill["re"], fill["im"]])
+        _complex_fill_as_array!(json)
     end
 
     z.storage[key] = Vector{UInt8}(JSON.json(json))
     return z
+end
+
+# Zarr v2 has the same complex `fill_value` defect, which only an explicit fill
+# value (a template layer's) exposes.
+function _finalize_v2_fill(z::Zarr.ZArray)
+    key = Zarr._concatpath(z.path, ".zarray")
+    json = JSON.parse(String(copy(z.storage[key])), Dict{String, Any})
+    _complex_fill_as_array!(json)
+    z.storage[key] = Vector{UInt8}(JSON.json(json))
+    return z
+end
+
+function _complex_fill_as_array!(json)
+    fill = get(json, "fill_value", nothing)
+    fill isa AbstractDict && haskey(fill, "re") && haskey(fill, "im") &&
+        (json["fill_value"] = [fill["re"], fill["im"]])
+    return json
 end
 
 """

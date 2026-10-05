@@ -293,6 +293,56 @@ end
     @test open(ProcessingSet, path)[1][:scan_name] isa DimArray{String}
 end
 
+@testset "a template, filled through r+, zarr v$fmt" for fmt in (2, 3)
+    ps = synthetic_set(1)
+    full = joinpath(mktempdir(), "full.ps.zarr")
+    write(full, ps; zarr_format = fmt)
+    whole = read(ProcessingSet, full)[1]
+    path = joinpath(mktempdir(), "template.ps.zarr")
+    write(path, ps; zarr_format = fmt, data = false, chunks = (; time = 1))
+
+    template = read(ProcessingSet, path)
+    @test isempty(check(template))
+    @test dims(template[1]) == dims(whole)
+    @test metadata(template[1]) == metadata(whole)
+    @test template[1][:scan_name] == whole[:scan_name]
+    @test all(template[1][:flag])
+    @test all(isnan, template[1][:weight])
+    @test all(iszero, template[1][:visibility])
+    for layer in ("VISIBILITY", "FLAG", "WEIGHT", "UVW")
+        @test isempty(chunk_files(joinpath(path, "test_00", layer)))
+    end
+    @test branches(template[1])[:antenna][:antenna_position] == branches(whole)[:antenna][:antenna_position]
+
+    dest = open(ProcessingSet, path; mode = "r+")[1]
+    dest[:visibility][Ti(2)] .= whole[:visibility][Ti(2)]
+    dest[:flag][Ti(2)] .= whole[:flag][Ti(2)]
+    back = read(ProcessingSet, path)[1]
+    @test back[:visibility][Ti(2)] == whole[:visibility][Ti(2)]
+    @test back[:flag][Ti(2)] == whole[:flag][Ti(2)]
+    @test all(back[:flag][Ti(Not(2))])
+end
+
+@testset "a template layer added to a stored Measurement Set" begin
+    ps = synthetic_set(1)
+    path = joinpath(mktempdir(), "added.ps.zarr")
+    write(path, ps)
+    ms = copy(open(ProcessingSet, path)[1])
+    ms[:visibility_corrected] = ms[:visibility]
+    write(path, :test_00 => ms; mode = "a", data = false, validate = false)
+    back = read(ProcessingSet, path)[1]
+    @test all(iszero, back[:visibility_corrected])
+    @test back[:visibility] == ps[1][:visibility]
+    @test_throws "`data = false` cannot replace stored layers" write(
+        path, :test_00 => ms; mode = "a", data = false, replace = true, validate = false
+    )
+    counted = copy(ps[1])
+    counted[:uvw] = rebuild(counted[:uvw], round.(Int, parent(counted[:uvw])))
+    @test_throws "a template layer must be Bool, floating-point or complex; `UVW` is Int64" write(
+        joinpath(mktempdir(), "int.ps.zarr"), :x => counted; data = false, validate = false,
+    )
+end
+
 @testset "scan intents" begin
     @testset "the ASDM enumerations" begin
         # Both are closed, and both define TEST and UNSPECIFIED, which is why
