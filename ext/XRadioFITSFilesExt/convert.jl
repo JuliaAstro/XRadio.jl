@@ -1500,99 +1500,55 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
     freqs = channel_frequencies(s.ref_freq, s.band_freq[band], s.ch_width[band], nchan)
     integration = s.inttim[first(range)]
 
-    time = Ti(
-        Sampled(
-            grid_times;
-            metadata = Dict{Symbol, Any}(
-                :type => "time", :units => "s", :scale => "utc", :format => "unix",
-                :integration_time => XRadio.Measure(
-                    integration, Dict{Symbol, Any}(:units => "s", :type => "quantity")
-                ),
-            )
-        )
-    )
-    frequency = Frequency(
-        Sampled(
-            collect(freqs);
-            metadata = Dict{Symbol, Any}(
-                :type => "spectral_coord", :units => "Hz", :observer => "TOPO",
-                :spectral_window_name => spectral_window_name(band),
-                :fitsidi_band => band,
-                :spectral_window_intents => s.spectral_window_intents,
-                :reference_frequency => XRadio.Measure(
-                    s.reference_frequency[band],
-                    Dict{Symbol, Any}(
-                        :units => "Hz", :type => "spectral_coord", :observer => "TOPO"
-                    )
-                ),
-                :channel_width => XRadio.Measure(
-                    abs(s.ch_width[band]),
-                    Dict{Symbol, Any}(:units => "Hz", :type => "quantity")
-                ),
-            )
-        )
-    )
-    polarization = Polarization(Categorical(labels))
-    baseline = BaselineID(Sampled(collect(Int64, 1:nbase)))
-    uvwlabel = UVWLabel(Categorical(["u", "v", "w"]))
-
-    ms = MeasurementSet(;
-        metadata = Dict{Symbol, Any}(
-            :type => "visibility",
-            :schema_version => string(XRadio.MSV4_SCHEMA_VERSION),
-            :creation_date => s.creation_date,
-            :creator => Dict{Symbol, Any}(
-                :software_name => "XRadio.jl", :version => string(pkgversion(XRadio))
-            ),
-            :observation_info => s.observation_info,
-            :processor_info => s.processor_info,
-            :data_groups => Dict{Symbol, Any}(
-                :base => Dict{Symbol, Any}(
-                    :correlated_data => "VISIBILITY", :flag => "FLAG",
-                    :weight => "WEIGHT", :uvw => "UVW",
-                    :field_and_source => "field_and_source_base_xds",
-                    :description => s.provenance,
-                    :date => s.creation_date,
-                ),
-            ),
-        )
-    )
-    grid = (polarization, frequency, baseline, time)
-    ms[:visibility] = DimArray(vis, grid; metadata = Dict{Symbol, Any}(:units => s.visibility_units))
-    ms[:flag] = DimArray(flag, grid)
-    ms[:weight] = DimArray(weight, grid)
-    ms[:uvw] = DimArray(
-        uvw, (uvwlabel, baseline, time);
-        metadata = Dict{Symbol, Any}(:type => "uvw", :units => "m", :frame => frame)
-    )
-    ms[:field_name] = DimArray(field_name, (time,))
-    ms[:scan_name] = DimArray(
-        scan_name, (time,);
-        metadata = Dict{Symbol, Any}(:scan_intents => s.scan_intents)
-    )
+    quantity(v, units) = XRadio.Measure(v, Dict{Symbol, Any}(:units => units, :type => "quantity"))
     antennas = map(baseline_antennas, codes)
-    ms[:baseline_antenna1_name] = DimArray([s.antenna_name[a[1]] for a in antennas], (baseline,))
-    ms[:baseline_antenna2_name] = DimArray([s.antenna_name[a[2]] for a in antennas], (baseline,))
-    if mixed !== nothing
-        ms[:polarization_mixed] = DimArray(
-            reduce(hcat, mixed), (polarization, baseline)
-        )
-    end
-
     numbers = sort!(unique(Iterators.flatten(antennas)))
-    ms.antenna = _antenna_dataset(s, numbers, band)
-    ms.field_and_source_base = _field_and_source_dataset(s, sources, frame)
-
     # The calibration and environment sub-datasets, each left out where the
     # file has no such table or where nothing it holds covers this partition.
     span = (first(grid_times), last(grid_times))
-    for (key, sub) in (
-            :system_calibration => _system_calibration_dataset(s, numbers, span, band),
-            :phase_calibration => _phase_calibration_dataset(s, numbers, span, band),
-            :weather => _weather_dataset(s, numbers, span),
-            :gain_curve => _gain_curve_dataset(s, numbers, band),
-        )
-        sub === nothing || (ms[key] = sub)
-    end
+    optional = (;
+        system_calibration = _system_calibration_dataset(s, numbers, span, band),
+        phase_calibration = _phase_calibration_dataset(s, numbers, span, band),
+        weather = _weather_dataset(s, numbers, span),
+        gain_curve = _gain_curve_dataset(s, numbers, band),
+    )
+    subdatasets = merge(
+        (;
+            antenna = _antenna_dataset(s, numbers, band),
+            field_and_source_base = _field_and_source_dataset(s, sources, frame),
+        ),
+        NamedTuple(k => v for (k, v) in pairs(optional) if v !== nothing),
+    )
+
+    ms = XRadio.measurement_set(;
+        time = grid_times, frequency = collect(freqs), polarization = labels,
+        baseline_id = collect(Int64, 1:nbase), uvw_label = ["u", "v", "w"],
+        visibility = vis, flag, weight, uvw, field_name, scan_name,
+        baseline_antenna1_name = [s.antenna_name[a[1]] for a in antennas],
+        baseline_antenna2_name = [s.antenna_name[a[2]] for a in antennas],
+        polarization_mixed = mixed === nothing ? nothing : reduce(hcat, mixed),
+        metadata = (; s.creation_date, s.observation_info, s.processor_info),
+        array_metadata = (;
+            time = (; integration_time = quantity(integration, "s")),
+            frequency = (;
+                observer = "TOPO",
+                spectral_window_name = spectral_window_name(band),
+                fitsidi_band = band,
+                s.spectral_window_intents,
+                reference_frequency = XRadio.Measure(
+                    s.reference_frequency[band],
+                    Dict{Symbol, Any}(:units => "Hz", :type => "spectral_coord", :observer => "TOPO")
+                ),
+                channel_width = quantity(abs(s.ch_width[band]), "Hz"),
+            ),
+            visibility = (; units = s.visibility_units),
+            uvw = (; frame),
+            scan_name = (; s.scan_intents),
+        ),
+        subdatasets,
+    )
+    base = metadata(ms)[:data_groups][:base]
+    base[:description] = s.provenance
+    base[:date] = s.creation_date
     return ms
 end
