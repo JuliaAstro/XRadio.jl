@@ -173,6 +173,8 @@ _attribute(v) = v
 # Zarr stores fixed-length strings as a padded numeric type. Nothing downstream
 # wants that, so string arrays are converted on read.
 _unwrap_strings(a::AbstractArray{<:Zarr.MaxLengthStrings.MaxLengthString}) = String.(a)
+# Broadcasting over a zero-dimensional array gives a scalar.
+_unwrap_strings(a::AbstractArray{<:Zarr.MaxLengthStrings.MaxLengthString, 0}) = fill(String(a[]))
 _unwrap_strings(a::AbstractArray) = a
 
 function _read_measurement_set(group::Zarr.ZGroup; lazy::Bool)

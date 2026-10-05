@@ -374,7 +374,7 @@ function _write_array(
     attrs = _to_attrs(metadata(array))
     # Zarr v2 has nowhere in its own metadata for dimension names, so xarray
     # puts them in an attribute; v3 has a field for them, patched in below.
-    zarr_format == 2 && (attrs["_ARRAY_DIMENSIONS"] = string.(dnames))
+    zarr_format == 2 && (attrs["_ARRAY_DIMENSIONS"] = String[string(n) for n in dnames])
     isempty(coords) || (attrs["coordinates"] = join(coords, " "))
 
     z = Zarr.zcreate(
@@ -425,7 +425,7 @@ const _V3_COMPLEX_NAMES = Dict("complexf32" => "complex64", "complexf64" => "com
 function _finalize_v3_metadata(z::Zarr.ZArray, dnames)
     key = Zarr._concatpath(z.path, "zarr.json")
     json = JSON.parse(String(copy(z.storage[key])), Dict{String, Any})
-    json["dimension_names"] = string.(dnames)
+    json["dimension_names"] = String[string(n) for n in dnames]
 
     dtype = get(json, "data_type", nothing)
     if dtype isa AbstractString && haskey(_V3_COMPLEX_NAMES, dtype)
@@ -468,9 +468,9 @@ correctly everywhere, but a strict check against the standard will call their
 dtype wrong.
 """
 function _to_storable(a::AbstractArray{<:AbstractString}, zarr_format)
-    zarr_format == 2 || return String.(a)
+    zarr_format == 2 || return map(String, a)
     width = isempty(a) ? 1 : maximum(length, a)
-    return Zarr.MaxLengthStrings.MaxLengthString{width, UInt32}.(a)
+    return map(Zarr.MaxLengthStrings.MaxLengthString{width, UInt32}, a)
 end
 _to_storable(a::AbstractArray, zarr_format) = a
 _to_storable(a, zarr_format) = collect(a)

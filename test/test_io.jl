@@ -89,6 +89,21 @@ end
     end
 end
 
+@testset "a zero-dimensional variable round-trips through zarr v$fmt" for fmt in (2, 3)
+    # A variable spanning no dimension extends the dataset only by dimensions
+    # it already has, so the set still conforms.
+    ps = synthetic_set(1)
+    ms = ps[1]
+    ms[:note] = DimArray(fill("calibrated by hand"), ())
+    ms[:scale] = DimArray(fill(1.5), ())
+    @test isempty(check(ps))
+    path = write(joinpath(mktempdir(), "scalar_v$fmt.ps.zarr"), ps; zarr_format = fmt)
+    for back in (read(ProcessingSet, path)[1], open(ProcessingSet, path)[1])
+        @test size(back[:note]) == () && back[:note][] == "calibrated by hand"
+        @test size(back[:scale]) == () && back[:scale][] == 1.5
+    end
+end
+
 @testset "consolidated metadata v$fmt" for fmt in (2, 3)
     ps = synthetic_set(2)
     path = joinpath(mktempdir(), "consolidated_v$fmt.ps.zarr")
