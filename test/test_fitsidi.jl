@@ -974,6 +974,34 @@ end
         @test_throws "partition must be" to_msv4(gt, "bad.ps.zarr"; partition = (:band,))
     end
 
+    @testset "digitizer levels are recorded per antenna" begin
+        mixed = synthetic_fitsidi(joinpath(dir, "digitizers.idifits"); no_levels = [2, 3, 4])
+        ps = open(ProcessingSet, to_msv4(mixed, "digitizers.ps.zarr"))
+        @test isempty(conversion_issues(ps))
+        ant = branches(ps[:digitizers_00])[:antenna]
+        @test lookup(ant[:digitizer_levels], AntennaName) == mixed.antenna_names
+        @test collect(ant[:digitizer_levels]) == [2, 3, 4]
+        @test eltype(ant[:digitizer_levels]) <: Integer
+        @test isdir(joinpath(dir, "digitizers.ps.zarr", "digitizers_00", "antenna_xds", "DIGITIZER_LEVELS"))
+
+        eight = synthetic_fitsidi(joinpath(dir, "eightlevel.idifits"); no_levels = [8, 8, 8])
+        ant = branches(open(ProcessingSet, to_msv4(eight, "eightlevel.ps.zarr"))[:eightlevel_00])[:antenna]
+        @test collect(ant[:digitizer_levels]) == [8, 8, 8]
+
+        unstated = synthetic_fitsidi(joinpath(dir, "unstated.idifits"); no_levels = nothing)
+        ps = open(ProcessingSet, to_msv4(unstated, "unstated.ps.zarr"))
+        @test isempty(conversion_issues(ps))
+        @test !haskey(branches(ps[:unstated_00])[:antenna], :digitizer_levels)
+
+        @test IDI.digitizer_levels(
+            (; data = (; ANTENNA_NO = [1, 2, 1], NO_LEVELS = [2, 8, 2]))
+        ) == Dict(1 => 2, 2 => 8)
+        @test isnothing(IDI.digitizer_levels((; data = (; ANTENNA_NO = [1, 2]))))
+        @test_throws "both 2 and 4 NO_LEVELS" IDI.digitizer_levels(
+            (; data = (; ANTENNA_NO = [1, 1], NO_LEVELS = [2, 4]))
+        )
+    end
+
     @testset "weights follow WEIGHTYP" begin
         normal = synthetic_fitsidi(joinpath(dir, "normal.idifits"); weightyp = "NORMAL")
         ms = open(ProcessingSet, to_msv4(normal, "normal.ps.zarr"))[:normal_00]
@@ -987,13 +1015,6 @@ end
         eight = synthetic_fitsidi(joinpath(dir, "eight.idifits"); no_levels = [2, 8, 4])
         ms = open(ProcessingSet, to_msv4(eight, "eight.ps.zarr"))[:eight_00]
         @test parent(ms[:weight]) ≈ correlat_weight(eight, 1, 1:3)
-
-        @test IDI.quantization_efficiencies(
-            (; data = (; ANTENNA_NO = [1, 2], NO_LEVELS = [2, 4]))
-        ) == Dict(1 => 2 / π, 2 => 0.8825)
-        @test_throws "both 2 and 4 NO_LEVELS" IDI.quantization_efficiencies(
-            (; data = (; ANTENNA_NO = [1, 1], NO_LEVELS = [2, 4]))
-        )
 
         other = synthetic_fitsidi(joinpath(dir, "other.idifits"); weightyp = "SIGMA")
         @test_throws "WEIGHTYP is \"SIGMA\"" to_msv4(other, "other.ps.zarr")

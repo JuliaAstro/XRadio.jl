@@ -32,9 +32,11 @@ Each Measurement Set carries the antennas its own baselines name and the fields
 its own rows observed, so a scan that ran on a subset of the array describes
 that subset rather than the whole. `STAXOF` has no field in MSv4's `antenna`
 dataset and is kept as the `ANTENNA_AXIS_OFFSET` extension variable, beside the
-mount coefficients [`mounts`](@ref) reads back; every other column of
-`ARRAY_GEOMETRY`, `ANTENNA` and `SOURCE` that MSv4 defines a home for is
-carried.
+mount coefficients [`mounts`](@ref) reads back. Each antenna's `NO_LEVELS` is
+kept as the integer `DIGITIZER_LEVELS` extension variable over `antenna_name`,
+whatever the count, and is absent when the file has no such column. Every other
+column of `ARRAY_GEOMETRY`, `ANTENNA` and `SOURCE` that MSv4 defines a home for
+is carried.
 
 Each spectral window's frequency coordinate records its 1-based FITS-IDI band
 as the `fitsidi_band` attribute, an extension MSv4 has no field for. It is the

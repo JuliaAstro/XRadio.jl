@@ -170,6 +170,12 @@ the fields its own rows observed, and carries a calibration or environment
 sub-dataset only where measurements cover its time span — a scan earlier than
 the first weather reading gets no `weather_xds`.
 
+Each antenna's digitizer level count, `ANTENNA`'s `NO_LEVELS`, becomes the
+integer variable `DIGITIZER_LEVELS` over `antenna_name` in `antenna_xds`, an
+extension MSv4 has no field for. It is written as the file states it, whatever
+the count, and left out when the file has no `NO_LEVELS` column. The
+quantization correction it determines is not applied to the visibilities.
+
 Units become MSv4's throughout: seconds to meters for `UVW`, degrees to
 radians, centigrade to kelvin, millibars to pascals.
 

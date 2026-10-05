@@ -129,27 +129,16 @@ function radiometer_weights(weightyp::AbstractString)
     ))
 end
 
-const _QUANTIZATION_EFFICIENCY = Dict(2 => 2 / π, 3 => 0.8098, 4 => 0.8825)
-
 """
-    quantization_efficiencies(antenna_hdu) -> Dict{Int, Float64}
+    digitizer_levels(antenna_hdu) -> Dict{Int, Int} or nothing
 
-Each antenna's digitizer efficiency `η`, keyed by `ANTENNA_NO`, from its
-`NO_LEVELS`: the fraction of the unquantized signal-to-noise ratio a
-correlation keeps, in the weak-signal limit with optimal thresholds and output
-levels (Thompson, Moran & Swenson, *Interferometry and Synthesis in Radio
-Astronomy*, ch. 8). Two, three and four levels give `2/π`, 0.8098 and 0.8825.
-A baseline's efficiency is the geometric mean of its antennas'.
-
-Any other level count throws, as does one that changes between an antenna's
-rows or a table without the column.
+Each antenna's digitizer level count, keyed by `ANTENNA_NO`, from `NO_LEVELS`,
+or `nothing` where the file omits the column. A count that changes between an
+antenna's rows throws.
 """
-function quantization_efficiencies(antenna_hdu)
+function digitizer_levels(antenna_hdu)
     data = antenna_hdu.data
-    hascol(data, :NO_LEVELS) || throw(ArgumentError(
-        "FITS-IDI ANTENNA has no NO_LEVELS column, from which the quantization " *
-            "efficiency follows"
-    ))
+    hascol(data, :NO_LEVELS) || return nothing
     levels = Dict{Int, Int}()
     for (no, n) in zip(column(data, :ANTENNA_NO), column(data, :NO_LEVELS))
         known = get!(levels, Int(no), Int(n))
@@ -158,15 +147,7 @@ function quantization_efficiencies(antenna_hdu)
                 "a digitizer that changes during the observation is not supported"
         ))
     end
-    return Dict(
-        no => get(_QUANTIZATION_EFFICIENCY, n) do
-                throw(ArgumentError(
-                    "FITS-IDI ANTENNA gives antenna $no $n NO_LEVELS; the " *
-                        "quantization efficiency is tabulated for 2, 3 and 4"
-                ))
-            end
-            for (no, n) in levels
-    )
+    return levels
 end
 
 """
@@ -1054,7 +1035,13 @@ function _antenna_dataset(s, numbers, band::Int)
         antenna_dish_diameter = s.diameters === nothing ? nothing :
             [s.diameters[a] for a in numbers],
     )
-    return XRadio.set_mounts!(xds, [s.mounts[a] for a in numbers])
+    XRadio.set_mounts!(xds, [s.mounts[a] for a in numbers])
+    isnothing(s.digitizer_levels) && return xds
+    # An extension MSv4 has no field for, stored as `DIGITIZER_LEVELS`.
+    xds[:digitizer_levels] = DimArray(
+        [s.digitizer_levels[a] for a in numbers], (dims(xds, XRadio.AntennaName),)
+    )
+    return xds
 end
 
 # The fields of one partition. FITS-IDI states one direction per source, which
@@ -1305,6 +1292,7 @@ function XRadio.fitsidi2msv4(
 
     bases = antenna_bases(an)
     receptor_angle = receptor_angles(an, layout.no_band)
+    levels = digitizer_levels(an)
     positions = antenna_positions(ag)
     mounts = antenna_mounts(ag)
     diameters = antenna_diameters(ag)
@@ -1342,7 +1330,7 @@ function XRadio.fitsidi2msv4(
     shared = (;
         products, bases, antenna_name, source_names, frames, source_of, scan_of,
         source_ra, source_dec, positions, mounts, diameters, telescope_name,
-        receptor_angles = receptor_angle, flag_ranges, freqid,
+        receptor_angles = receptor_angle, digitizer_levels = levels, flag_ranges, freqid,
         system_calibration, phase_calibration, weather, gain_curve,
         gain_curve_date = _UNKNOWN_RELEASE_DATE,
         observation_span = maximum(times) - minimum(times),

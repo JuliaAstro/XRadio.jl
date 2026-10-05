@@ -129,8 +129,8 @@ independent of the file's own `DATE`/`TIME` split.
 # Keywords
 
 Array: `antenna_names`, `positions` (3 x n, metres, geocentric), `mntsta`,
-`staxof` (3 x n, metres), `diameters`, `poltya`, `poltyb`, `no_levels`,
-`array_name`, `array_center`.
+`staxof` (3 x n, metres), `diameters`, `poltya`, `poltyb`, `no_levels`
+(`nothing` leaves out the column), `array_name`, `array_center`.
 
 Sky: `source_names`, `ra` and `dec` (degrees, one per source), `equinox`.
 
@@ -401,7 +401,7 @@ function synthetic_fitsidi(
             ANTENNA_NO = Int32.(1:nant),
             ARRAY = ones(Int32, nant),
             FREQID = ones(Int32, nant),
-            NO_LEVELS = Int32.(no_levels),
+            (isnothing(no_levels) ? (;) : (; NO_LEVELS = Int32.(no_levels)))...,
             POLTYA = collect(poltya),
             POLAA = _idi_column([zeros(Float32, nband) for _ in 1:nant]),
             POLTYB = collect(poltyb),
