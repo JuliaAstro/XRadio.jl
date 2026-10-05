@@ -11,8 +11,19 @@ Measurement Set. The `mode` keyword says what happens to a store already at
 | `"w"` | replace it | create |
 | `"a"` | write into it | create |
 
-These are xarray's `to_zarr` modes. Changing values inside a stored array, as
-xarray's `"r+"` does, is not supported.
+These are xarray's `to_zarr` modes. To change values inside a stored array,
+as xarray's `"r+"` does, open the store with `mode = "r+"` and assign into its
+layers:
+
+```julia
+ps = open(ProcessingSet, path; mode = "r+")
+ps[:track_0][:flag][Ti(1:10)] .= true
+```
+
+This writes only the chunks the assignment covers. Shapes, coordinates and
+dimensions cannot change, and in a Zarr v2 store string-valued layers refuse
+assignment. The write is not atomic, and other readers see each chunk as soon
+as it is written.
 
 ## Chunk shapes
 

@@ -104,7 +104,7 @@ end
 
     # Only v2's is read back: `Zarr.jl` returns an empty group from a v3
     # consolidated read, so a v3 store is opened node by node.
-    store = XRadio._zarr_group(path).storage
+    store = XRadio._zarr_group(path, "r").storage
     @test (store isa Zarr.ConsolidatedStore) == (fmt == 2)
 
     # Reading through it gives the same processing set as reading the nodes.
@@ -125,7 +125,7 @@ end
     write(path, ps)
     rm(joinpath(path, ".zmetadata"))
 
-    @test !(XRadio._zarr_group(path).storage isa Zarr.ConsolidatedStore)
+    @test !(XRadio._zarr_group(path, "r").storage isa Zarr.ConsolidatedStore)
     back = read(ProcessingSet, path)
     @test collect(keys(back)) == collect(keys(ps))
     @test parent(back[1][:visibility]) == parent(ps[1][:visibility])
@@ -241,6 +241,56 @@ end
     @test write(path, ps; mode = "w") == path
     @test_throws "mode must be one of \"w-\", \"w\", \"a\"" write(path, ps; mode = "r+")
     @test_throws "`replace` applies to mode \"a\"" write(path, ps; mode = "w", replace = true)
+end
+
+# Every stored file of one array that is not metadata, keyed by its path.
+function chunk_files(dir)
+    files = Dict{String, Vector{UInt8}}()
+    for (root, _, names) in walkdir(dir), name in names
+        name in (".zarray", ".zattrs", "zarr.json") && continue
+        files[relpath(joinpath(root, name), dir)] = read(joinpath(root, name))
+    end
+    return files
+end
+
+@testset "editing a store in place, zarr v$fmt" for fmt in (2, 3)
+    ps = synthetic_set(1)
+    path = joinpath(mktempdir(), "edit.ps.zarr")
+    write(path, ps; zarr_format = fmt, chunks = (; time = 1))
+    flagdir = joinpath(path, "test_00", "FLAG")
+    before = chunk_files(flagdir)
+    stored = read(ProcessingSet, path)[1][:flag]
+
+    edit = open(ProcessingSet, path; mode = "r+")
+    flipped = .!stored[Ti(2)]
+    edit[1][:flag][Ti(2)] .= flipped
+
+    back = read(ProcessingSet, path)[1][:flag]
+    @test back[Ti(2)] == flipped
+    @test back[Ti(Not(2))] == stored[Ti(Not(2))]
+    # Zarr v3 does not store a chunk holding only the fill value, so the
+    # assignment may create its chunk rather than rewrite it.
+    after = chunk_files(flagdir)
+    @test issubset(keys(before), keys(after))
+    @test count(k -> get(before, k, nothing) != after[k], keys(after)) == 1
+    @test isempty(check(read(ProcessingSet, path)))
+
+    if fmt == 2
+        @test_throws MethodError edit[1][:scan_name][1] = "other"
+    else
+        edit[1][:scan_name][1] = "other"
+        @test read(ProcessingSet, path)[1][:scan_name][1] == "other"
+    end
+    @test_throws "read-only" open(ProcessingSet, path)[1][:flag][1, 1, 1, 1] = true
+end
+
+@testset "opening modes" begin
+    path = joinpath(mktempdir(), "modes.ps.zarr")
+    write(path, synthetic_set(1))
+    @test_throws "mode must be \"r\" or \"r+\"" open(ProcessingSet, path; mode = "w")
+    @test_throws "with lazy = false nothing would reach the store" open(ProcessingSet, path; lazy = false, mode = "r+")
+    @test_throws "needs a writable Zarr group" open(ProcessingSet, Zarr.zopen(path); mode = "r+")
+    @test open(ProcessingSet, path)[1][:scan_name] isa DimArray{String}
 end
 
 @testset "scan intents" begin

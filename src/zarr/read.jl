@@ -11,7 +11,7 @@ Zarr v2 — and the two record an array's dimension names differently, so
 """
 
 """
-    open(ProcessingSet, store; lazy = true) -> ProcessingSet
+    open(ProcessingSet, store; lazy = true, mode = "r") -> ProcessingSet
 
 Open the MSv4 processing set at `store`, which may be a path or an
 already-opened Zarr group.
@@ -19,6 +19,23 @@ already-opened Zarr group.
 The arrays are left on disk and read on demand, so opening a large store costs
 only its metadata. Pass `lazy = false`, or use `read`, to bring the data into
 memory instead.
+
+`mode = "r+"` opens the stored arrays writable, as xarray's `to_zarr(mode =
+"r+", region = ...)` does: assigning into a layer writes the chunks the
+assignment covers and nothing else.
+
+```julia
+ps = open(ProcessingSet, "track.ps.zarr"; mode = "r+")
+ps[:track_0][:flag][Ti(1:10)] .= true
+```
+
+Shapes, coordinates and dimensions cannot change this way: the coordinates and
+attributes are copies in memory. A string-valued layer of a Zarr v2 store is
+read through a conversion from fixed-width strings and refuses assignment. A
+write is not atomic: an interrupted assignment leaves some of its chunks
+written, and every chunk is visible to other readers of the store as soon as it
+is written. `mode = "r+"` needs `lazy = true` and a path, or a Zarr
+group opened writable.
 
 A store carrying consolidated metadata is opened from it, which is one read
 rather than one per node. [`write`](@ref) produces one; a store without it opens
@@ -28,8 +45,12 @@ the slow way.
 ps = open(ProcessingSet, "track.ps.zarr")
 ```
 """
-function Base.open(::Type{ProcessingSet}, store; lazy::Bool = true)
-    group = _zarr_group(store)
+function Base.open(::Type{ProcessingSet}, store; lazy::Bool = true, mode::AbstractString = "r")
+    mode in ("r", "r+") || throw(ArgumentError("mode must be \"r\" or \"r+\"; got $(repr(mode))"))
+    mode == "r+" && !lazy && throw(
+        ArgumentError("mode = \"r+\" writes through lazy layers; with lazy = false nothing would reach the store")
+    )
+    group = _zarr_group(store, mode)
     type = get(group.attrs, "type", nothing)
     if type != "processing_set"
         throw(
@@ -55,12 +76,17 @@ Equivalent to `open(ProcessingSet, store; lazy = false)`.
 """
 Base.read(::Type{ProcessingSet}, store) = open(ProcessingSet, store; lazy = false)
 
-_zarr_group(g::Zarr.ZGroup) = g
+function _zarr_group(g::Zarr.ZGroup, mode)
+    mode == "r+" && !g.writeable && throw(
+        ArgumentError("mode = \"r+\" needs a writable Zarr group; `$(g.path)` was opened read-only")
+    )
+    return g
+end
 
-function _zarr_group(path::AbstractString)
+function _zarr_group(path::AbstractString, mode)
     store, subpath = Zarr.storefromstring(path, false)
     consolidated = _use_consolidated(store, subpath)
-    return Zarr.zopen(store, "r"; path = subpath, consolidated)
+    return Zarr.zopen(store, mode == "r+" ? "w" : "r"; path = subpath, consolidated)
 end
 
 # Whether this store's metadata should be read from its consolidated copy.
