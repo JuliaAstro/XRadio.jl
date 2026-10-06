@@ -26,8 +26,8 @@ An antenna dataset for the antennas `names`.
 
 `positions` is a 3 × n matrix of geocentric positions in metres; by default
 antenna `i` sits at `(1, 2, 3) · 10⁴ i` m, so no two are within a site of one
-another. `mounts` defaults to alt-azimuth, and `receptors` to `("R", "L")` for
-every antenna.
+another. `mounts` defaults to alt-azimuth, and `receptors`, every antenna's
+receptor list of any length, to `("R", "L")`.
 """
 function antenna(
         names::AbstractVector{<:AbstractString};
@@ -41,12 +41,12 @@ function antenna(
         :antenna;
         antenna_name = collect(String, names),
         cartesian_pos_label = ["x", "y", "z"],
-        receptor_label = ["pol_0", "pol_1"],
+        receptor_label = ["pol_$(r - 1)" for r in eachindex(receptors)],
         antenna_position = Matrix{Float64}(positions),
         station_name = collect(String, names),
         telescope_name = fill("SYNTHETIC", n),
-        polarization_type = [String(receptors[r]) for r in 1:2, _ in 1:n],
-        antenna_receptor_angle = zeros(2, n),
+        polarization_type = [String(r) for r in receptors, _ in 1:n],
+        antenna_receptor_angle = zeros(length(receptors), n),
         antenna_dish_diameter = fill(Float64(diameter), n),
         metadata = (; overall_telescope_name = "SYNTHETIC", relocatable_antennas = false),
         array_metadata = (;
