@@ -202,6 +202,16 @@ zero-dimensional array. After `ms[baseline(ms, ("BR", "LA"))]` the Measurement
 Set has no `baseline_id` dimension, and `ms[:baseline_antenna1_name][]` is
 `"BR"`. A one-element vector keeps the dimension: `BaselineID(At([7]))`.
 
+**Selection is by label, not position.** The Measurement Sets of a processing
+set, or of two stores, do not share baseline order, time samples or channel
+lists, so a position names different data in each where a label names the same.
+The tree accepts selectors only; to take positions, take them from the
+coordinate:
+
+```julia
+ms[Ti(At(times(ms)[1:10]))]    # the first ten integrations
+```
+
 On a single layer, indexing is DimensionalData's own and none of these rules
 apply:
 
@@ -285,6 +295,7 @@ The reference is the Python package
 | Change each Measurement Set | no method | `transform(f, ps)` |
 | Combine processing sets | no method | `merge(ps, others...)` |
 | Cut inside a Measurement Set | `ms_xdt.xr_ms.sel(**indexers)`, xarray's `sel` on the correlated dataset | `ms[dim = selector, ...]` on the whole tree |
+| Cut by position | `ms_xdt.isel(**indexers)`, from `xarray.DataTree` | none; select by label (see [Indexing](@ref)) |
 | Unknown dimension in a cut | error from xarray | `ArgumentError` listing the dimensions |
 | Data group in a cut | `sel(data_group_name=...)` drops the other groups' variables | no counterpart |
 | Name-based selectors | none; select on the coordinates | `baseline`, `baselines`, `scan`, `field` |
