@@ -470,6 +470,14 @@ end
     @test spectralwindow(ms) == "spw_0"
     @test length(frequencies(ms)) == 5
 
+    @test attributes(ms, :frequency)[:spectral_window_name] == "spw_0"
+    @test attributes(ms, :time)[:integration_time].value == 10.0
+    @test attributes(ms, :antenna, :antenna_position)[:frame] == "ITRS"
+    @test attributes(ms, :visibility)[:units] == "Jy"
+    @test isempty(attributes(ms, :no_such_name))
+    @test isempty(attributes(ms, :no_such_subdataset, :antenna_position))
+    @test isempty(attributes(ms, :antenna, :no_such_name))
+
     # The data group resolves which array is meant, rather than the name being
     # assumed.
     @test correlated(ms) === ms[:visibility]
@@ -561,6 +569,22 @@ end
         )
         @test isempty(system_temperatures(tantonly))
     end
+end
+
+@testset "accessors on a Measurement Set without sub-datasets" begin
+    ms = synthetic_set(1)[1]
+    foreach(k -> delete!(branches(ms), k), collect(keys(branches(ms))))
+    shape(r) = (eltype(r), map(XRadio.msv4name, dims(r)), size(r))
+    @test shape(mounts(ms)) == (typeof(MountAltAz()), (:antenna_name,), (0,))
+    @test shape(antenna_positions(ms)) == (Float64, (:cartesian_pos_label, :antenna_name), (3, 0))
+    @test shape(receptor_angles(ms)) == (Float64, (:receptor_label, :antenna_name), (0, 0))
+    @test shape(polarization_types(ms)) == (String, (:receptor_label, :antenna_name), (0, 0))
+    curves = gaincurves(ms)
+    @test shape(curves[:curve]) == (GainPolynomial{Vector{Float64}}, (:antenna_name, :receptor_label), (0, 0))
+    @test shape(curves[:sensitivity]) == (Float64, (:antenna_name, :receptor_label), (0, 0))
+    tsys = system_temperatures(ms)
+    @test shape(tsys) == (Float64, (:receptor_label, :time_system_cal, :antenna_name), (0, 0, 0))
+    @test metadata(tsys)[:units] == "K"
 end
 
 

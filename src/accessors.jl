@@ -197,8 +197,7 @@ of zero.
 A Measurement Set without an antenna sub-dataset gives an empty vector.
 """
 function mounts(ms::MeasurementSet)
-    haskey(branches(ms), :antenna) ||
-        return DimArray(typeof(MountAltAz())[], (dimtype(:antenna_name)(String[]),))
+    haskey(branches(ms), :antenna) || return _absent(typeof(MountAltAz()), :antenna_name => String[])
     return mounts(branches(ms)[:antenna])
 end
 
@@ -276,10 +275,10 @@ than converted. A Measurement Set without an antenna sub-dataset gives an empty
 matrix.
 """
 function antenna_positions(ms::MeasurementSet)
-    X, A = dimtype(:cartesian_pos_label), dimtype(:antenna_name)
-    haskey(branches(ms), :antenna) ||
-        return DimArray(zeros(3, 0), (X(Categorical(["x", "y", "z"])), A(String[])))
-    xds = branches(ms)[:antenna]
+    haskey(branches(ms), :antenna) || return _absent(
+        Float64, :cartesian_pos_label => Categorical(["x", "y", "z"]), :antenna_name => String[]
+    )
+    X, xds = dimtype(:cartesian_pos_label), branches(ms)[:antenna]
     dims(xds[:antenna_position], X) === nothing && throw(ArgumentError(
         "this Measurement Set states its antenna positions in ellipsoid " *
             "coordinates, and XRadio does not convert them to Cartesian"
@@ -297,12 +296,11 @@ MSv4 makes `ANTENNA_RECEPTOR_ANGLE` optional; a store without it gives `NaN`,
 which says the angles are unknown rather than zero.
 """
 function receptor_angles(ms::MeasurementSet)
-    R, A = dimtype(:receptor_label), dimtype(:antenna_name)
     haskey(branches(ms), :antenna) ||
-        return DimArray(zeros(0, 0), (R(String[]), A(String[])))
+        return _absent(Float64, :receptor_label => String[], :antenna_name => String[])
     xds = branches(ms)[:antenna]
     haskey(xds, :antenna_receptor_angle) && return xds[:antenna_receptor_angle]
-    receptor, antenna = dims(xds, R), _antenna_dim(xds)
+    receptor, antenna = dims(xds, dimtype(:receptor_label)), _antenna_dim(xds)
     receptor === nothing && throw(ArgumentError(
         "this antenna dataset has no `receptor_label` dimension"
     ))
@@ -316,9 +314,8 @@ The polarization each receptor responds to, such as `"R"` or `"X"`, over
 `receptor_label` and `antenna_name`.
 """
 function polarization_types(ms::MeasurementSet)
-    R, A = dimtype(:receptor_label), dimtype(:antenna_name)
     haskey(branches(ms), :antenna) ||
-        return DimArray(Matrix{String}(undef, 0, 0), (R(String[]), A(String[])))
+        return _absent(String, :receptor_label => String[], :antenna_name => String[])
     return branches(ms)[:antenna][:polarization_type]
 end
 
@@ -971,11 +968,10 @@ function gaincurves(xds::Dataset)
 end
 
 function _no_gain_curves()
-    over = (dimtype(:antenna_name)(String[]), dimtype(:receptor_label)(String[]))
-    empty = Array{GainPolynomial{Vector{Float64}}}(undef, 0, 0)
+    over = (:antenna_name => String[], :receptor_label => String[])
     return DimStack((;
-        curve = DimArray(empty, over),
-        sensitivity = DimArray(fill(NaN, 0, 0), over),
+        curve = _absent(GainPolynomial{Vector{Float64}}, over...),
+        sensitivity = _absent(Float64, over...),
     ))
 end
 
@@ -1011,14 +1007,10 @@ function system_temperatures(xds::Dataset)
     return xds[:tsys]
 end
 
-function _no_system_temperatures()
-    over = (
-        dimtype(:receptor_label)(String[]),
-        dimtype(:time_system_cal)(Float64[]),
-        dimtype(:antenna_name)(String[]),
-    )
-    return DimArray(fill(NaN, 0, 0, 0), over; metadata = Dict{Symbol, Any}(:units => "K"))
-end
+_no_system_temperatures() = _absent(
+    Float64, :receptor_label => String[], :time_system_cal => Float64[], :antenna_name => String[];
+    metadata = Dict{Symbol, Any}(:units => "K"),
+)
 
 """
     spectralwindow(ms) -> String
@@ -1026,10 +1018,41 @@ end
 The name of the spectral window `ms` covers. MSv4 replaces MSv2's numeric data
 description index with this name, and one Measurement Set covers exactly one.
 """
-function spectralwindow(ms::MeasurementSet)
-    d = dims(ms, dimtype(:frequency))
-    d === nothing && return ""
-    return String(get(metadata(lookup(d)), :spectral_window_name, ""))
+spectralwindow(ms::MeasurementSet) =
+    String(get(attributes(ms, :frequency), :spectral_window_name, ""))
+
+"""
+    attributes(tree, name) -> AbstractDict{Symbol}
+    attributes(ms, subdataset, name) -> AbstractDict{Symbol}
+
+The attributes of the coordinate or variable `name` of `tree`, a Measurement
+Set or sub-dataset, or of `name` in the sub-dataset `subdataset` of `ms`: what
+xarray gives as `.attrs`. An index coordinate's attributes are the metadata of
+its lookup.
+
+The result is the stored `Dict` itself, as `.attrs` is, so changing it changes
+the tree; a quantity in it is a [`Measure`](@ref). A `name` the tree does not
+hold, a sub-dataset `ms` does not carry, or a coordinate stored without
+attributes gives an empty `Dict`.
+
+```julia
+attributes(ms, :frequency)[:spectral_window_name]
+attributes(ms, :time)[:integration_time].value   # seconds
+```
+"""
+function attributes(tree::Union{MeasurementSet, Dataset}, name::Symbol)
+    d = dims(tree, dimtype(name))
+    stored = if !isnothing(d)
+        metadata(lookup(d))
+    elseif haskey(tree, name)
+        metadata(tree[name])
+    end
+    return stored isa AbstractDict ? stored : Dict{Symbol, Any}()
+end
+
+function attributes(ms::MeasurementSet, subdataset::Symbol, name::Symbol)
+    haskey(branches(ms), subdataset) || return Dict{Symbol, Any}()
+    return attributes(branches(ms)[subdataset], name)
 end
 
 # The reference's summary row, in its column order and under its names, less
@@ -1187,6 +1210,15 @@ _comparable(T::Type, want) =
 _covers(want::Intent, have::Intent) =
     want.intent == have.intent &&
     (want.subintent === nothing || want.subintent == have.subintent)
+
+# What an accessor gives for a sub-dataset the Measurement Set does not carry:
+# an empty array of element type `T` over the MSv4 dimensions named, each
+# labelled by the values or lookup paired with it.
+_absent(T::Type, labels::Pair{Symbol}...; metadata = DimensionalData.NoMetadata()) = DimArray(
+    Array{T}(undef, map(length ∘ last, labels)...),
+    map(((name, values),) -> dimtype(name)(values), labels);
+    metadata,
+)
 
 # The values of an index coordinate, or an empty vector when the tree has no
 # such dimension. A present dimension supplies its own element type and an
