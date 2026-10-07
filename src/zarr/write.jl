@@ -58,7 +58,8 @@ function Base.write(
         path::AbstractString, ps::ProcessingSet;
         mode::AbstractString = "w-", replace::Bool = false, kw...
     )
-    return _write_members(path, pairs(ps), metadata(ps); mode, replace, kw...)
+    meta = delete!(copy(metadata(ps)), UNREAD_ROOT_ARRAYS)
+    return _write_members(path, pairs(ps), meta; mode, replace, kw...)
 end
 
 """

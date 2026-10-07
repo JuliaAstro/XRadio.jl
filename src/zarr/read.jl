@@ -37,6 +37,11 @@ written, and every chunk is visible to other readers of the store as soon as it
 is written. `mode = "r+"` needs `lazy = true` and a path, or a Zarr
 group opened writable.
 
+The root's children must be Measurement Sets. An empty child group is
+skipped, and a child holding anything whose `type` is not that of correlated
+data is an error. Arrays on the root itself belong to no MSv4 dataset: they
+are not read, `open` warns, and [`check`](@ref) reports them.
+
 A store carrying consolidated metadata is opened from it, which is one read
 rather than one per node. [`write`](@ref) produces one; a store without it opens
 the slow way.
@@ -60,12 +65,33 @@ function Base.open(::Type{ProcessingSet}, store; lazy::Bool = true, mode::Abstra
             )
         )
     end
+    meta = _attributes(group.attrs)
+    unread = sort!(collect(keys(group.arrays)))
+    if !isempty(unread)
+        @warn "`$store` holds arrays on its root, which no MSv4 dataset describes; \
+               they are not read: $(join(unread, ", "))"
+        meta[UNREAD_ROOT_ARRAYS] = unread
+    end
     sets = OrderedDict{Symbol, MeasurementSet}()
     for name in sort!(collect(keys(group.groups)))
-        sets[Symbol(name)] = _read_measurement_set(group.groups[name]; lazy)
+        child = group.groups[name]
+        isempty(child.arrays) && isempty(child.groups) && continue
+        childtype = get(child.attrs, "type", nothing)
+        childtype in CORRELATED_TYPES || throw(
+            ArgumentError(
+                "`$store` holds `$name` at its root with `type` $(repr(childtype)); \
+                 a processing set holds Measurement Sets, whose `type` is one of \
+                 $(join(sort!(collect(CORRELATED_TYPES)), ", "))."
+            )
+        )
+        sets[Symbol(name)] = _read_measurement_set(child; lazy)
     end
-    return ProcessingSet(sets, _attributes(group.attrs))
+    return ProcessingSet(sets, meta)
 end
+
+# The metadata key under which `open` records root arrays it did not read, so
+# `check` can report them. `write` leaves it out: it describes the source store.
+const UNREAD_ROOT_ARRAYS = :unread_root_arrays
 
 """
     read(ProcessingSet, store) -> ProcessingSet

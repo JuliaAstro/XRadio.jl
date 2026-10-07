@@ -248,6 +248,49 @@ end
     @test_throws "not an MSv4 processing set" open(ProcessingSet, path)
 end
 
+@testset "what the root of a processing set may hold" begin
+    ps = synthetic_set(1)
+    function edited(edit, tag)
+        path = joinpath(mktempdir(), "$tag.ps.zarr")
+        write(path, ps)
+        rm(joinpath(path, ".zmetadata"))
+        edit(Zarr.zopen(path, "w"))
+        return path
+    end
+
+    @testset "an empty child group is skipped" begin
+        path = edited(g -> Zarr.zgroup(g, "notes"), "empty_child")
+        back = open(ProcessingSet, path)
+        @test collect(keys(back)) == collect(keys(ps))
+        @test isempty(check(back))
+    end
+
+    @testset "a child that is not a Measurement Set is refused" begin
+        path = edited("other_child") do g
+            child = Zarr.zgroup(g, "image"; attrs = Dict("type" => "image_dataset"))
+            sky = Zarr.zcreate(Float64, child, "SKY", 4; attrs = Dict("_ARRAY_DIMENSIONS" => ["l"]))
+            sky[:] = zeros(4)
+        end
+        @test_throws "holds `image` at its root with `type` \"image_dataset\"" open(ProcessingSet, path)
+    end
+
+    @testset "root arrays are reported, not read" begin
+        path = edited("root_array") do g
+            a = Zarr.zcreate(Float64, g, "ROOTVAR", 3; attrs = Dict("_ARRAY_DIMENSIONS" => ["k"]))
+            a[:] = zeros(3)
+        end
+        back = @test_logs (:warn, r"arrays on its root.*not read: ROOTVAR") open(ProcessingSet, path)
+        @test collect(keys(back)) == collect(keys(ps))
+        @test only(check(back)).message ==
+            "the store holds arrays on its root, which no MSv4 dataset describes: ROOTVAR"
+
+        # The record describes the store it was read from, not a set written from it.
+        again = write(joinpath(mktempdir(), "rewritten.ps.zarr"), back)
+        @test !haskey(Zarr.zopen(again).attrs, "unread_root_arrays")
+        @test isempty(check(open(ProcessingSet, again)))
+    end
+end
+
 @testset "writing will not clobber" begin
     ps = synthetic_set(1)
     path = joinpath(mktempdir(), "once.ps.zarr")

@@ -90,6 +90,11 @@ function check(ps::ProcessingSet; strict::Bool = true, schemas = ())
             SchemaIssue("/", "`type` attribute is $(repr(get(metadata(ps), :type, nothing))), expected \"processing_set\"")
         )
     end
+    unread = get(metadata(ps), UNREAD_ROOT_ARRAYS, nothing)
+    isnothing(unread) || push!(
+        issues,
+        SchemaIssue("/", "the store holds arrays on its root, which no MSv4 dataset describes: $(join(unread, ", "))")
+    )
     for (name, ms) in pairs(ps)
         append!(issues, _check_tree(ms, checker, string(name), Set{Symbol}()))
     end
