@@ -391,9 +391,6 @@ export_schema_json_file(s.VisibilityXds, "test/reference/VisibilityXds.json")
   path to that and no plan for one.
 - **Images.** `xradio` also defines an image data model; this package covers
   the Measurement Set only.
-- **Attributes nested inside attributes.** `check` validates an array's own
-  attributes but does not descend into the labelled arrays some of them hold,
-  such as the frequency axis's `reference_frequency`.
 
 ## Status against the standard
 
