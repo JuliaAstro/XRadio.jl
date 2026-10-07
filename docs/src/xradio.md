@@ -81,7 +81,7 @@ data-group names are `Symbol`s (`:base`) rather than strings.
 | `ms_xdt.time.values` | [`times`](@ref)`(ms)` |
 | `ms_xdt.polarization.values` | [`polarizations`](@ref)`(ms)` |
 | `ms_xdt.frequency.attrs["spectral_window_name"]` | [`spectralwindow`](@ref)`(ms)` |
-| `ms_xdt.time.attrs`, `ms_xdt.antenna_xds.ANTENNA_POSITION.attrs` | [`attributes`](@ref)`(ms, :time)`, `attributes(ms, :antenna, :antenna_position)` |
+| `ms_xdt.time.attrs`, `ms_xdt.antenna_xds.ANTENNA_POSITION.attrs` | `metadata(dims(ms, Ti))`, `metadata(ms.antenna[:antenna_position])` |
 | `ms_xdt.antenna_xds.antenna_name.values` | [`antennas`](@ref)`(ms)` |
 | `ms_xdt.antenna_xds` | `ms.antenna` |
 | `ms_xdt.xr_ms.get_field_and_source_xds("base")` | [`field_and_source`](@ref)`(ms, :base)` |

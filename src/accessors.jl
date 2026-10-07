@@ -1018,41 +1018,10 @@ _no_system_temperatures() = _absent(
 The name of the spectral window `ms` covers. MSv4 replaces MSv2's numeric data
 description index with this name, and one Measurement Set covers exactly one.
 """
-spectralwindow(ms::MeasurementSet) =
-    String(get(attributes(ms, :frequency), :spectral_window_name, ""))
-
-"""
-    attributes(tree, name) -> AbstractDict{Symbol}
-    attributes(ms, subdataset, name) -> AbstractDict{Symbol}
-
-The attributes of the coordinate or variable `name` of `tree`, a Measurement
-Set or sub-dataset, or of `name` in the sub-dataset `subdataset` of `ms`: what
-xarray gives as `.attrs`. An index coordinate's attributes are the metadata of
-its lookup.
-
-The result is the stored `Dict` itself, as `.attrs` is, so changing it changes
-the tree; a quantity in it is a [`Measure`](@ref). A `name` the tree does not
-hold, a sub-dataset `ms` does not carry, or a coordinate stored without
-attributes gives an empty `Dict`.
-
-```julia
-attributes(ms, :frequency)[:spectral_window_name]
-attributes(ms, :time)[:integration_time].value   # seconds
-```
-"""
-function attributes(tree::Union{MeasurementSet, Dataset}, name::Symbol)
-    d = dims(tree, dimtype(name))
-    stored = if !isnothing(d)
-        metadata(lookup(d))
-    elseif haskey(tree, name)
-        metadata(tree[name])
-    end
-    return stored isa AbstractDict ? stored : Dict{Symbol, Any}()
-end
-
-function attributes(ms::MeasurementSet, subdataset::Symbol, name::Symbol)
-    haskey(branches(ms), subdataset) || return Dict{Symbol, Any}()
-    return attributes(branches(ms)[subdataset], name)
+function spectralwindow(ms::MeasurementSet)
+    d = dims(ms, dimtype(:frequency))
+    isnothing(d) && return ""
+    return String(get(metadata(d), :spectral_window_name, ""))
 end
 
 # The reference's summary row, in its column order and under its names, less

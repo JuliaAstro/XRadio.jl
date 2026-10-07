@@ -470,14 +470,6 @@ end
     @test spectralwindow(ms) == "spw_0"
     @test length(frequencies(ms)) == 5
 
-    @test attributes(ms, :frequency)[:spectral_window_name] == "spw_0"
-    @test attributes(ms, :time)[:integration_time].value == 10.0
-    @test attributes(ms, :antenna, :antenna_position)[:frame] == "ITRS"
-    @test attributes(ms, :visibility)[:units] == "Jy"
-    @test isempty(attributes(ms, :no_such_name))
-    @test isempty(attributes(ms, :no_such_subdataset, :antenna_position))
-    @test isempty(attributes(ms, :antenna, :no_such_name))
-
     # The data group resolves which array is meant, rather than the name being
     # assumed.
     @test correlated(ms) === ms[:visibility]
