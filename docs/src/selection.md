@@ -205,11 +205,11 @@ Set has no `baseline_id` dimension, and `ms[:baseline_antenna1_name][]` is
 **Selection is by label, not position.** The Measurement Sets of a processing
 set, or of two stores, do not share baseline order, time samples or channel
 lists, so a position names different data in each where a label names the same.
-The tree accepts selectors only; to take positions, take them from the
-coordinate:
+The tree accepts selectors only. A time range is a selection by value, and
+picks the same stretch of time in every Measurement Set it is applied to:
 
 ```julia
-ms[Ti(At(times(ms)[1:10]))]    # the first ten integrations
+ms[Ti(t0 .. t0 + 300)]    # the five minutes from t0, both ends included
 ```
 
 On a single layer, indexing is DimensionalData's own and none of these rules
