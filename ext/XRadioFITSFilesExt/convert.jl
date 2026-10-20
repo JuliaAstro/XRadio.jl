@@ -1419,6 +1419,14 @@ end
 _autocorrelation(vis, flag, q, c, b, k) =
     (q == 0 || b == 0 || flag[q, c, b, k]) ? real(eltype(vis))(NaN) : abs(vis[q, c, b, k])
 
+# A baseline's code with the lower antenna number first.
+function _ordered_code(code)
+    a1, a2 = baseline_antennas(code)
+    return 256 * min(a1, a2) + max(a1, a2)
+end
+
+_reversed(code) = >(baseline_antennas(code)...)
+
 # One MSv4: the rows of `range` for one band, regridded onto the dense grid
 # their distinct times and baselines imply.
 function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {F}
@@ -1427,10 +1435,20 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
     npol, nchan = layout.no_stkd, layout.no_chan
 
     grid_times = sort!(unique(times[range]))
-    codes = sort!(unique(rows.baseline[range]))
+    codes = sort!(unique(_ordered_code(rows.baseline[r]) for r in range))
     ntime, nbase = length(grid_times), length(codes)
     time_of = Dict(t => k for (k, t) in enumerate(grid_times))
     base_of = Dict(c => b for (b, c) in enumerate(codes))
+    any_reversed = any(r -> _reversed(rows.baseline[r]), range)
+    swapped = map(s.products) do product
+        q = findfirst(==(reverse(product)), s.products)
+        isnothing(q) && any_reversed && throw(ArgumentError(
+            "a baseline is stored in both antenna orders, and its $product " *
+                "products have no $(reverse(product)) to swap with"
+        ))
+        something(q, 0)
+    end
+    written = falses(nbase, ntime)
 
     # MSv4 states dimensions slowest-varying first — (time, baseline_id,
     # frequency, polarization) — and a Julia array runs the other way.
@@ -1456,9 +1474,15 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
 
     for (i, r) in enumerate(range)
         k = time_of[times[r]]
-        b = base_of[rows.baseline[r]]
+        b = base_of[_ordered_code(rows.baseline[r])]
+        reversed = _reversed(rows.baseline[r])
+        written[b, k] && throw(ArgumentError(
+            "UV_DATA row $r writes baseline $(join(baseline_antennas(rows.baseline[r]), "-")) " *
+                "at a time another row already wrote"
+        ))
+        written[b, k] = true
         for axis in 1:3
-            uvw[axis, b, k] = rows.uvw[r, axis] * _C_LIGHT
+            uvw[axis, b, k] = (reversed ? -1 : 1) * rows.uvw[r, axis] * _C_LIGHT
         end
         field_name[k] = s.source_names[s.source_of[Int(rows.source_id[r])]]
         scan_name[k] = s.scan_of[r]
@@ -1475,11 +1499,13 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
             # 114r §2.1) and MSv4, following casacore, stores the other one
             # (casacore `FitsIDItoMS.cc`: "FITS-IDI convention is conjugate of
             # AIPS and CASA convention"). `UVW` and the baseline antenna order
-            # are shared by both and are carried across untouched.
-            vis[p, c, b, k] = C(re * visnorm, -im * visnorm)
+            # are shared by both and are carried across untouched. A reversed
+            # row is the conjugate of its partner order, which cancels this one.
+            q = reversed ? swapped[p] : p
+            vis[q, c, b, k] = C(re * visnorm, (reversed ? im : -im) * visnorm)
             good = w > 0 && isfinite(re) && isfinite(im)
-            weight[p, c, b, k] = good ? w * scale : zero(F)
-            flag[p, c, b, k] = !good
+            weight[q, c, b, k] = good ? w * scale : zero(F)
+            flag[q, c, b, k] = !good
         end
     end
 

@@ -929,6 +929,45 @@ end
         @test count(ms[:flag]) == size(ms[:flag], 1) * size(ms[:flag], 2)
     end
 
+    @testset "a baseline stored in reverse order is read in one order" begin
+        ref = synthetic_fitsidi(joinpath(dir, "forward.idifits"))
+        # AA–CC written as CC–AA: the conjugate, cross hands swapped (the disk
+        # order is RR, LL, RL, LR), UVW negated.
+        bl = findfirst(==((1, 3)), ref.baselines)
+        crossed = [1, 2, 4, 3]
+        rev = synthetic_fitsidi(
+            joinpath(dir, "reversed.idifits");
+            baselines = replace(ref.baselines, (1, 3) => (3, 1)),
+            visibility = (s, c, band, b, k) -> b == bl ?
+                conj(synthetic_visibility_value(crossed[s], c, band, b, k)) :
+                synthetic_visibility_value(s, c, band, b, k),
+            weight = (s, band, b, k) -> synthetic_weight_value(b == bl ? crossed[s] : s, band, b, k),
+            uvw = (axis, b, k) -> (b == bl ? -1 : 1) * synthetic_uvw_value(axis, b, k),
+        )
+        expected = open(ProcessingSet, to_msv4(ref, "forward.ps.zarr"))
+        got = open(ProcessingSet, to_msv4(rev, "reversed.ps.zarr"))
+        @test length(got) == length(expected)
+        for (m, n) in zip(values(expected), values(got))
+            @test collect(n[:baseline_antenna1_name]) == collect(m[:baseline_antenna1_name])
+            @test collect(n[:baseline_antenna2_name]) == collect(m[:baseline_antenna2_name])
+            @test parent(n[:visibility]) == parent(m[:visibility])
+            @test parent(n[:weight]) ≈ parent(m[:weight])
+            @test parent(n[:flag]) == parent(m[:flag])
+            @test parent(n[:uvw]) == parent(m[:uvw])
+        end
+
+        nocross = synthetic_fitsidi(
+            joinpath(dir, "nocross.idifits"); no_stkd = 3,
+            baselines = replace(ref.baselines, (1, 3) => (3, 1)),
+        )
+        @test_throws "its PQ products have no QP to swap with" to_msv4(nocross, "nocross.ps.zarr")
+
+        both = synthetic_fitsidi(
+            joinpath(dir, "both_orders.idifits"); baselines = [(1, 1), (1, 2), (2, 1), (2, 2)]
+        )
+        @test_throws "at a time another row already wrote" to_msv4(both, "both_orders.ps.zarr")
+    end
+
     @testset "a heterogeneous array keeps its per-baseline polarizations" begin
         gt = synthetic_fitsidi(
             joinpath(dir, "mixed.idifits");

@@ -72,6 +72,13 @@ negative of every phase, delay and rate the standard's consumers expect. `UVW`
 and the antenna order of a baseline mean the same thing in both formats and are
 carried across untouched; the conjugation is the whole of the difference.
 
+Each baseline is stored in one order, the lower antenna number first. A row
+whose `BASELINE` names the higher one first is conjugated relative to its
+partner order, its `UVW` negated and its cross hands swapped (`RL` with `LR`),
+so it lands on the same baseline as rows written the other way. A file holding
+such a row whose cross hand has no partner product is refused, as is a file
+writing one baseline twice at one time.
+
 Four things these tables carry have no MSv4 field and are dropped:
 `PHASE-CAL`'s `PC_RATE` and `STATE`, `WEATHER`'s `PRECIPITATION`, and any
 `GAIN_CURVE` curve that is not a polynomial in elevation or in zenith angle —
