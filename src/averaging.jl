@@ -25,12 +25,11 @@ of those that contribute and its weight their sum; where none does it is `NaN`,
 of weight zero and flagged. Averaging time then channels gives the same data as
 averaging both at once.
 
-Over time, `uvw` is averaged per baseline, weighted by the contributing weight
-it carries (equally, where that is zero). The time coordinate is the mid-point
-of the time each label spans, from its first sample's start to its last
-sample's end, and the `integration_time` of the result is that span, so the
-coordinate does not depend on the data's weights or flags. One Measurement Set
-states one integration time, so labels spanning different lengths of time are
+Over time, `uvw` is the mean of each baseline's finite values under a label,
+and the time coordinate is the mid-point of the time each label spans, from its
+first sample's start to its last sample's end; the `integration_time` of the
+result is that span. Neither depends on the data's weights or flags. One
+Measurement Set states one integration time, so labels spanning different lengths of time are
 an error: average the groups of `groupby(ps, ByScan())` instead, or choose
 labels of equal length.
 
@@ -119,7 +118,7 @@ function _average(ms::MeasurementSet, by, ::Val{:time})
     if haskey(datagroup(ms, :base), :uvw)
         uvw_key = _group_layer(ms, :base, :uvw)
         U = ms[uvw_key]
-        u = _label_mean(parent(U), _aligned_weights(weights, U), dimnum(U, Ti), members)
+        u = _finite_label_mean(parent(U), dimnum(U, Ti), members)
         reduced[uvw_key] = (U, u)
     end
     epochs, time_attrs = _averaged_epochs(ms, t, members, labels(split))
@@ -301,33 +300,16 @@ end
 _nan(::Type{T}) where {T <: Complex} = T(NaN, NaN)
 _nan(::Type{T}) where {T} = T(NaN)
 
-# The contributing weights summed over the dimensions `A` does not span, laid
-# out to broadcast against `A`'s data.
-function _aligned_weights(weights, A)
-    shared = DimensionalData.commondims(A, weights)
-    summed = otherdims(weights, shared)
-    s = isempty(summed) ? weights : dropdims(sum(weights; dims = summed); dims = summed)
-    s = permutedims(s, dims(s, shared))
-    return reshape(parent(s), map(d -> hasdim(s, d) ? length(d) : 1, dims(A)))
-end
-
-# Σ wᵢaᵢ / Σ wᵢ along `tdim` over each label's samples; the equally weighted
-# mean where every wᵢ is zero. A sample of zero weight adds nothing, even where
-# its value is not finite.
-function _label_mean(a, w, tdim::Int, members)
+# The mean of each label's finite samples along `tdim`; `NaN` where none is.
+function _finite_label_mean(a, tdim::Int, members)
     out = similar(a, _resized(size(a), tdim, length(members)))
     for (l, p) in pairs(members)
         al = selectdim(a, tdim, p)
-        wl = selectdim(w, tdim, p)
-        num = sum(_weighted.(al, wl); dims = tdim)
-        den = sum(wl; dims = tdim)
-        empty = sum(al; dims = tdim) ./ length(p)
-        selectdim(out, tdim, l:l) .= ifelse.(iszero.(den), empty, num ./ den)
+        total = sum(x -> isfinite(x) ? x : zero(x), al; dims = tdim)
+        selectdim(out, tdim, l:l) .= total ./ sum(isfinite, al; dims = tdim)
     end
     return out
 end
-
-_weighted(a, w) = iszero(w) ? zero(a * w) : a * w
 
 # A coordinate such as `scan_name` names something that does not change within
 # an averaged sample, so each label must see one value of it.

@@ -61,10 +61,8 @@ using XRadio: Testing, subdataset
     end
 
     @testset "uvw, epochs and integration time" begin
-        # Weighted per baseline and time by the weight contributing over every
-        # polarization and channel: 31 at the first sample, 34 at the second.
-        @test out[:uvw][BaselineID(At(0)), Ti(1)] ≈ (31 .* [1, 2, 3] .+ 34 .* [4, 5, 6]) ./ 65
-        @test out[:uvw][BaselineID(At(0)), Ti(2)] ≈ [3, 3, 3]
+        @test out[:uvw][BaselineID(At(0)), Ti(1)] ≈ [2.5, 3.5, 4.5]
+        @test out[:uvw][BaselineID(At(0)), Ti(2)] ≈ [2, 2, 2]
         @test all(iszero, out[:uvw][BaselineID(At(1))])
         # The mid-points of the spans, whatever the weights.
         @test times(out) ≈ [t0 + 5, t0 + 105]
@@ -93,8 +91,12 @@ using XRadio: Testing, subdataset
         @test times(average(m, _ -> [1, 2, 1, 2])) ≈ [t0 + 10, t0 + 20]
     end
 
-    @testset "epochs do not depend on weights or flags" begin
-        m = copy(Testing.measurement_set(; times = t0 .+ (0:10:30)))
+    @testset "epochs and uvw do not depend on weights or flags" begin
+        plain = copy(Testing.measurement_set(; times = t0 .+ (0:10:30)))
+        U = copy(plain[:uvw])
+        U .= reshape(1:length(U), size(U))
+        plain[:uvw] = U
+        m = copy(plain)
         W = copy(m[:weight])
         view(W, Ti(1)) .= 0
         view(W, Ti(4)) .= 5
@@ -102,8 +104,23 @@ using XRadio: Testing, subdataset
         view(F, Ti(2)) .= true
         m[:weight] = W
         m[:flag] = F
-        plain = Testing.measurement_set(; times = t0 .+ (0:10:30))
         @test times(average(m, _ -> :all)) == times(average(plain, _ -> :all))
+        @test isequal(average(m, _ -> :all)[:uvw], average(plain, _ -> :all)[:uvw])
+    end
+
+    @testset "uvw skips samples that are not finite" begin
+        m = copy(Testing.measurement_set(; times = t0 .+ (0:10:30)))
+        U = copy(m[:uvw])
+        U[BaselineID(At(0)), Ti(1)] = [1, 2, 3]
+        U[BaselineID(At(0)), Ti(2)] = [NaN, NaN, NaN]
+        U[BaselineID(At(1)), Ti(1)] = [1, 2, 3]
+        U[BaselineID(At(1)), Ti(2)] = [3, 4, 5]
+        U[BaselineID(At(1)), Ti(3:4)] .= NaN
+        m[:uvw] = U
+        u = average(m, _ -> [1, 1, 2, 2])[:uvw]
+        @test u[BaselineID(At(0)), Ti(1)] == [1, 2, 3]
+        @test u[BaselineID(At(1)), Ti(1)] ≈ [2, 3, 4]
+        @test all(isnan, u[BaselineID(At(1)), Ti(2)])
     end
 
     @testset "a label for the whole Measurement Set" begin
