@@ -25,20 +25,21 @@ of those that contribute and its weight their sum; where none does it is `NaN`,
 of weight zero and flagged. Averaging time then channels gives the same data as
 averaging both at once.
 
-Over time, `uvw` is averaged per baseline, and the time coordinate per label,
-weighted by the contributing weight they carry (equally, where that is zero).
-The `integration_time` of the result is the time each label spans, from its
-first sample's start to its last sample's end. One Measurement Set states one
-integration time, so labels spanning different lengths of time are an error:
-average the groups of `groupby(ps, ByScan())` instead, or choose labels of equal
-length.
+Over time, `uvw` is averaged per baseline, weighted by the contributing weight
+it carries (equally, where that is zero). The time coordinate is the mid-point
+of the time each label spans, from its first sample's start to its last
+sample's end, and the `integration_time` of the result is that span, so the
+coordinate does not depend on the data's weights or flags. One Measurement Set
+states one integration time, so labels spanning different lengths of time are
+an error: average the groups of `groupby(ps, ByScan())` instead, or choose
+labels of equal length.
 
 Over channels, an averaged channel's frequency is the mean of its channels'
 frequencies and its `channel_width` their summed widths. The channels under a
 label need not be adjacent. One Measurement Set states one channel width, so
 labels gathering different numbers of channels are an error.
 
-Two labels averaging to the same time or frequency are an error. A coordinate
+Two labels averaging to the same frequency are an error. A coordinate
 that is not numeric, such as `scan_name` or `field_name`, must hold one value
 under each label. Any other variable stated along the averaged axis is an
 error, as is more than one data group: remove them first. Sub-datasets sampled
@@ -121,7 +122,7 @@ function _average(ms::MeasurementSet, by, ::Val{:time})
         u = _label_mean(parent(U), _aligned_weights(weights, U), dimnum(U, Ti), members)
         reduced[uvw_key] = (U, u)
     end
-    epochs, time_attrs = _averaged_epochs(ms, t, weights, members, labels(split))
+    epochs, time_attrs = _averaged_epochs(ms, t, members, labels(split))
     time = only(
         DimensionalData.Dimensions.format(
             (rebuild(dims(ms, Ti), Sampled(epochs; metadata = time_attrs)),), epochs
@@ -349,21 +350,16 @@ function _constant_per_label(a, adim::Int, ctx, label)
     return collect(selectdim(a, adim, first.(ctx.members)))
 end
 
-# Each label's weighted mean epoch, and the time coordinate's attributes with
-# `integration_time` the span each label covers.
-function _averaged_epochs(ms, t, weights, members, names)
+# Each label's epoch, the mid-point of the time it spans, and the time
+# coordinate's attributes with `integration_time` that span.
+function _averaged_epochs(ms, t, members, names)
     attrs = metadata(lookup(ms, Ti))
     nominal = attrs[:integration_time]
-    per_time = vec(_aligned_weights(weights, DimArray(t, (dims(ms, Ti),))))
     epochs = similar(t, float(eltype(t)), length(members))
     spans = similar(epochs)
     for (l, p) in pairs(members)
-        t0 = t[first(p)]
-        offset = t[p] .- t0
-        w = per_time[p]
-        total = sum(w)
-        epochs[l] = t0 + (iszero(total) ? sum(offset) / length(p) : sum(w .* offset) / total)
         lo, hi = extrema(view(t, p))
+        epochs[l] = lo + (hi - lo) / 2
         spans[l] = (hi - lo) + value(nominal)
     end
     for l in eachindex(spans)
@@ -378,12 +374,6 @@ function _averaged_epochs(ms, t, weights, members, names)
             )
         )
     end
-    allunique(epochs) || throw(
-        ArgumentError(
-            "two labels average to the same epoch, and a time coordinate names each " *
-                "sample once; label the samples so each label's weighted mean time differs"
-        )
-    )
     span = Measure(first(spans), metadata(nominal))
     return epochs, merge(attrs, Dict(:integration_time => span))
 end

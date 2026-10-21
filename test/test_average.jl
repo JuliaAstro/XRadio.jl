@@ -66,8 +66,8 @@ using XRadio: Testing, subdataset
         @test out[:uvw][BaselineID(At(0)), Ti(1)] ≈ (31 .* [1, 2, 3] .+ 34 .* [4, 5, 6]) ./ 65
         @test out[:uvw][BaselineID(At(0)), Ti(2)] ≈ [3, 3, 3]
         @test all(iszero, out[:uvw][BaselineID(At(1))])
-        # 92 and 98 contributing at the first two samples; 96 and 288 at the others.
-        @test times(out) ≈ [t0 + 10 * 98 / 190, t0 + 107.5]
+        # The mid-points of the spans, whatever the weights.
+        @test times(out) ≈ [t0 + 5, t0 + 105]
         it = metadata(lookup(out, Ti))[:integration_time]
         @test it isa Measure && XRadio.value(it) == 20.0
         @test metadata(it)[:units] == "s"
@@ -88,24 +88,22 @@ using XRadio: Testing, subdataset
         )
     end
 
-    @testset "averaged epochs name each sample once" begin
-        # Interleaved labels of equal span whose weights put both means at t0 + 15.
+    @testset "interleaved labels" begin
+        m = Testing.measurement_set(; times = t0 .+ (0:10:30))
+        @test times(average(m, _ -> [1, 2, 1, 2])) ≈ [t0 + 10, t0 + 20]
+    end
+
+    @testset "epochs do not depend on weights or flags" begin
         m = copy(Testing.measurement_set(; times = t0 .+ (0:10:30)))
         W = copy(m[:weight])
-        view(W, Ti(1)) .= 1
-        view(W, Ti(2)) .= 3
-        view(W, Ti(3)) .= 3
-        view(W, Ti(4)) .= 1
+        view(W, Ti(1)) .= 0
+        view(W, Ti(4)) .= 5
+        F = copy(m[:flag])
+        view(F, Ti(2)) .= true
         m[:weight] = W
-        @test_throws "average to the same epoch" average(m, _ -> [1, 2, 1, 2])
-        # Weights that put the first label's epoch after the second's: allowed.
-        view(W, Ti(1)) .= 0.1
-        view(W, Ti(2)) .= 10
-        view(W, Ti(3)) .= 10
-        view(W, Ti(4)) .= 0.1
-        m[:weight] = W
-        late_first = times(average(m, _ -> [1, 2, 1, 2]))
-        @test late_first[1] > late_first[2]
+        m[:flag] = F
+        plain = Testing.measurement_set(; times = t0 .+ (0:10:30))
+        @test times(average(m, _ -> :all)) == times(average(plain, _ -> :all))
     end
 
     @testset "a label for the whole Measurement Set" begin
