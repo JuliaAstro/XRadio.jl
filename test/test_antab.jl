@@ -107,6 +107,23 @@
         @test gain(high[:curve][AntennaName(At("NN")), ReceptorLabel(At("pol_0"))], deg2rad(40)) ≈ 1.0 + 0.25 * 40
     end
 
+    @testset "one IF per channel" begin
+        ps = XRadio.Testing.processing_set(; antennas = ["AA", "MG", "NN", "ZZ"], nchan = 2)
+        @test_logs (:warn,) read_antab!(ps, antab(text); ifs = Dict("spw_0" => 1:2))
+        ms = only(values(ps))
+        @test isempty(XRadio.check(ms))
+        tsys = system_temperatures(ms)
+        @test lookup(tsys, Frequency) == frequencies(ms)
+        at(a, r, c) = collect(tsys[AntennaName(At(a)), ReceptorLabel(At(r)), Frequency(c)])
+        @test isequal(at("AA", "pol_0", 1), [NaN, 2.5, 2.7, NaN])
+        @test isequal(at("AA", "pol_1", 2), [NaN, 3.5, 3.7, NaN])
+        @test isequal(at("MG", "pol_0", 2), [200.0, NaN, NaN, 180.0])
+        @test_throws "gives 3 IFs for spectral window `spw_0`, which has 2 channels" read_antab!(
+            XRadio.Testing.processing_set(; antennas = ["AA", "MG"], nchan = 2), antab(text);
+            ifs = Dict("spw_0" => 1:3)
+        )
+    end
+
     @testset "what it refuses" begin
         path = antab(text)
         ps = built()

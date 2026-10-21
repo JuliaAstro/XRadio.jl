@@ -12,8 +12,11 @@ for right circular polarization in IFs 1 to 32, `'L1|R1'` one value for both
 receptors of IF 1, `'X'` an unused column). An IF is a FITS-IDI band, which
 [`fitsidi2msv4`](@ref) writes as one spectral window and records as the window's
 `fitsidi_band`; for a store without that attribute, `ifs` maps each spectral
-window name to its IF, such as `Dict("spw_0" => 1, "spw_1" => 2)`. The IFs the
-file covers and the IFs of `ps`'s windows must be the same.
+window name to its IF, such as `Dict("spw_0" => 1, "spw_1" => 2)`, or to the IF
+of each of its channels, such as `Dict("spw_0" => 1:32)` for a UVFITS file whose
+32 one-channel IFs were read as the channels of one window. A window given one
+IF per channel takes a system temperature per channel, over `frequency`. The
+IFs the file covers and the IFs of `ps`'s windows must be the same.
 
 Stations are matched to antennas by name, and polarizations to receptors by the
 antenna's `polarization_type`. Each Measurement Set takes the rows that fall
@@ -43,7 +46,7 @@ function read_antab!(ps::ProcessingSet, path::AbstractString; ifs = nothing)
     end
 
     windows = [_antab_if(ms, ifs) for ms in members]
-    _check_antab_ifs(antab, Set(windows))
+    _check_antab_ifs(antab, Set(Iterators.flatten(windows)))
     spans = [_antab_span(ms) for ms in members]
     t0 = minimum(first, spans)
     interval = maximum(last, spans) - t0
@@ -58,7 +61,7 @@ function read_antab!(ps::ProcessingSet, path::AbstractString; ifs = nothing)
     written = map(members, windows, spans) do ms, k, span
         roster = _antab_identity(ms)
         (;
-            system_calibration = _antab_tsys_dataset(antab, clock, roster, k, span),
+            system_calibration = _antab_tsys_dataset(antab, clock, roster, k, span, ms),
             gain_curve = _antab_gain_dataset(antab, roster, _reference_frequency(ms), interval),
         )
     end
@@ -83,7 +86,13 @@ function _antab_if(ms::MeasurementSet, ifs)
         return Int(band)
     end
     haskey(ifs, window) || throw(ArgumentError("`ifs` gives no IF for spectral window `$window`"))
-    return Int(ifs[window])
+    k = ifs[window]
+    k isa Integer && return Int(k)
+    nchan = length(frequencies(ms))
+    length(k) == nchan || throw(ArgumentError(
+        "`ifs` gives $(length(k)) IFs for spectral window `$window`, which has $nchan channels"
+    ))
+    return collect(Int, k)
 end
 
 function _check_antab_ifs(antab, windows)
@@ -149,7 +158,7 @@ function _antab_receptor(roster, i, letter, station)
     return only(j)
 end
 
-function _antab_tsys_dataset(antab, clock, roster, k, span)
+function _antab_tsys_dataset(antab, clock, roster, k, span, ms)
     rows = [
         (station, i, r) for (i, station) in pairs(roster.antenna_name) if haskey(antab.tsys, station)
             for r in eachindex(clock[station]) if span[1] <= clock[station][r] <= span[2]
@@ -157,21 +166,29 @@ function _antab_tsys_dataset(antab, clock, roster, k, span)
     isempty(rows) && return nothing
     grid = sort!(unique(clock[s][r] for (s, _, r) in rows))
     at = Dict(t => n for (n, t) in pairs(grid))
-    tsys = fill(NaN, length(roster.receptor_label), length(grid), length(roster.antenna_name))
+    channel_ifs = k isa Integer ? [k] : k
+    tsys = fill(NaN, length(channel_ifs), length(roster.receptor_label), length(grid), length(roster.antenna_name))
     for (station, i, r) in rows
         block = antab.tsys[station]
-        for (c, column) in pairs(block.columns), (letter, range) in column
-            k in range || continue
+        for (c, column) in pairs(block.columns), (letter, range) in column, (n, kn) in pairs(channel_ifs)
+            kn in range || continue
             j = _antab_receptor(roster, i, letter, station)
-            tsys[j, at[clock[station][r]], i] = block.values[r, c]
+            tsys[n, j, at[clock[station][r]], i] = block.values[r, c]
         end
     end
     all(isnan, tsys) && return nothing
     (; antenna_name, station_name, receptor_label, polarization_type) = roster
+    k isa Integer && return subdataset(
+        :system_calibration;
+        antenna_name, station_name, receptor_label, polarization_type,
+        time_system_cal = grid, tsys = dropdims(tsys; dims = 1),
+    )
+    F = dims(ms, dimtype(:frequency))
     return subdataset(
         :system_calibration;
         antenna_name, station_name, receptor_label, polarization_type,
-        time_system_cal = grid, tsys,
+        time_system_cal = grid, frequency = collect(F), tsys,
+        array_metadata = (; frequency = metadata(lookup(F))),
     )
 end
 
