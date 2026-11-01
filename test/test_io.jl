@@ -478,6 +478,21 @@ end
     @test uvw(ms) === ms[:uvw]
     @test_throws KeyError datagroup(ms, :nonexistent)
 
+    @testset "datastack" begin
+        s = datastack(ms)
+        @test keys(s) == (:correlated_data, :flag, :weight, :uvw)
+        @test s.correlated_data == correlated(ms)
+        @test parent(s.flag) === parent(flags(ms))
+        @test dims(s.uvw) == dims(uvw(ms))
+        flag_layer(s) = s.flag
+        @test @inferred(flag_layer(s)) == flags(ms)
+
+        c = copy(ms)
+        metadata(c)[:data_groups] = Dict{Symbol, Any}(:base => delete!(copy(datagroup(ms)), :uvw))
+        @test keys(datastack(c)) == (:correlated_data, :flag, :weight)
+        @test_throws KeyError datastack(ms, :nonexistent)
+    end
+
     @testset "an absent axis gives an empty vector of the right type" begin
         # The dimension supplies the element type when it is there; when it is
         # not, the type is what MSv4 declares the coordinate to be, so a caller

@@ -154,6 +154,38 @@ data has none.
 """
 uvw(ms::MeasurementSet, group::Symbol = :base) = ms[_group_layer(ms, group, :uvw)]
 
+"""
+    datastack(ms, group = :base) -> DimStack
+
+The arrays of one data group in a `DimStack` whose layers are named for their
+role: `correlated_data`, `flag`, `weight`, and `uvw` when the group names one.
+
+A Measurement Set holds its layers untyped, since which arrays it has and their
+element types are read from the store, so `ms[:visibility]` and
+[`correlated`](@ref) cannot be inferred. A `DimStack` carries the type of each
+layer, so code that takes the stack as an argument compiles for the arrays it
+holds:
+
+```julia
+function flagged_fraction(s::DimStack)
+    n = 0
+    for f in s.flag
+        n += f
+    end
+    return n / length(s.flag)
+end
+
+flagged_fraction(datastack(ms))
+```
+
+The layers are the Measurement Set's own arrays rather than copies.
+"""
+function datastack(ms::MeasurementSet, group::Symbol = :base)
+    g = datagroup(ms, group)
+    roles = filter(r -> haskey(g, r), (:correlated_data, :flag, :weight, :uvw))
+    return DimStack(NamedTuple{roles}(map(r -> ms[_group_layer(ms, group, r)], roles)))
+end
+
 function _group_layer(ms::MeasurementSet, group::Symbol, role::Symbol)
     g = datagroup(ms, group)
     haskey(g, role) || throw(

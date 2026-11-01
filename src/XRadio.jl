@@ -49,7 +49,7 @@ export AbstractMount, Mount, MountAltAz, MountEquatorial, MountNasmythR, MountNa
 export AbstractGainCurve, GainPolynomial, TabulatedGain, SphericalHarmonicGain,
     AtDeclination, gain
 export fitsidi2msv4, fitsidi_gain_curves, read_antab!
-export datagroups, datagroup, add_datagroup!, correlated, flags, weights, uvw
+export datagroups, datagroup, add_datagroup!, correlated, flags, weights, uvw, datastack
 export antennas, mounts, antenna_positions, receptor_angles, polarization_types,
     scans, fields, sources, scan_intents, spectral_window_intents,
     Intent, ScanIntents, SubscanIntents,
