@@ -62,11 +62,8 @@ function column_units(hdu, name::AbstractString)
     return nothing
 end
 
-# A `LazyStructuredData` answers `keys` but not `haskey`, so optional columns
-# have to be guarded against the key list.
-hascol(data, name::Symbol) = name in keys(data)
 column(data, name::Symbol) = getproperty(data, name)
-column(data, name::Symbol, default) = hascol(data, name) ? column(data, name) : default
+column(data, name::Symbol, default) = haskey(data, name) ? column(data, name) : default
 
 # A column of `leng` elements per row comes back as an `(nrows, leng)` matrix,
 # but a `leng == 1` column comes back as a plain vector. `rowvalues` gives row

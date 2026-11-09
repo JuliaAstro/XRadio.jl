@@ -86,7 +86,7 @@ VLBA writes that instead, its numeric `EPOCH`.
 function source_frames(source_hdu)
     data = source_hdu.data
     for name in (:EQUINOX, :EPOCH)
-        hascol(data, name) && return map(idi_frame, column(data, name))
+        haskey(data, name) && return map(idi_frame, column(data, name))
     end
     throw(ArgumentError(
         "FITS-IDI SOURCE table has neither an EQUINOX nor an EPOCH column, so " *
@@ -138,7 +138,7 @@ antenna's rows throws.
 """
 function digitizer_levels(antenna_hdu)
     data = antenna_hdu.data
-    hascol(data, :NO_LEVELS) || return nothing
+    haskey(data, :NO_LEVELS) || return nothing
     levels = Dict{Int, Int}()
     for (no, n) in zip(column(data, :ANTENNA_NO), column(data, :NO_LEVELS))
         known = get!(levels, Int(no), Int(n))
@@ -294,7 +294,7 @@ the file omits the optional `DIAMETER` column.
 """
 function antenna_diameters(ag_hdu)
     data = ag_hdu.data
-    hascol(data, :DIAMETER) || return nothing
+    haskey(data, :DIAMETER) || return nothing
     nosta = column(data, :NOSTA)
     diameter = column(data, :DIAMETER)
     return Dict{Int, Float64}(
@@ -384,7 +384,7 @@ comes back in the order a converted partition's polarization axis uses.
 function read_flag_ranges(flag_hdu, perm, layout, rdate::DateTime)
     data = flag_hdu.data
     for name in (:SOURCE_ID, :ANTS, :FREQID, :TIMERANG, :BANDS, :CHANS, :PFLAGS)
-        hascol(data, name) || throw(ArgumentError(
+        haskey(data, name) || throw(ArgumentError(
             "FITS-IDI FLAG table has no $name column, which the standard requires; " *
                 "without it a row does not say what it flags"
         ))
@@ -489,7 +489,7 @@ end
 function _cal_column(hdu, names::Symbol...)
     data = hdu.data
     for name in names
-        hascol(data, name) && return collect(column(data, name))
+        haskey(data, name) && return collect(column(data, name))
     end
     throw(ArgumentError(
         "FITS-IDI $(card_string(hdu, "EXTNAME")) table has no " *
@@ -505,7 +505,7 @@ end
 function _cal_optional(hdu, names::Symbol...)
     data = hdu.data
     for name in names
-        hascol(data, name) || continue
+        haskey(data, name) || continue
         col = collect(column(data, name))
         col isa AbstractVector && return col
     end
@@ -553,7 +553,7 @@ end
 # omits the keyword still has the second receptor's columns exactly when it
 # describes two.
 function _no_pol(hdu, probe::AbstractString)
-    n = Int(card(hdu, "NO_POL", hascol(hdu.data, Symbol(probe, "_2")) ? 2 : 1))
+    n = Int(card(hdu, "NO_POL", haskey(hdu.data, Symbol(probe, "_2")) ? 2 : 1))
     n in (1, 2) || throw(ArgumentError(
         "FITS-IDI $(card_string(hdu, "EXTNAME")) table has NO_POL = $n; a feed " *
             "has one or two receptors"
@@ -583,7 +583,7 @@ function _cal_rows(hdu, freqid::Int)
     time = Float64.(_cal_scalar(hdu, :TIME))
     interval = Float64.(_cal_scalar(hdu, :TIME_INTERVAL))
     antenna = Int.(_cal_scalar(hdu, :ANTENNA_NO, :ANTENNA_NUMBER))
-    keep = if hascol(hdu.data, :FREQID)
+    keep = if haskey(hdu.data, :FREQID)
         f = Int.(_cal_scalar(hdu, :FREQID))
         findall(x -> x == 0 || x == freqid, f)
     else
@@ -756,7 +756,7 @@ function read_gain_curves(hdus, layout, freqid::Int, T = nothing)
     data = hdu.data
     nband = layout.no_band
     antenna = Int.(_cal_scalar(hdu, :ANTENNA_NO))
-    keep = if hascol(data, :FREQID)
+    keep = if haskey(data, :FREQID)
         f = Int.(_cal_scalar(hdu, :FREQID))
         findall(r -> f[r] == 0 || f[r] == freqid, eachindex(f))
     else

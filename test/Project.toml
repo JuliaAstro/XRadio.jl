@@ -11,7 +11,7 @@ XRadio = "8f21e5d1-474f-4c64-bef4-ed78edb0e816"
 Zarr = "0a941bbe-ad1d-11e8-39d9-ab76183a1d99"
 
 [sources]
-FITSFiles = {rev = "ptiede-uvfixes", url = "https://github.com/ptiede/FITSFiles.jl"}
+FITSFiles = {rev = "ptiede-uvfixes-rebased", url = "https://github.com/ptiede/FITSFiles.jl"}
 XRadio = {path = ".."}
 
 [compat]
