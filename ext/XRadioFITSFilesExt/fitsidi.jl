@@ -8,10 +8,9 @@
 # The two access patterns exist because the file has two scales. Every table
 # but `UV_DATA` is at most a few thousand rows and is read column by column
 # through FITSFiles. `UV_DATA` is the observation itself — hundreds of
-# thousands of rows of tens of kilobytes each — and its per-row columns all sit
-# in the leading bytes of a row, so those are read in a single strided pass.
-# Column-at-a-time access there would re-traverse the whole file once per
-# column.
+# thousands of rows of tens of kilobytes each — so it is decoded straight from
+# the memory-mapped data unit, its per-row columns in one strided pass over the
+# leading bytes of each row.
 
 # ── Cards and columns ────────────────────────────────────────────────────────
 
@@ -26,6 +25,9 @@ _trim(s) = _trim(string(s))
 # versions, which for `UV_DATA` means reading the entire observation; the
 # descriptor carries the byte layout without touching the data block.
 _descriptor(hdu) = getfield(hdu, :data)
+
+# The memory-mapped data unit; it becomes invalid if the file is truncated.
+_bytes(hdu) = getfield(_descriptor(hdu), :bytes)
 
 _nrows(hdu) = Int(_descriptor(hdu).format.shape[2])
 _rowlength(hdu) = Int(_descriptor(hdu).format.shape[1])
@@ -273,30 +275,14 @@ function _scalar(field)
     return field
 end
 
-# One strided pass collecting every row's leading `prefix` bytes into a single
-# buffer — tens of megabytes for a file of tens of gigabytes. Decoding then
-# runs over memory, one type-stable loop per column.
-function _read_row_prefixes(desc, prefix::Int, n::Int, rowlen::Int)
-    buf = Vector{UInt8}(undef, n * prefix)
-    io = FITSFiles.open_lazy_source(desc)
-    try
-        for r in 1:n
-            seek(io, desc.begpos + rowlen * (r - 1))
-            unsafe_read(io, pointer(buf, (r - 1) * prefix + 1), prefix)
-        end
-    finally
-        close(io)
-    end
-    return buf
-end
-
 # FITS is big-endian; `S` is the type the file stores and `T` the type wanted.
 # `out` is one column per row, `stride` the distance between rows within `buf`,
-# and `off` the field's 1-based byte offset within a row.
+# and `off` the 1-based byte offset in `buf` of the field in the first row.
+# The caller keeps every byte read within `buf`.
 function _decode!(
         out::Matrix{T}, ::Type{S}, buf::Vector{UInt8}, stride::Int, off::Int
     ) where {T, S}
-    for r in axes(out, 2)
+    GC.@preserve buf for r in axes(out, 2)
         base = (r - 1) * stride + off
         for k in axes(out, 1)
             out[k, r] = T(ntoh(unsafe_load(Ptr{S}(pointer(buf, base + (k - 1) * sizeof(S))))))
@@ -305,8 +291,10 @@ function _decode!(
     return out
 end
 
-function _decode_field!(out::Matrix, field, buf::Vector{UInt8}, stride::Int)
-    off = first(field.slice)
+# Decodes `field` for the rows of `out`, the first of them starting at byte
+# `start + 1` of `buf`.
+function _decode_field!(out::Matrix, field, buf::Vector{UInt8}, stride::Int, start::Int = 0)
+    off = start + first(field.slice)
     S = field.type
     S === Float64 && return _decode!(out, Float64, buf, stride, off)
     S === Float32 && return _decode!(out, Float32, buf, stride, off)
@@ -319,8 +307,8 @@ function _decode_field!(out::Matrix, field, buf::Vector{UInt8}, stride::Int)
     ))
 end
 
-_row_column(::Type{T}, field, buf::Vector{UInt8}, prefix::Int, n::Int) where {T} =
-    vec(_decode_field!(Matrix{T}(undef, 1, n), field, buf, prefix))
+_row_column(::Type{T}, field, buf::Vector{UInt8}, rowlen::Int, n::Int) where {T} =
+    vec(_decode_field!(Matrix{T}(undef, 1, n), field, buf, rowlen))
 
 """
     read_uv_rows(uv_hdu) -> NamedTuple
@@ -397,12 +385,8 @@ function read_uv_rows(uv_hdu)
     scan = optional_field(:SCAN, :SCAN_NUMBER, Symbol("SCAN NO"), :SCANNO)
 
     uu, vv, ww = uvw_field('U'), uvw_field('V'), uvw_field('W')
-    wanted = filter(!isnothing, [
-        date, time, baseline, source, freqid, inttim, array, scan, uu, vv, ww,
-    ])
-    prefix = maximum(f -> last(f.slice), wanted)
-    buf = _read_row_prefixes(desc, prefix, n, rowlen)
-    col(::Type{T}, f) where {T} = _row_column(T, f, buf, prefix, n)
+    bytes = _bytes(uv_hdu)
+    col(::Type{T}, f) where {T} = _row_column(T, f, bytes, rowlen, n)
     col(::Type{T}, ::Nothing, default) where {T} = fill(T(default), n)
     col(::Type{T}, f, default) where {T} = col(T, f)
 
@@ -524,17 +508,11 @@ function read_uv_block(uv_hdu, rows::AbstractUnitRange{<:Integer}; T::Type = Flo
             "axes give $nflux"
     ))
 
-    buf = Vector{UInt8}(undef, nrow * rowlen)
-    io = FITSFiles.open_lazy_source(desc)
-    try
-        seek(io, desc.begpos + rowlen * (first(rows) - 1))
-        read!(io, buf)
-    finally
-        close(io)
-    end
+    bytes = _bytes(uv_hdu)
+    start = rowlen * (first(rows) - 1)
 
     flux = reshape(
-        _decode_field!(Matrix{T}(undef, nflux, nrow), flux_field, buf, rowlen),
+        _decode_field!(Matrix{T}(undef, nflux, nrow), flux_field, bytes, rowlen, start),
         layout.ncomplex, layout.no_stkd, layout.no_chan, layout.no_band, nrow
     )
 
@@ -560,7 +538,7 @@ function read_uv_block(uv_hdu, rows::AbstractUnitRange{<:Integer}; T::Type = Flo
                 "NO_BAND gives $nweight"
         ))
         reshape(
-            _decode_field!(Matrix{T}(undef, nweight, nrow), field, buf, rowlen),
+            _decode_field!(Matrix{T}(undef, nweight, nrow), field, bytes, rowlen, start),
             layout.no_stkd, layout.no_band, nrow
         )
     end
