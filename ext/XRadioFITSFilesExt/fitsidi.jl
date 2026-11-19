@@ -479,55 +479,49 @@ function flux_element_type(uv_hdu)
 end
 
 """
-    read_uv_block(uv_hdu, rows; T = Float32) -> (; flux, weight, layout)
+    read_uv_block(uv_hdu, rows; T = Float32, bands = all) -> (; flux, weight, layout, bands)
 
-Read the data matrix and the `WEIGHT` column for a contiguous range of
-`UV_DATA` rows.
+Read the data matrix and the `WEIGHT` column of the bands `bands` for a
+contiguous range of `UV_DATA` rows.
 
 `flux` is `(complex, polarization, channel, band, row)` and `weight` is
-`(polarization, band, row)`, both in the file's own axis order and both
-`Matrix{T}`-backed; `weight` is `nothing` when the `COMPLEX` axis is 3 and so
-carries the weights itself. `layout` is the [`uv_matrix_layout`](@ref) the
-shapes come from.
+`(polarization, band, row)`, both in the file's own axis order, with band `k`
+of the block being band `bands[k]` of the file; `weight` is `nothing` when the
+`COMPLEX` axis is 3 and so carries the weights itself. `layout` is the
+[`uv_matrix_layout`](@ref) the shapes come from.
 
-The rows are read as one contiguous block, which is nearly the whole cost of a
+The rows are read as one block, which is nearly the whole cost of a
 conversion, so ask for a whole partition at a time. A block is
-`length(rows) * (2 to 3) * no_stkd * no_chan * no_band` values resident, which
-for a file of any size means the caller must partition rather than ask for all
-of them.
+`length(rows) * (2 to 3) * no_stkd * no_chan * length(bands)` values resident,
+which for a file of any size means the caller must partition rather than ask
+for all of them.
 """
-function read_uv_block(uv_hdu, rows::AbstractUnitRange{<:Integer}; T::Type = Float32)
-    desc = _descriptor(uv_hdu)
+function read_uv_block(
+        uv_hdu, rows::AbstractUnitRange{<:Integer}; T::Type = Float32,
+        bands::AbstractUnitRange{<:Integer} = Base.OneTo(uv_matrix_layout(uv_hdu).no_band)
+    )
     n = _nrows(uv_hdu)
     (first(rows) >= 1 && last(rows) <= n) || throw(ArgumentError(
         "UV_DATA rows $rows lie outside the table's 1:$n"
     ))
     layout = uv_matrix_layout(uv_hdu)
-    rowlen = _rowlength(uv_hdu)
-    nrow = length(rows)
-
-    byname = Dict(Symbol(rstrip(String(f.name))) => f for f in desc.fields)
-    haskey(byname, :FLUX) || throw(ArgumentError("UV_DATA has no FLUX column"))
-    flux_field = _unscaled(byname[:FLUX])
-    nflux = layout.ncomplex * layout.no_stkd * layout.no_chan * layout.no_band
-    flux_field.leng == nflux || throw(ArgumentError(
-        "UV_DATA FLUX holds $(flux_field.leng) values per row; the data-matrix " *
-            "axes give $nflux"
+    (first(bands) >= 1 && last(bands) <= layout.no_band) || throw(ArgumentError(
+        "UV_DATA bands $bands lie outside the data matrix's 1:$(layout.no_band)"
     ))
+    data = _descriptor(uv_hdu)
 
-    bytes = _bytes(uv_hdu)
-    start = rowlen * (first(rows) - 1)
-
+    haskey(data, :FLUX) || throw(ArgumentError("UV_DATA has no FLUX column"))
+    perband = layout.ncomplex * layout.no_stkd * layout.no_chan
     flux = reshape(
-        _decode_field!(Matrix{T}(undef, nflux, nrow), flux_field, bytes, rowlen, start),
-        layout.ncomplex, layout.no_stkd, layout.no_chan, layout.no_band, nrow
+        _band_block(data[:FLUX], "FLUX", rows, bands, perband, layout.no_band, T),
+        layout.ncomplex, layout.no_stkd, layout.no_chan, length(bands), length(rows)
     )
 
     # AIPS Memo 114r ties the WEIGHT random parameter to the COMPLEX axis: with
     # MAXIS1 = 2 the weights have nowhere else to live and the parameter is
     # required, and with MAXIS1 = 3 they are in the data matrix and it must be
     # absent. Either mismatch means the weights are not what they appear.
-    haveweight = haskey(byname, :WEIGHT)
+    haveweight = haskey(data, :WEIGHT)
     if haveweight == (layout.ncomplex == 3)
         throw(ArgumentError(
             haveweight ?
@@ -538,17 +532,22 @@ function read_uv_block(uv_hdu, rows::AbstractUnitRange{<:Integer}; T::Type = Flo
         ))
     end
     weight = if haveweight
-        field = _unscaled(byname[:WEIGHT])
-        nweight = layout.no_stkd * layout.no_band
-        field.leng == nweight || throw(ArgumentError(
-            "UV_DATA WEIGHT holds $(field.leng) values per row; NO_STKD x " *
-                "NO_BAND gives $nweight"
-        ))
         reshape(
-            _decode_field!(Matrix{T}(undef, nweight, nrow), field, bytes, rowlen, start),
-            layout.no_stkd, layout.no_band, nrow
+            _band_block(data[:WEIGHT], "WEIGHT", rows, bands, layout.no_stkd, layout.no_band, T),
+            layout.no_stkd, length(bands), length(rows)
         )
     end
 
-    return (; flux, weight, layout)
+    return (; flux, weight, layout, bands)
+end
+
+# The values of bands `bands` in rows `rows` of a column holding `perband`
+# values for each of `nband` bands, band slowest, as one column per row.
+function _band_block(col, name, rows, bands, perband, nband, ::Type{T}) where {T}
+    size(col, 2) == perband * nband || throw(ArgumentError(
+        "UV_DATA $name holds $(size(col, 2)) values per row; the data-matrix " *
+            "axes give $(perband * nband)"
+    ))
+    inner = ((first(bands) - 1) * perband + 1):(last(bands) * perband)
+    return convert(Matrix{T}, permutedims(col[rows, inner]))
 end

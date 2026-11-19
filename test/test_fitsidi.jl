@@ -1406,6 +1406,13 @@ end
             gt.visibility[:, :, :, 1, 1]
         @test block.weight[:, :, 1] == gt.weight[:, :, 1, 1]
         @test_throws "lie outside the table's" IDI.read_uv_block(uv, 1:100)
+
+        # A band range reads only those bands, the same values as the whole matrix.
+        sub = IDI.read_uv_block(uv, 1:6; bands = 2:2)
+        @test sub.bands == 2:2
+        @test sub.flux == block.flux[:, :, :, 2:2, :]
+        @test sub.weight == block.weight[:, 2:2, :]
+        @test_throws "lie outside the data matrix's" IDI.read_uv_block(uv, 1:6; bands = 2:3)
     end
 end
 

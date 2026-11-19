@@ -1382,7 +1382,7 @@ function XRadio.fitsidi2msv4(
     index = 0
     width = max(2, ndigits(length(ranges) * length(windows) - 1))
     for range in ranges
-        block = read_uv_block(uv, range; T)
+        block = read_uv_block(uv, range; T, bands = first(windows):last(windows))
         for band in windows
             ms = _build_partition(
                 shared, rows, times, block, range, band, T
@@ -1492,6 +1492,7 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
     wfactor = F(2 * abs(s.ch_width[band]))
     visnorm, wscal = F(inv(s.vis_scal)), F(s.weight_scal)
     percell = layout.ncomplex == 3
+    bb = band - first(block.bands) + 1
 
     for (i, r) in enumerate(range)
         k = time_of[times[r]]
@@ -1513,10 +1514,10 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
             wscal
         per_row = s.per_second ? F(s.inttim[r]) : one(F)
         for c in 1:nchan, (p, sp) in enumerate(s.perm)
-            re = block.flux[1, sp, c, band, i]
-            im = block.flux[2, sp, c, band, i]
-            w = percell ? block.flux[3, sp, c, band, i] :
-                block.weight === nothing ? one(F) : block.weight[sp, band, i]
+            re = block.flux[1, sp, c, bb, i]
+            im = block.flux[2, sp, c, bb, i]
+            w = percell ? block.flux[3, sp, c, bb, i] :
+                block.weight === nothing ? one(F) : block.weight[sp, bb, i]
             # Conjugated: FITS-IDI stores V = ⟨E_a1 · conj(E_a2)⟩ (AIPS Memo
             # 114r §2.1) and MSv4, following casacore, stores the other one
             # (casacore `FitsIDItoMS.cc`: "FITS-IDI convention is conjugate of
