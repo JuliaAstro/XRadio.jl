@@ -27,11 +27,16 @@ averaging both at once.
 
 Over time, `uvw` is the mean of each baseline's finite values under a label,
 and the time coordinate is the mid-point of the time each label spans, from its
-first sample's start to its last sample's end; the `integration_time` of the
-result is that span. Neither depends on the data's weights or flags. One
-Measurement Set states one integration time, so labels spanning different lengths of time are
-an error: average the groups of `groupby(ps, ByScan())` instead, or choose
-labels of equal length.
+first sample's start to its last sample's end, a sample extending half its
+longest `effective_integration_time` (else the nominal `integration_time`) to
+either side of its time; the `integration_time` of the result is the longest of
+those spans. Each averaged sample's
+`effective_integration_time`, over (baseline, time), is the sum of its samples'
+`effective_integration_time`, or of the nominal `integration_time` where the
+Measurement Set states none. It is stated whenever the Measurement Set stated it
+or it differs from the result's `integration_time` anywhere, as for a scan whose
+last label gathers fewer samples than the others. None of these depends on the
+data's weights or flags.
 
 Over channels, an averaged channel's frequency is the mean of its channels'
 frequencies and its `channel_width` their summed widths. The channels under a
@@ -121,14 +126,23 @@ function _average(ms::MeasurementSet, by, ::Val{:time})
         u = _finite_label_mean(parent(U), dimnum(U, Ti), members)
         reduced[uvw_key] = (U, u)
     end
-    epochs, time_attrs = _averaged_epochs(ms, t, members, labels(split))
+    E = _effective_integration_time(ms)
+    epochs, time_attrs = _averaged_epochs(ms, t, members, _sample_extents(E))
     time = only(
         DimensionalData.Dimensions.format(
             (rebuild(dims(ms, Ti), Sampled(epochs; metadata = time_attrs)),), epochs
         )
     )
+    integrated = _label_sums(E, members)
+    nominal = value(time_attrs[:integration_time])
+    stated = haskey(ms, :effective_integration_time)
+    stated && (reduced[:effective_integration_time] = (E, integrated))
     ctx = (; dim = time, axis = "time", members, labels = labels(split))
-    return _drop_lookups!(_average_tree(ms, ctx, reduced, ""))
+    out = _drop_lookups!(_average_tree(ms, ctx, reduced, ""))
+    if !stated && !all(x -> isapprox(x, nominal; rtol = 1.0e-9), integrated)
+        out[:effective_integration_time] = _with_dim(E, integrated, time)
+    end
+    return out
 end
 
 function _average(ms::MeasurementSet, by, ::Val{:frequency})
@@ -332,32 +346,52 @@ function _constant_per_label(a, adim::Int, ctx, label)
     return collect(selectdim(a, adim, first.(ctx.members)))
 end
 
-# Each label's epoch, the mid-point of the time it spans, and the time
-# coordinate's attributes with `integration_time` that span.
-function _averaged_epochs(ms, t, members, names)
+# Each label's epoch, the mid-point of the time its samples span, and the time
+# coordinate's attributes with `integration_time` the longest span. A sample
+# spans `extents` about its time.
+function _averaged_epochs(ms, t, members, extents)
     attrs = metadata(lookup(ms, Ti))
-    nominal = attrs[:integration_time]
     epochs = similar(t, float(eltype(t)), length(members))
     spans = similar(epochs)
     for (l, p) in pairs(members)
-        lo, hi = extrema(view(t, p))
+        lo = minimum(k -> t[k] - extents[k] / 2, p)
+        hi = maximum(k -> t[k] + extents[k] / 2, p)
         epochs[l] = lo + (hi - lo) / 2
-        spans[l] = (hi - lo) + value(nominal)
+        spans[l] = hi - lo
     end
-    for l in eachindex(spans)
-        isapprox(spans[l], first(spans); rtol = 1.0e-9) && continue
-        throw(
-            ArgumentError(
-                "the label $(repr(names[1])) spans $(first(spans)) s and the label " *
-                    "$(repr(names[l])) spans $(spans[l]) s, but one Measurement Set " *
-                    "states one `integration_time`. Split the data so each Measurement " *
-                    "Set's labels span equal times first, for instance by scan with " *
-                    "`groupby(ps, ByScan())`"
-            )
-        )
-    end
-    span = Measure(first(spans), metadata(nominal))
+    span = Measure(maximum(spans), metadata(attrs[:integration_time]))
     return epochs, merge(attrs, Dict(:integration_time => span))
+end
+
+# The effective integration time as stated, or else the nominal one over
+# (baseline, time).
+function _effective_integration_time(ms)
+    haskey(ms, :effective_integration_time) && return ms[:effective_integration_time]
+    nominal = metadata(lookup(ms, Ti))[:integration_time]
+    return DimArray(
+        fill(Float64(value(nominal)), length(baselines(ms)), length(times(ms))),
+        (dims(ms, BaselineID), dims(ms, Ti));
+        name = :effective_integration_time, metadata = copy(metadata(nominal)),
+    )
+end
+
+# Each time sample's extent: the longest effective integration time at it.
+function _sample_extents(E)
+    tdim = dimnum(E, Ti)
+    others = Tuple(d for d in 1:ndims(E) if d != tdim)
+    return vec(maximum(parent(E); dims = others, init = zero(eltype(E))))
+end
+
+# The sum of `E` over each label's samples.
+function _label_sums(E, members)
+    e = parent(E)
+    Base.require_one_based_indexing(e)
+    tdim = dimnum(E, Ti)
+    summed = similar(e, float(eltype(e)), _resized(size(e), tdim, length(members)))
+    for (l, p) in pairs(members)
+        selectdim(summed, tdim, l:l) .= sum(selectdim(e, tdim, p); dims = tdim)
+    end
+    return summed
 end
 
 # Each label's mean channel frequency, and the frequency coordinate's attributes

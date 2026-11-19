@@ -80,10 +80,27 @@ using XRadio: Testing, subdataset
         )
     end
 
-    @testset "one span per Measurement Set" begin
-        @test_throws "one Measurement Set states one `integration_time`" average(
-            ms, _ -> [1, 1, 1, 2]
+    @testset "labels of unequal length" begin
+        @test !haskey(out, :effective_integration_time)
+        m = Testing.measurement_set(; times = t0 .+ (0:10:40), integration_time = 10.0)
+        short = average(m, _ -> [1, 1, 2, 2, 3])
+        @test times(short) ≈ [t0 + 5, t0 + 25, t0 + 40]
+        @test XRadio.value(metadata(lookup(short, Ti))[:integration_time]) == 20
+        E = short[:effective_integration_time]
+        @test all(==(20), E[Ti(1:2)]) && all(==(10), E[Ti(3)])
+        @test metadata(E)[:units] == "s"
+        @test isempty(check(short))
+        again = average(short, _ -> :all)
+        @test all(==(50), again[:effective_integration_time])
+        @test XRadio.value(metadata(lookup(again, Ti))[:integration_time]) == 50
+        # The span holds the gap; the integrated time does not.
+        gapped = average(
+            Testing.measurement_set(; times = t0 .+ [0.0, 10.0, 100.0, 110.0], integration_time = 10.0),
+            _ -> [1, 1, 1, 2],
         )
+        @test XRadio.value(metadata(lookup(gapped, Ti))[:integration_time]) == 110
+        @test all(==(30), gapped[:effective_integration_time][Ti(1)])
+        @test all(==(10), gapped[:effective_integration_time][Ti(2)])
     end
 
     @testset "interleaved labels" begin
@@ -172,13 +189,19 @@ using XRadio: Testing, subdataset
         @test_throws "`extra/direction` is stated per time" average(linked, ByScan())
     end
 
-    @testset "variables it does not average" begin
-        bt = (dims(ms, BaselineID), dims(ms, Ti))
+    @testset "a stated effective integration time" begin
         full = copy(ms)
         full[:effective_integration_time] = DimArray(
-            fill(10.0, 3, 4), bt; metadata = Dict{Symbol, Any}(:units => "s", :type => "quantity")
+            [8.0 10.0 10.0 10.0; 10.0 10.0 10.0 10.0; 10.0 10.0 10.0 10.0],
+            (dims(ms, BaselineID), dims(ms, Ti));
+            metadata = Dict{Symbol, Any}(:units => "s", :type => "quantity")
         )
-        @test_throws "`effective_integration_time` is stated per time" average(full, ByScan())
+        E = average(full, ByScan())[:effective_integration_time]
+        @test E[BaselineID(At(0)), Ti(1)] == 18
+        @test count(==(20), E) == length(E) - 1
+    end
+
+    @testset "more than one data group" begin
         g = copy(ms)
         g[:visibility_corrected] = rebuild(ms[:visibility], 2 .* parent(ms[:visibility]))
         add_datagroup!(g, :corrected; correlated_data = "VISIBILITY_CORRECTED")
