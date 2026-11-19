@@ -168,7 +168,8 @@ Provenance: `telescope`, `obscode`, `observer`, `uv_observer`, `correlator`,
 `system_temperatures`, `phase_cals`, `weathers` and `gain_curves` add the four
 optional calibration and environment tables the same way. Their times are
 seconds from `rdate` midnight, as `scans` are, and `antenna` is a `NOSTA`
-number — zero, in a weather row, for the whole site.
+number — zero, in a weather row, for the whole site. `empty_tables` names
+tables to write with no rows.
 
 - a system temperature row sets `time`, `interval`, `antenna` and the
   `(receptor, band)` matrices `tsys` and `tant`;
@@ -248,6 +249,7 @@ function synthetic_fitsidi(
         phase_cals = NamedTuple[],
         weathers = NamedTuple[],
         gain_curves = NamedTuple[],
+        empty_tables = String[],
         gain_curve_terms = 4,
     )
     nant = length(antenna_names)
@@ -522,6 +524,7 @@ function synthetic_fitsidi(
     isempty(gain_curves) ||
         push!(hdus, _synthetic_gaincurve_hdu(gain_curves, g, gain_curve_terms))
     write(path, hdus)
+    foreach(name -> _append_empty_table(path, name, g), empty_tables)
 
     return (;
         path,
@@ -537,6 +540,25 @@ function synthetic_fitsidi(
         telescope, obscode, observer, uv_observer, weightyp,
         flags, system_temperatures, phase_cals, weathers, gain_curves,
     )
+end
+
+# A BINTABLE with `NAXIS2 = 0`: header blocks and no data unit. Written by hand
+# because FITSFiles builds a table only from at least one row.
+function _append_empty_table(path, extname, g)
+    fixed(key, v) = rpad(key, 8) * "= " * lpad(string(v), 20)
+    quoted(key, v) = rpad(key, 8) * "= " * rpad("'" * rpad(v, 8) * "'", 20)
+    cards = String[
+        quoted("XTENSION", "BINTABLE"), fixed("BITPIX", 8), fixed("NAXIS", 2),
+        fixed("NAXIS1", 12), fixed("NAXIS2", 0), fixed("PCOUNT", 0), fixed("GCOUNT", 1),
+        fixed("TFIELDS", 2), quoted("TTYPE1", "TIME"), quoted("TFORM1", "1D"),
+        quoted("TTYPE2", "ANTENNA_NO"), quoted("TFORM2", "1J"), quoted("EXTNAME", extname),
+        fixed("TABREV", 1), fixed("NO_BAND", g.nband), fixed("NO_POL", 2), "END",
+    ]
+    header = join(rpad.(cards, 80))
+    open(path, "a") do io
+        write(io, rpad(header, cld(length(header), 2880) * 2880))
+    end
+    return path
 end
 
 # FLAG rows are ranges to apply rather than a per-datum array: an antenna pair

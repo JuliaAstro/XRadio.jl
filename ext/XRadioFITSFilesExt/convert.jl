@@ -631,7 +631,7 @@ The `SYSTEM_TEMPERATURE` table's system and antenna temperatures, as
 `(receptor, band, row)` arrays, or `nothing` where the file omits the table.
 """
 function read_system_calibration(hdus, layout, freqid::Int)
-    hdu = table(hdus, "SYSTEM_TEMPERATURE")
+    hdu = optional_table(hdus, "SYSTEM_TEMPERATURE")
     hdu === nothing && return nothing
     keep, time, interval, antenna = _cal_rows(hdu, freqid)
     npol, nband = _no_pol(hdu, "TSYS"), layout.no_band
@@ -656,7 +656,7 @@ file omits the table.
 not read.
 """
 function read_phase_calibration(hdus, layout, freqid::Int)
-    hdu = table(hdus, "PHASE-CAL")
+    hdu = optional_table(hdus, "PHASE-CAL")
     hdu === nothing && return nothing
     keep, time, interval, antenna = _cal_rows(hdu, freqid)
     npol, nband = _no_pol(hdu, "PC_FREQ"), layout.no_band
@@ -693,7 +693,7 @@ Each field is `nothing` where the file omits its column; MSv4 makes them all
 optional too. `PRECIPITATION` has no MSv4 field and is not read.
 """
 function read_weather(hdus, freqid::Int)
-    hdu = table(hdus, "WEATHER")
+    hdu = optional_table(hdus, "WEATHER")
     hdu === nothing && return nothing
     keep, time, interval, antenna = _cal_rows(hdu, freqid)
     take(f, names...) = let col = _cal_optional(hdu, names...)
@@ -753,7 +753,7 @@ _at_precision(::Nothing, x) = x
 _at_precision(T::Type, x) = T.(x)
 
 function read_gain_curves(hdus, layout, freqid::Int, T = nothing)
-    hdu = table(hdus, "GAIN_CURVE")
+    hdu = optional_table(hdus, "GAIN_CURVE")
     hdu === nothing && return NamedTuple[]
     data = hdu.data
     nband = layout.no_band
@@ -1253,7 +1253,7 @@ function XRadio.fitsidi2msv4(
     # Flags. FITS-IDI keeps them apart from the data as ranges to apply, so
     # nothing in `UV_DATA` says a datum is bad and the table has to be expanded
     # onto every partition's grid.
-    fl = table(hdus, "FLAG")
+    fl = optional_table(hdus, "FLAG")
     flag_ranges = fl === nothing ? FlagRange[] :
         read_flag_ranges(fl, perm, layout, reference_date(fl))
 

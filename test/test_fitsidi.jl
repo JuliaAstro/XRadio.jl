@@ -365,6 +365,18 @@ end
         @test collect(ps[:grid_02][:scan_name]) == fill("2", 2)
     end
 
+    @testset "a table declared with no rows is treated as absent" begin
+        empty = ["FLAG", "SYSTEM_TEMPERATURE", "PHASE-CAL", "WEATHER", "GAIN_CURVE"]
+        gt = synthetic_fitsidi(joinpath(dir, "empty.idifits"); empty_tables = empty)
+        ps = open(ProcessingSet, to_msv4(gt, "empty.ps.zarr"))
+
+        @test isempty(conversion_issues(ps))
+        for ms in values(ps)
+            @test !any(ms[:flag])
+            @test isempty(intersect(keys(branches(ms)), (:system_calibration, :phase_calibration, :weather, :gain_curve)))
+        end
+    end
+
     @testset "a delay comes out in the MSv4 sense" begin
         # The cell-by-cell check above fixes the conjugation; this fixes what it
         # means. A delay is defined against MSv4-sense visibilities by

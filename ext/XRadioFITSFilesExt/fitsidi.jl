@@ -41,6 +41,13 @@ function table(hdus, name::AbstractString)
     return i === nothing ? nothing : hdus[i]
 end
 
+# An optional table, or `nothing` where the file omits it or declares it with
+# no rows: either way it states nothing.
+function optional_table(hdus, name::AbstractString)
+    t = table(hdus, name)
+    return isnothing(t) || iszero(card(t, "NAXIS2", 0)) ? nothing : t
+end
+
 function require_table(hdus, name::AbstractString)
     t = table(hdus, name)
     t === nothing && throw(ArgumentError("FITS-IDI file has no $name table"))
