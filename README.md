@@ -165,10 +165,12 @@ whatever the input weighs. A 24.73 GB file converts in about 4 GB.
 | `GAIN_CURVE` | `gain_curve_xds` |
 
 One Measurement Set covers a single spectral window, so the `BAND` axis is
-always split. A partition carries only the antennas its own baselines name and
-the fields its own rows observed, and carries a calibration or environment
-sub-dataset only where measurements cover its time span — a scan earlier than
-the first weather reading gets no `weather_xds`.
+always split. `spectral_windows` converts only the windows it names — `spw_16`
+through `spw_23` are bands 17 to 24 — which for a multi-band VGOS file gives
+one store per receiver band. A partition carries only the antennas its own
+baselines name and the fields its own rows observed, and carries a calibration
+or environment sub-dataset only where measurements cover its time span — a
+scan earlier than the first weather reading gets no `weather_xds`.
 
 Each antenna's digitizer level count, `ANTENNA`'s `NO_LEVELS`, becomes the
 integer variable `DIGITIZER_LEVELS` over `antenna_name` in `antenna_xds`, an

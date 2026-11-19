@@ -131,6 +131,9 @@ says the datum must not be used and `WEIGHT` says how good it would have been.
   rejected here rather than written to the store.
 - `spectral_window_intents = ["UNSPECIFIED"]`: strings, since that vocabulary
   is not enumerated.
+- `spectral_windows`: names of the spectral windows to convert, such as
+  `["spw_0", "spw_1"]`; the rest are skipped. A window keeps the name it has in
+  a full conversion. Defaults to every window in the file.
 - `release_date`: ISO 8601 date on which the data may become public. Defaults
   to the MJD zero point, with a warning.
 - `integration_time`: seconds, required only for a file with no `INTTIM`

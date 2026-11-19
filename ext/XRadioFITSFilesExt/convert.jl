@@ -55,6 +55,20 @@ const _UNKNOWN_RELEASE_DATE = "1858-11-17T00:00:00.000"
 # the index in MSv4's own words rather than in the file's.
 spectral_window_name(window::Integer) = "spw_$(window - 1)"
 
+# The bands whose spectral window names `names` lists, in the file's order.
+function _selected_windows(names, nband::Integer)
+    isnothing(names) && return 1:nband
+    all = spectral_window_name.(1:nband)
+    return sort!(unique(map(names) do w
+        i = findfirst(==(w), all)
+        isnothing(i) && throw(ArgumentError(
+            "FITS-IDI file has no spectral window $(repr(w)); its spectral " *
+                "windows are $(join(all, ", "))"
+        ))
+        i
+    end))
+end
+
 # The reference frequency of each spectral window: the file's `REF_FREQ` plus
 # the window's own offset from the `FREQUENCY` table. It is what a store
 # carries as the frequency axis's `reference_frequency`, and the physical
@@ -1164,6 +1178,7 @@ function XRadio.fitsidi2msv4(
         gap::Real = 60.0,
         scan_intents = [XRadio.Intent(XRadio.ScanIntents.UNSPECIFIED)],
         spectral_window_intents::AbstractVector{<:AbstractString} = ["UNSPECIFIED"],
+        spectral_windows = nothing,
         release_date::Union{Nothing, AbstractString} = nothing,
         integration_time::Union{Nothing, Real} = nothing,
         element_type::Union{Nothing, Type} = nothing,
@@ -1249,6 +1264,7 @@ function XRadio.fitsidi2msv4(
             "data matrix $(layout.no_band)"
     ))
     freqid = Int(column(fqd, :FREQID)[1])
+    windows = _selected_windows(spectral_windows, layout.no_band)
 
     # Flags. FITS-IDI keeps them apart from the data as ranges to apply, so
     # nothing in `UV_DATA` says a datum is bad and the table has to be expanded
@@ -1364,10 +1380,10 @@ function XRadio.fitsidi2msv4(
         zarr_format, overwrite = mode == "w"
     )
     index = 0
-    width = max(2, ndigits(length(ranges) * layout.no_band - 1))
+    width = max(2, ndigits(length(ranges) * length(windows) - 1))
     for range in ranges
         block = read_uv_block(uv, range; T)
-        for band in 1:layout.no_band
+        for band in windows
             ms = _build_partition(
                 shared, rows, times, block, range, band, T
             )

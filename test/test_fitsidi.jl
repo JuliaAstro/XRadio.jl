@@ -365,6 +365,24 @@ end
         @test collect(ps[:grid_02][:scan_name]) == fill("2", 2)
     end
 
+    @testset "spectral_windows converts only the windows it names" begin
+        gt = synthetic_fitsidi(joinpath(dir, "spw.idifits"))
+        full = open(ProcessingSet, to_msv4(gt, "spw_full.ps.zarr"))
+        ps = open(ProcessingSet, to_msv4(gt, "spw_1.ps.zarr"; spectral_windows = ["spw_1"]))
+
+        @test collect(keys(ps)) == [:spw_00, :spw_01]
+        @test spectralwindow.(values(ps)) == ["spw_1", "spw_1"]
+        @test isempty(conversion_issues(ps))
+        for (k, kfull) in ((:spw_00, :spw_01), (:spw_01, :spw_03))
+            @test parent(ps[k][:visibility]) == parent(full[kfull][:visibility])
+            @test lookup(ps[k][:visibility], Frequency) == gt.frequencies[:, 2]
+        end
+
+        @test_throws "no spectral window \"spw_2\"; its spectral windows are spw_0, spw_1" to_msv4(
+            gt, "spw_bad.ps.zarr"; spectral_windows = ["spw_2"]
+        )
+    end
+
     @testset "a table declared with no rows is treated as absent" begin
         empty = ["FLAG", "SYSTEM_TEMPERATURE", "PHASE-CAL", "WEATHER", "GAIN_CURVE"]
         gt = synthetic_fitsidi(joinpath(dir, "empty.idifits"); empty_tables = empty)
