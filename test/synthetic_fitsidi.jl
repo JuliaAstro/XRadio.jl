@@ -98,10 +98,12 @@ synthetic_visibility_value(s, c, band, b, k) =
 """
     synthetic_weight_value(pol, band, baseline, time) -> Float32
 
-The default fixture weight. FITS-IDI stores one weight per (polarization,
-band), shared across every channel, so this takes no channel index.
+The default fixture weight, a validity fraction in `(0, 1]` distinct for each
+(polarization, band). FITS-IDI stores one weight per (polarization, band),
+shared across every channel, so this takes no channel index. Powers of two keep
+the division of a visibility by its weight exact.
 """
-synthetic_weight_value(s, band, b, k) = Float32(10band + s)
+synthetic_weight_value(s, band, b, k) = Float32(2.0^-(s + 4 * (band - 1)))
 
 """
     synthetic_uvw_value(axis, baseline, time) -> Float32

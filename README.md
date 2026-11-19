@@ -252,7 +252,9 @@ file.
 
 Two conversions rescale the data rather than relabeling it. `WEIGHTYP =
 "CORRELAT"` means the `WEIGHT` column holds validity fractions rather than the
-`1/σ²` MSv4 wants, so each becomes `f · 2Δν · τ / (A_a · A_b)`: the radiometer
+`1/σ²` MSv4 wants. Each visibility is divided by its fraction `f`, as AIPS
+Memo 114 requires (and by the integration time too for `"CORRTIME"`), and each
+weight becomes `f · 2Δν · τ / (A_a · A_b)`: the radiometer
 weight of a correlation coefficient, divided by the product of the two
 autocorrelation amplitudes because the store holds the visibility before that
 normalization. The visibilities are not corrected for quantization loss, and

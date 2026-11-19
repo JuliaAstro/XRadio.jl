@@ -263,16 +263,28 @@ end
 
     conversion_issues(ps) = sort!([i.message for i in check(ps)])
 
+    # The visibility a CORRELAT file stores, `conj(V) / f` (AIPS Memo 114: the
+    # weight is divided into the visibility), as `(polarization, channel,
+    # baseline, time)` in MSv4's order.
+    function correlat_visibility(gt, band, times)
+        _, _, perm = pol_axis(gt.no_stkd, gt.stk_1, gt.cdelt2)
+        return [
+            conj(gt.visibility[perm[p], c, band, bi, k]) / gt.weight[perm[p], band, bi, k]
+                for p in eachindex(perm), c in 1:gt.nchan, bi in eachindex(gt.baselines), k in times
+        ]
+    end
+
     # The inverse variance of the stored visibility a CORRELAT weight implies,
     # `f · 2Δν · τ / (A_a · A_b)`, as `(polarization, channel,
     # baseline, time)` in MSv4's order: `A` is the amplitude of each antenna's
-    # autocorrelation of the receptor the product names.
+    # autocorrelation of the receptor the product names, divided by its own `f`.
     function correlat_weight(gt, band, times)
         _, _, perm = pol_axis(gt.no_stkd, gt.stk_1, gt.cdelt2)
         auto = Dict(a => i for (i, (a, b)) in pairs(gt.baselines) if a == b)
         receptors = ((1, 1), (1, 2), (2, 1), (2, 2))
         parallel = (1, 4)
-        amplitude(a, r, c, k) = abs(gt.visibility[perm[parallel[r]], c, band, auto[a], k])
+        amplitude(a, r, c, k) = abs(gt.visibility[perm[parallel[r]], c, band, auto[a], k]) /
+            gt.weight[perm[parallel[r]], band, auto[a], k]
         return [
             gt.weight[perm[p], band, bi, k] * 2 * gt.ch_width * gt.inttim /
                 (amplitude(a, receptors[p][1], c, k) * amplitude(b, receptors[p][2], c, k))
@@ -313,8 +325,9 @@ end
 
         # `gt.visibility` is what the fixture wrote into FLUX, so this is an
         # absolute check of the conjugation the converter applies, not a round
-        # trip: MSv4 holds the conjugate of the FITS-IDI visibility.
-        @test parent(vis) == conj.(gt.visibility[perm, :, band, :, times])
+        # trip: MSv4 holds the conjugate of the FITS-IDI visibility, divided by
+        # its CORRELAT weight.
+        @test parent(vis) == correlat_visibility(gt, band, times)
         @test !any(ms[:flag])
 
         # UU/VV/WW are seconds of light travel on disk and metres in MSv4.
@@ -1055,8 +1068,37 @@ end
         ms = open(ProcessingSet, to_msv4(eight, "eight.ps.zarr"))[:eight_00]
         @test parent(ms[:weight]) ≈ correlat_weight(eight, 1, 1:3)
 
+        # True weights leave the visibilities as written; CORRTIME divides them
+        # by the integration time as well as the weight.
+        _, _, nperm = pol_axis(normal.no_stkd, normal.stk_1, normal.cdelt2)
+        nms = open(ProcessingSet, joinpath(dir, "normal.ps.zarr"))[:normal_00]
+        @test parent(nms[:visibility]) == conj.(normal.visibility[nperm, :, 1, :, 1:3])
+        corrtime = synthetic_fitsidi(joinpath(dir, "corrtime.idifits"); weightyp = "CORRTIME")
+        ms = open(ProcessingSet, to_msv4(corrtime, "corrtime.ps.zarr"))[:corrtime_00]
+        @test parent(ms[:visibility]) ≈ correlat_visibility(corrtime, 1, 1:3) ./ corrtime.inttim
+
         other = synthetic_fitsidi(joinpath(dir, "other.idifits"); weightyp = "SIGMA")
         @test_throws "WEIGHTYP is \"SIGMA\"" to_msv4(other, "other.ps.zarr")
+    end
+
+    @testset "CORRELAT visibilities are divided by their validity fraction" begin
+        # A correlator that lost part of an integration writes the sum over the
+        # valid data scaled to the whole integration, `f · V`, with weight `f`.
+        # The store must hold `V` whatever `f` is, on cross- and
+        # autocorrelations alike, including a baseline whose `f` is not the
+        # product of its antennas' fractions.
+        frac(s, band, b, k) = Float32(2.0^-mod(b + k, 3))
+        full = synthetic_fitsidi(joinpath(dir, "valid1.idifits"); weight = (s, band, b, k) -> 1.0f0)
+        part = synthetic_fitsidi(
+            joinpath(dir, "validf.idifits");
+            visibility = (s, c, band, b, k) -> frac(s, band, b, k) * synthetic_visibility_value(s, c, band, b, k),
+            weight = frac,
+        )
+        m = open(ProcessingSet, to_msv4(full, "valid1.ps.zarr"))[:valid1_00]
+        n = open(ProcessingSet, to_msv4(part, "validf.ps.zarr"))[:validf_00]
+        @test parent(n[:visibility]) == parent(m[:visibility])
+        f = [frac(1, 1, b, k) for p in 1:4, c in 1:part.nchan, b in eachindex(part.baselines), k in 1:3]
+        @test parent(n[:weight]) ≈ f .* parent(m[:weight])
     end
 
     @testset "a CORRELAT weight without its autocorrelations" begin
@@ -1141,7 +1183,7 @@ end
         @test eltype(double[:visibility]) == ComplexF64
         @test eltype(double[:weight]) == Float64
         _, _, wperm = pol_axis(wide.no_stkd, wide.stk_1, wide.cdelt2)
-        @test parent(double[:visibility]) == conj.(wide.visibility[wperm, :, 1, :, 1:3])
+        @test parent(double[:visibility]) == correlat_visibility(wide, 1, 1:3)
         @test ComplexF32.(parent(double[:visibility])) != parent(double[:visibility])
 
         # The keyword still overrides, so a caller wanting the smaller store is
@@ -1273,7 +1315,7 @@ end
         gt = synthetic_fitsidi(joinpath(dir, "scal.idifits"); vis_scal = 4.0)
         ms = open(ProcessingSet, to_msv4(gt, "scal.ps.zarr"))[:scal_00]
         _, _, perm = pol_axis(gt.no_stkd, gt.stk_1, gt.cdelt2)
-        @test parent(ms[:visibility]) ≈ conj.(gt.visibility[perm, :, 1, :, 1:3]) ./ 4
+        @test parent(ms[:visibility]) ≈ correlat_visibility(gt, 1, 1:3) ./ 4
 
         # Where the weights are true weights it squares into them, since it
         # divides into an amplitude. Validity fractions are untouched.

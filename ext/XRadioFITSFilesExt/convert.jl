@@ -116,8 +116,10 @@ weights only through the radiometer equation.
 `WEIGHTYP` (AIPS Memo 114, Table 14) declares what the column holds.
 `"NORMAL"` means it is already a true weight, `1/σ²`. `"CORRELAT"` and
 `"CORRTIME"` mean it is a validity fraction in `[0, 1]` — the fraction of the
-integration that correlated — which is not a variance at all. An absent
-`WEIGHTYP` means `"CORRELAT"`, as the memo states. Any other value throws.
+integration that correlated — which is not a variance at all, and which the
+memo says must be divided into the visibilities (with the integration time as
+well, for `"CORRTIME"`). An absent `WEIGHTYP` means `"CORRELAT"`, as the memo
+states. Any other value throws.
 """
 function radiometer_weights(weightyp::AbstractString)
     kind = uppercase(_trim(weightyp))
@@ -1206,7 +1208,9 @@ function XRadio.fitsidi2msv4(
                                their content is not carried into the store." dropped
 
     layout = uv_matrix_layout(uv)
-    radiometer = radiometer_weights(card_string(uv, "WEIGHTYP", "CORRELAT"))
+    weightyp = card_string(uv, "WEIGHTYP", "CORRELAT")
+    radiometer = radiometer_weights(weightyp)
+    per_second = uppercase(_trim(weightyp)) == "CORRTIME"
 
     # `VIS_SCAL` lets a near-real-time correlator write accumulated sums and
     # leave the normalization to the reader. Absent, it is 1. Where weights are
@@ -1335,7 +1339,7 @@ function XRadio.fitsidi2msv4(
         gain_curve_date = _UNKNOWN_RELEASE_DATE,
         observation_span = maximum(times) - minimum(times),
         ref_freq, band_freq, reference_frequency,
-        ch_width, radiometer, vis_scal, weight_scal, inttim,
+        ch_width, radiometer, per_second, vis_scal, weight_scal, inttim,
         without_autocorrelations = Ref(0), perm, layout,
         # Stored as MSv4 states them, but validated on the way in: an intent
         # outside the ASDM enumerations cannot reach the store.
@@ -1465,9 +1469,10 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
     # rather than of the grid.
     source_at = Vector{Int}(undef, ntime)
 
-    # `WEIGHTYP = 'CORRELAT'` weights are validity fractions rather than
-    # variances; `f · 2Δν · τ` is the inverse variance they imply for a
-    # correlation coefficient as the correlator wrote it.
+    # `WEIGHTYP = 'CORRELAT'` weights are validity fractions `f`: the correlator
+    # wrote sums over the valid data scaled to the whole integration, so each
+    # visibility is divided by `f` (and by `τ` for `CORRTIME`), and `f · 2Δν · τ`
+    # is the inverse variance of the resulting correlation coefficient.
     wfactor = F(2 * abs(s.ch_width[band]))
     visnorm, wscal = F(inv(s.vis_scal)), F(s.weight_scal)
     percell = layout.ncomplex == 3
@@ -1490,6 +1495,7 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
         scale = s.radiometer ?
             wfactor * F(s.inttim[r]) :
             wscal
+        per_row = s.per_second ? F(s.inttim[r]) : one(F)
         for c in 1:nchan, (p, sp) in enumerate(s.perm)
             re = block.flux[1, sp, c, band, i]
             im = block.flux[2, sp, c, band, i]
@@ -1502,8 +1508,9 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
             # are shared by both and are carried across untouched. A reversed
             # row is the conjugate of its partner order, which cancels this one.
             q = reversed ? swapped[p] : p
-            vis[q, c, b, k] = C(re * visnorm, (reversed ? im : -im) * visnorm)
             good = w > 0 && isfinite(re) && isfinite(im)
+            norm = s.radiometer && good ? visnorm / (F(w) * per_row) : visnorm
+            vis[q, c, b, k] = C(re * norm, (reversed ? im : -im) * norm)
             weight[q, c, b, k] = good ? w * scale : zero(F)
             flag[q, c, b, k] = !good
         end

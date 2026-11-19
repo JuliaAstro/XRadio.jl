@@ -95,8 +95,10 @@ convention casacore and AIPS write and MSv4 inherits without stating.
 `WEIGHT` is the inverse variance of `VISIBILITY` as stored. `WEIGHTYP`
 (AIPS Memo 114) says what the file's `WEIGHT` column holds. `NORMAL` weights
 are already that, and are only rescaled by `VIS_SCAL²`. `CORRELAT` and
-`CORRTIME` weights are validity fractions `f`, from which the radiometer
-equation gives the inverse variance of a correlation coefficient,
+`CORRTIME` weights are validity fractions `f`. The correlator wrote sums over
+the valid data scaled to the whole integration, so each visibility is divided
+by `f` (and by `τ` for `CORRTIME`), as the memo requires; the radiometer
+equation then gives the inverse variance of a correlation coefficient,
 `f · 2Δν · τ`, with `Δν` the channel width and `τ` the integration time. The
 visibilities are not corrected for quantization loss: a correlation of
 digitized signals keeps a fraction `η_a · η_b` of the unquantized amplitude
