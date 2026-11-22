@@ -214,18 +214,46 @@ function baseline_antennas(code::Integer)
 end
 
 """
-    channel_frequencies(ref_freq, band_freq, ch_width, no_chan) -> Vector{Float64}
+    channel_frequencies(ref_freq, band_freq, ch_width, no_chan, ref_pixl = 1) -> Vector{Float64}
 
-The sky frequency of every channel of one band, in hertz.
+The sky frequency of every channel of one band, in hertz: channel `c` (from 1)
+is at `ref_freq + band_freq + (c - ref_pixl) * ch_width`.
 
-`band_freq` is the band's offset from `ref_freq`, both from the `FREQUENCY`
-table. A lower-sideband band carries a negative `ch_width`, so its channels run
-down from the band edge.
+`band_freq` is the band's offset from `ref_freq` and `ref_pixl` the channel,
+possibly fractional, that frequency falls on (the `REF_PIXL` keyword). A
+lower-sideband band carries a negative `ch_width`, so its channels run down
+from the band edge.
 
     channel_frequencies(1e9, 0.0, 1e6, 4) == [1.0e9, 1.001e9, 1.002e9, 1.003e9]
+    channel_frequencies(1e9, 0.0, 1e6, 2, 0.75) == [1.00025e9, 1.00125e9]
 """
-channel_frequencies(ref_freq, band_freq, ch_width, no_chan::Integer) =
-    ref_freq .+ band_freq .+ (0:(no_chan - 1)) .* ch_width
+channel_frequencies(ref_freq, band_freq, ch_width, no_chan::Integer, ref_pixl = 1) =
+    ref_freq .+ band_freq .+ ((1:no_chan) .- ref_pixl) .* ch_width
+
+"""
+    signed_channel_widths(ch_width, sideband) -> Vector{Float64}
+
+Each band's channel width, negative for a lower-sideband band, from the
+`FREQUENCY` table's `CH_WIDTH` and `SIDEBAND` (`nothing` where the table has no
+`SIDEBAND` column, leaving `CH_WIDTH` as written). Some writers, DiFX among them,
+give a lower-sideband band `SIDEBAND = -1` and a positive `CH_WIDTH`; the channels
+still run down from the band edge.
+
+    signed_channel_widths([5e5, 5e5], [-1, 1]) == [-5e5, 5e5]
+"""
+signed_channel_widths(ch_width, ::Nothing) = ch_width
+function signed_channel_widths(ch_width, sideband)
+    length(sideband) == length(ch_width) || throw(ArgumentError(
+        "FITS-IDI FREQUENCY gives $(length(sideband)) SIDEBAND values for $(length(ch_width)) bands"
+    ))
+    return map(ch_width, sideband) do w, s
+        s == -1 && return -abs(w)
+        s == 1 && w > 0 && return w
+        throw(ArgumentError(
+            "FITS-IDI FREQUENCY gives SIDEBAND $s with CH_WIDTH $w; a band is upper (1, positive width) or lower (-1) sideband"
+        ))
+    end
+end
 
 """
     scan_ranges(source_id, jd; gap = 60.0) -> Vector{UnitRange{Int}}

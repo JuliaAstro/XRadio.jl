@@ -80,7 +80,7 @@ function _idi_common_cards(extname::AbstractString, tabrev::Integer, g)
         Card("NO_CHAN", Int32(g.nchan)),
         Card("REF_FREQ", Float64(g.ref_freq)),
         Card("CHAN_BW", Float64(g.ch_width)),
-        Card("REF_PIXL", 1.0),
+        Card("REF_PIXL", Float64(g.ref_pixl)),
         Card("OBSCODE", g.obscode),
         Card("RDATE", g.rdate),
     ]
@@ -137,7 +137,7 @@ Array: `antenna_names`, `positions` (3 x n, metres, geocentric), `mntsta`,
 Sky: `source_names`, `ra` and `dec` (degrees, one per source), `equinox`.
 
 Spectrum: `ref_freq`, `band_freq` (one offset per band), `ch_width`, `nchan`,
-`sideband`, and the `STOKES` axis as `no_stkd`, `stk_1`, `cdelt2`.
+`sideband`, `ref_pixl` (the `REF_PIXL` keyword), and the `STOKES` axis as `no_stkd`, `stk_1`, `cdelt2`.
 
 Observation: `rdate`, `scans` — each a `(; source, start, ntime)` giving a
 source index, a start in seconds from `rdate` midnight, and a number of
@@ -153,7 +153,9 @@ Shape of the file itself: `uvw_suffix` names the projection on the `UU`/`VV`/`WW
 columns, `equinox_column` is `:EQUINOX` or the VLBA's numeric `:EPOCH`,
 `inttim_column`, `scan_column`, `source_column`, `freqid_column` and
 `weight_column` add or drop those columns, `source_key` spells the source
-column `:SOURCE`, `:SOURCE_ID` or `Symbol("SOURCE ID")`, `narrays` repeats the
+column `:SOURCE`, `:SOURCE_ID` or `Symbol("SOURCE ID")`, `source_table_id` names the
+SOURCE table's ID column (`:SOURCE_ID`, or `Symbol("ID_NO.")` as older DiFX writes
+it), `narrays` repeats the
 `ARRAY_GEOMETRY` table, and `vis_scal` writes a `VIS_SCAL` normalization the
 reader has to divide out.
 
@@ -212,6 +214,7 @@ function synthetic_fitsidi(
         ch_width = 5.0e5,
         nchan = 4,
         sideband = 1,
+        ref_pixl = 1.0,
         no_stkd = 4,
         stk_1 = -1,
         cdelt2 = -1,
@@ -241,6 +244,7 @@ function synthetic_fitsidi(
         scan_column = false,
         source_column = true,
         source_key = :SOURCE,
+        source_table_id = :SOURCE_ID,
         freqid_column = true,
         weight_column = true,
         narrays = 1,
@@ -262,7 +266,7 @@ function synthetic_fitsidi(
         "every scan's source must index into source_names"
     ))
 
-    g = (; no_stkd, stk_1, nband, nchan, ref_freq, ch_width, obscode, rdate)
+    g = (; no_stkd, stk_1, nband, nchan, ref_freq, ref_pixl, ch_width, obscode, rdate)
 
     # The timeline, flattened across scans. FITS-IDI splits a timestamp into a
     # whole-day `DATE` and a fractional `TIME` so the day stays exactly
@@ -344,7 +348,9 @@ function synthetic_fitsidi(
         weight_rows[r] = [wts[s, band, b, k] for band in 1:nband for s in 1:no_stkd]
     end
 
-    freqs = [ref_freq + band_freq[band] + (c - 1) * ch_width
+    # A lower-sideband band runs down from its band edge whatever sign CH_WIDTH has.
+    step = sideband == -1 ? -abs(ch_width) : ch_width
+    freqs = [ref_freq + band_freq[band] + (c - ref_pixl) * step
         for c in 1:nchan, band in 1:nband]
 
     primary = HDU(
@@ -437,8 +443,8 @@ function synthetic_fitsidi(
     source = HDU(
         Bintable,
         merge(
+        NamedTuple{(source_table_id,)}((Int32.(1:nsource),)),
         (
-            SOURCE_ID = Int32.(1:nsource),
             SOURCE = rpad.(source_names, 16),
             QUAL = zeros(Int32, nsource),
             CALCODE = fill(rpad("", 4), nsource),
@@ -489,7 +495,7 @@ function synthetic_fitsidi(
                 Card("MAXIS3", Int32(nchan)),
                 Card("CTYPE3", "FREQ"),
                 Card("CRVAL3", Float64(ref_freq)), Card("CDELT3", Float64(ch_width)),
-                Card("CRPIX3", 1.0),
+                Card("CRPIX3", Float64(ref_pixl)),
                 Card("MAXIS4", Int32(nband)),
                 Card("CTYPE4", "BAND"),
                 Card("CRVAL4", 1.0), Card("CDELT4", 1.0), Card("CRPIX4", 1.0),
@@ -531,7 +537,7 @@ function synthetic_fitsidi(
         antenna_names, nosta = collect(1:nant), positions, mntsta, staxof,
         diameters, poltya, poltyb, no_levels, array_name,
         source_names, ra, dec, equinox,
-        ref_freq, band_freq, ch_width, nchan, nband, no_stkd, stk_1, cdelt2,
+        ref_freq, ref_pixl, band_freq, ch_width, sideband, nchan, nband, no_stkd, stk_1, cdelt2,
         frequencies = freqs,
         rdate, jd0, seconds, datetimes, time_source, time_scan,
         inttim, nscan = length(scans),
