@@ -2,7 +2,7 @@
 # runtests.jl is what loads it.
 const IDI = Base.get_extension(XRadio, :XRadioFITSFilesExt)
 using .IDI: baseline_antennas, channel_frequencies, pol_axis, pol_labels,
-    read_uv_rows, scan_ranges
+    read_uv_rows, scan_ranges, signed_channel_widths
 
 @testset "FITS-IDI reading" begin
     @testset "polarization axis" begin
@@ -56,6 +56,20 @@ using .IDI: baseline_antennas, channel_frequencies, pol_axis, pol_labels,
         # run down from the band edge.
         @test channel_frequencies(1.0e9, 1.0e8, -1.0e6, 4) ==
             [1.1e9, 1.099e9, 1.098e9, 1.097e9]
+        # REF_PIXL is the channel, possibly fractional, that the band's
+        # frequency falls on; DiFX writes 0.75.
+        @test channel_frequencies(1.0e9, 0.0, 1.0e6, 2, 0.75) ≈ [1.00025e9, 1.00125e9]
+        @test channel_frequencies(1.0e9, 1.0e8, -1.0e6, 2, 0.75) ≈ [1.09975e9, 1.09875e9]
+    end
+
+    @testset "sideband sets the sign of the channel width" begin
+        # DiFX writes a lower-sideband band as SIDEBAND = -1 with a positive CH_WIDTH.
+        @test signed_channel_widths([5.0e5, 5.0e5], [-1, 1]) == [-5.0e5, 5.0e5]
+        @test signed_channel_widths([-5.0e5], [-1]) == [-5.0e5]
+        @test signed_channel_widths([5.0e5, -5.0e5], nothing) == [5.0e5, -5.0e5]
+        @test_throws "SIDEBAND 1 with CH_WIDTH -500000.0" signed_channel_widths([-5.0e5], [1])
+        @test_throws "SIDEBAND 0" signed_channel_widths([5.0e5], [0])
+        @test_throws "2 SIDEBAND values for 1 bands" signed_channel_widths([5.0e5], [1, 1])
     end
 
     @testset "scan segmentation" begin
@@ -290,6 +304,24 @@ end
                 (amplitude(a, receptors[p][1], c, k) * amplitude(b, receptors[p][2], c, k))
                 for p in 1:4, c in 1:gt.nchan, (bi, (a, b)) in pairs(gt.baselines), k in times
         ]
+    end
+
+    @testset "a SOURCE table whose ID column is ID_NO." begin
+        gt = synthetic_fitsidi(joinpath(dir, "idno.idifits"); source_table_id = Symbol("ID_NO."))
+        ps = open(ProcessingSet, to_msv4(gt, "idno.ps.zarr"))
+        @test sort(unique(only(XRadio.fields(ms)) for ms in values(ps))) == sort(gt.source_names)
+    end
+
+    @testset "a lower-sideband band runs down from its edge" begin
+        # As DiFX writes it: SIDEBAND = -1 with a positive CH_WIDTH, and REF_PIXL 0.75.
+        gt = synthetic_fitsidi(joinpath(dir, "lsb.idifits"); sideband = -1, ref_pixl = 0.75)
+        ps = open(ProcessingSet, to_msv4(gt, "lsb.ps.zarr"))
+        for band in 1:gt.nband
+            f = lookup(ps[Symbol("lsb_0", band - 1)][:visibility], Frequency)
+            @test f ≈ gt.frequencies[:, band]
+            @test issorted(f; rev = true)
+            @test first(f) ≈ gt.ref_freq + gt.band_freq[band] - 0.25 * gt.ch_width
+        end
     end
 
     @testset "the dense grid holds the values that went in" begin

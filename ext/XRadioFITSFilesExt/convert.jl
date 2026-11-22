@@ -1252,9 +1252,17 @@ function XRadio.fitsidi2msv4(
     ))
     fqd = fq.data
     ref_freq = Float64(card(uv, "REF_FREQ", 0.0))
+    haskey(uv.cards, "REF_PIXL") || throw(ArgumentError(
+        "FITS-IDI UV_DATA has no REF_PIXL, which the standard requires; without it " *
+            "the channels' frequencies are not stated"
+    ))
+    ref_pixl = Float64(uv.cards["REF_PIXL"])
     band_freq = Float64.(rowvalues(column(fqd, :BANDFREQ), 1))
     reference_frequency = reference_frequencies(ref_freq, band_freq)
-    ch_width = Float64.(rowvalues(column(fqd, :CH_WIDTH), 1))
+    ch_width = signed_channel_widths(
+        Float64.(rowvalues(column(fqd, :CH_WIDTH), 1)),
+        haskey(fqd, :SIDEBAND) ? Int.(rowvalues(column(fqd, :SIDEBAND), 1)) : nothing,
+    )
     radiometer && any(iszero, ch_width) && throw(ArgumentError(
         "FITS-IDI FREQUENCY gives a zero CH_WIDTH, and the radiometer " *
             "conversion of CORRELAT weights needs the channel width"
@@ -1291,8 +1299,10 @@ function XRadio.fitsidi2msv4(
     end
 
     # Sources, by SOURCE_ID, which is what UV_DATA's SOURCE column holds.
+    # Older DiFX names that column `ID_NO.`, as the AIPS SU table does.
     srd = sr.data
-    source_ids = Int.(collect(column(srd, :SOURCE_ID)))
+    id_column = haskey(srd, :SOURCE_ID) ? :SOURCE_ID : Symbol("ID_NO.")
+    source_ids = Int.(collect(column(srd, id_column)))
     source_names = _trim.(collect(column(srd, :SOURCE)))
     source_ra = Float64.(collect(column(srd, :RAEPO)))
     source_dec = Float64.(collect(column(srd, :DECEPO)))
@@ -1354,7 +1364,7 @@ function XRadio.fitsidi2msv4(
         system_calibration, phase_calibration, weather, gain_curve,
         gain_curve_date = _UNKNOWN_RELEASE_DATE,
         observation_span = maximum(times) - minimum(times),
-        ref_freq, band_freq, reference_frequency,
+        ref_freq, ref_pixl, band_freq, reference_frequency,
         ch_width, radiometer, per_second, vis_scal, weight_scal, inttim,
         without_autocorrelations = Ref(0), perm, layout,
         # Stored as MSv4 states them, but validated on the way in: an intent
@@ -1547,7 +1557,7 @@ function _build_partition(s, rows, times, block, range, band, ::Type{F}) where {
     ))
     frame = only(partition_frames)
 
-    freqs = channel_frequencies(s.ref_freq, s.band_freq[band], s.ch_width[band], nchan)
+    freqs = channel_frequencies(s.ref_freq, s.band_freq[band], s.ch_width[band], nchan, s.ref_pixl)
     integration = s.inttim[first(range)]
 
     quantity(v, units) = XRadio.Measure(v, Dict{Symbol, Any}(:units => units, :type => "quantity"))
